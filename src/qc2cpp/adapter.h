@@ -12,6 +12,8 @@ void QC_LoadProgs(void);
 void QC_InitProg(void);
 void QC_Shutdown(void);
 void QC_UnloadProgs(void);
+void QC_LoadEntities(const char *data);
+void QC_StartFrame(float time, float frametime, qbool is_bot_frame);
 void QC_Unpublish(void *context);
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic);
 

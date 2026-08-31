@@ -121,6 +121,77 @@ void NQP_Reset (void);
 
 #endif
 
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/adapter.h"
+#include "qc2cpp/globals.h"
+
+static inline qbool PR_UsesQc2cppGlobals(void) {
+	return QC_Active() && !pr_nqprogs;
+}
+
+static inline float *PR_Global_time(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->time : &PR_GLOBAL(time);
+}
+static inline float *PR_Global_frametime(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->frametime : &PR_GLOBAL(frametime);
+}
+static inline float *PR_Global_force_retouch(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->force_retouch : &PR_GLOBAL(force_retouch);
+}
+static inline float *PR_Global_serverflags(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->serverflags : &PR_GLOBAL(serverflags);
+}
+static inline float *PR_Global_parm1(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->parm1 : &PR_GLOBAL(parm1);
+}
+static inline float *PR_Global_total_secrets(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->total_secrets : &PR_GLOBAL(total_secrets);
+}
+static inline float *PR_Global_total_monsters(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->total_monsters : &PR_GLOBAL(total_monsters);
+}
+static inline float *PR_Global_found_secrets(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->found_secrets : &PR_GLOBAL(found_secrets);
+}
+static inline float *PR_Global_killed_monsters(void) {
+	return PR_UsesQc2cppGlobals() ? &QC_Globals()->killed_monsters : &PR_GLOBAL(killed_monsters);
+}
+static inline int PR_Global_self_word(void) {
+	return PR_UsesQc2cppGlobals() ? (int)QC_Globals()->self : PR_GLOBAL(self);
+}
+static inline int PR_Global_other_word(void) {
+	return PR_UsesQc2cppGlobals() ? (int)QC_Globals()->other : PR_GLOBAL(other);
+}
+static inline void PR_SetGlobal_self_word(int value) {
+	if (PR_UsesQc2cppGlobals()) QC_Globals()->self = (qc_shared_entity_slot_t)value;
+	else PR_GLOBAL(self) = value;
+}
+static inline void PR_SetGlobal_other_word(int value) {
+	if (PR_UsesQc2cppGlobals()) QC_Globals()->other = (qc_shared_entity_slot_t)value;
+	else PR_GLOBAL(other) = value;
+}
+static inline void PR_SetGlobal_self_slot(edict_t *entity) {
+	PR_SetGlobal_self_word(entity == NULL ? 0 : entity->e.entnum);
+}
+static inline void PR_SetGlobal_other_slot(edict_t *entity) {
+	PR_SetGlobal_other_word(entity == NULL ? 0 : entity->e.entnum);
+}
+#else
+static inline float *PR_Global_time(void) { return &PR_GLOBAL(time); }
+static inline float *PR_Global_frametime(void) { return &PR_GLOBAL(frametime); }
+static inline float *PR_Global_force_retouch(void) { return &PR_GLOBAL(force_retouch); }
+static inline float *PR_Global_serverflags(void) { return &PR_GLOBAL(serverflags); }
+static inline float *PR_Global_parm1(void) { return &PR_GLOBAL(parm1); }
+static inline float *PR_Global_total_secrets(void) { return &PR_GLOBAL(total_secrets); }
+static inline float *PR_Global_total_monsters(void) { return &PR_GLOBAL(total_monsters); }
+static inline float *PR_Global_found_secrets(void) { return &PR_GLOBAL(found_secrets); }
+static inline float *PR_Global_killed_monsters(void) { return &PR_GLOBAL(killed_monsters); }
+static inline int PR_Global_self_word(void) { return PR_GLOBAL(self); }
+static inline int PR_Global_other_word(void) { return PR_GLOBAL(other); }
+static inline void PR_SetGlobal_self_word(int value) { PR_GLOBAL(self) = value; }
+static inline void PR_SetGlobal_other_word(int value) { PR_GLOBAL(other) = value; }
+#endif
+
 //============================================================================
 
 void PR_Init (void);
@@ -153,6 +224,22 @@ int NUM_FOR_EDICT(edict_t *e);
 
 #define	EDICT_TO_PROG(e) ((byte *)(e)->v - (byte *)sv.game_edicts)
 #define PROG_TO_EDICT(e) (&sv.edicts[(e)/pr_edict_size])
+
+#ifdef MVDSV_QC2CPP_ENABLED
+#define PR_SetGlobal_self(entity) do { \
+	edict_t *const pr_global_entity_ = (edict_t *)(entity); \
+	if (PR_UsesQc2cppGlobals()) PR_SetGlobal_self_slot(pr_global_entity_); \
+	else PR_GLOBAL(self) = pr_global_entity_ == NULL ? 0 : EDICT_TO_PROG(pr_global_entity_); \
+} while (0)
+#define PR_SetGlobal_other(entity) do { \
+	edict_t *const pr_global_entity_ = (edict_t *)(entity); \
+	if (PR_UsesQc2cppGlobals()) PR_SetGlobal_other_slot(pr_global_entity_); \
+	else PR_GLOBAL(other) = pr_global_entity_ == NULL ? 0 : EDICT_TO_PROG(pr_global_entity_); \
+} while (0)
+#else
+#define PR_SetGlobal_self(entity) (PR_GLOBAL(self) = (entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity)))
+#define PR_SetGlobal_other(entity) (PR_GLOBAL(other) = (entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity)))
+#endif
 
 //============================================================================
 
