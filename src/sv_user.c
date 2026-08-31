@@ -915,19 +915,19 @@ static void Cmd_Spawn_f (void)
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_TOTALSECRETS);
-	ClientReliableWrite_Long (sv_client, PR_GLOBAL(total_secrets));
+	ClientReliableWrite_Long (sv_client, *PR_Global_total_secrets());
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_TOTALMONSTERS);
-	ClientReliableWrite_Long (sv_client, PR_GLOBAL(total_monsters));
+	ClientReliableWrite_Long (sv_client, *PR_Global_total_monsters());
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_SECRETS);
-	ClientReliableWrite_Long (sv_client, PR_GLOBAL(found_secrets));
+	ClientReliableWrite_Long (sv_client, *PR_Global_found_secrets());
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_MONSTERS);
-	ClientReliableWrite_Long (sv_client, PR_GLOBAL(killed_monsters));
+	ClientReliableWrite_Long (sv_client, *PR_Global_killed_monsters());
 
 	// get the client to check and download skins
 	// when that is completed, a begin command will be issued
@@ -996,17 +996,17 @@ static void Cmd_Begin_f (void)
 
 		// copy spawn parms out of the client_t
 		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
-			(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
+			PR_Global_parm1()[i] = sv_client->spawn_parms[i];
 
 		// call the spawn function
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 		PR_GameClientConnect(sv_client->spectator);
 
 		// actually spawn the player
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		PR_GamePutClientInServer(sv_client->spectator);
 	}
 
@@ -1839,8 +1839,8 @@ static void SV_Say (qbool team)
 	// try handle say in the mod.
 	SV_EndRedirect ();
 
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 
 	j = PR_ClientSay(team, p);
 
@@ -2020,8 +2020,8 @@ static void Cmd_Kill_f (void)
 		return;
 	}
 
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	PR_ClientKill();
 }
 
@@ -2101,8 +2101,8 @@ static void Cmd_Pause_f (void)
 	}
 
 	if (GE_ShouldPause) {
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		G_FLOAT(OFS_PARM0) = newstate;
 		PR_ExecuteProgram (GE_ShouldPause);
 		if (!G_FLOAT(OFS_RETURN))
@@ -2391,8 +2391,8 @@ static void Cmd_SetInfo_f (void)
 
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
 
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	if (PR_UserInfoChanged(0))
 		return; // does not allowed to be changed by mod.
 
@@ -2476,8 +2476,8 @@ void ProcessUserInfoChange (client_t* sv_client, const char* key, const char* ol
 
 	if (mod_UserInfo_Changed)
 	{
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_client->edict);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_client->edict);
 		PR_SetTmpString(&G_INT(OFS_PARM0), key);
 		PR_SetTmpString(&G_INT(OFS_PARM1), old_value);
 		PR_SetTmpString(&G_INT(OFS_PARM2), Info_Get(&sv_client->_userinfo_ctx_, key));
@@ -2723,7 +2723,7 @@ static void Cmd_Join_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	PR_SetGlobal_self(sv_player);
 	PR_GameClientDisconnect(1);
 
 	// this is like SVC_DirectConnect.
@@ -2743,17 +2743,17 @@ static void Cmd_Join_f (void)
 
 	// copy spawn parms out of the client_t
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+		sv_client->spawn_parms[i] = PR_Global_parm1()[i];
 
 	// call the spawn function
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GameClientConnect(0);
 
 	// actually spawn the player
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GamePutClientInServer(0);
 
@@ -2808,7 +2808,7 @@ static void Cmd_Observe_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	PR_SetGlobal_self(sv_player);
 	PR_GameClientDisconnect(0);
 
 	// this is like SVC_DirectConnect.
@@ -2830,16 +2830,16 @@ static void Cmd_Observe_f (void)
 
 	// copy spawn parms out of the client_t
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+		sv_client->spawn_parms[i] = PR_Global_parm1()[i];
 
 	// call the spawn function
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GameClientConnect(1);
 
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	PR_GamePutClientInServer(1); // let mod know we put spec not player
 
 	// look in SVC_DirectConnect() for for extended comment whats this for
@@ -3410,8 +3410,8 @@ static ucmd_t ucmds[] =
 
 static qbool SV_ExecutePRCommand (void)
 {
-	pr_global_struct->time = sv.time;
-	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	*PR_Global_time() = sv.time;
+	PR_SetGlobal_self(sv_player);
 	return PR_ClientCmd();
 }
 
@@ -3763,9 +3763,9 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		VectorCopy (sv_player->v->velocity, oldvelocity);
 		old_teleport_time = sv_player->v->teleport_time;
 
-		PR_GLOBAL(frametime) = sv_frametime;
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_frametime() = sv_frametime;
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		PR_GameClientPreThink(0);
 
 		if (pr_nqprogs)
@@ -3830,7 +3830,7 @@ FIXME
 	// Better would be to provide a way to simulate a move command, but at least this doesn't require API change
 	if (blocked && !second_attempt && sv_client->isBot && sv_player->v->blocked)
 	{
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		PR_SetGlobal_self(sv_player);
 
 		// Don't store in the bot's entity as we will run this again
 		VectorSubtract (pmove.origin, offset, pr_global_struct->trace_endpos);
@@ -3885,8 +3885,8 @@ FIXME
 			ent = EDICT_NUM(n);
 			if (!ent->v->touch || (playertouch[n/8]&(1<<(n%8))))
 				continue;
-			pr_global_struct->self = EDICT_TO_PROG(ent);
-			pr_global_struct->other = EDICT_TO_PROG(sv_player);
+		PR_SetGlobal_self(ent);
+		PR_SetGlobal_other(sv_player);
 			PR_EdictTouch (ent->v->touch);
 			playertouch[n/8] |= 1 << (n%8);
 		}
@@ -4194,8 +4194,8 @@ void SV_PostRunCmd(void)
 #endif
 
 		onground = (int) sv_player->v->flags & FL_ONGROUND;
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		VectorCopy (sv_player->v->velocity, originalvel);
 		PR_GameClientPostThink(0);
 
@@ -4220,8 +4220,8 @@ void SV_PostRunCmd(void)
 	}
 	else
 	{
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
 		PR_GameClientPostThink(1);
 	}
 }
