@@ -22,6 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/entities.h"
+#endif
 
 static void SV_ClientDownloadComplete(client_t* cl);
 
@@ -442,8 +445,18 @@ static void Cmd_New_f (void)
 	// send full levelname
 	if (sv_client->rip_vip)
 		MSG_WriteString (&sv_client->netchan.message, "");
-	else
-		MSG_WriteString (&sv_client->netchan.message, PR_GetEntityString(sv.edicts->v->message));
+	else {
+		const char *levelname_text = PR_GetEntityString(sv.edicts->v->message);
+#ifdef MVDSV_QC2CPP_ENABLED
+		char levelname[MAX_INFO_STRING] = {0};
+		if (QC_Active()) {
+			if (QC_CopyEntityString(sv.edicts, "message", levelname, sizeof(levelname), NULL)
+				== QC_PLUGIN_OK) levelname_text = levelname;
+			else levelname_text = "";
+		}
+#endif
+		MSG_WriteString (&sv_client->netchan.message, levelname_text);
+	}
 
 	// send the movevars
 	MSG_WriteFloat(&sv_client->netchan.message, movevars.gravity);
@@ -943,7 +956,16 @@ static void SV_SpawnSpectator (void)
 	for (i=MAX_CLIENTS-1 ; i<sv.num_edicts ; i++)
 	{
 		e = EDICT_NUM(i);
-		if (!strcmp(PR_GetEntityString(e->v->classname), "info_player_start"))
+		const char *classname_text = PR_GetEntityString(e->v->classname);
+#ifdef MVDSV_QC2CPP_ENABLED
+		char classname[MAX_QPATH] = {0};
+		if (QC_Active()) {
+			if (QC_CopyEntityString(e, "classname", classname, sizeof(classname), NULL)
+				== QC_PLUGIN_OK) classname_text = classname;
+			else classname_text = "";
+		}
+#endif
+		if (!strcmp(classname_text, "info_player_start"))
 		{
 			VectorCopy (e->v->origin, sv_player->v->origin);
 			VectorCopy (e->v->angles, sv_player->v->angles);
@@ -2143,7 +2165,7 @@ static void Cmd_PTrack_f (void)
 		sv_client->spec_track = 0;
 		ent = EDICT_NUM(sv_client - svs.clients + 1);
 		tent = EDICT_NUM(0);
-		ent->v->goalentity = EDICT_TO_PROG(tent);
+		ent->v->goalentity = PR_EntityReference(tent);
 		return;
 	}
 
@@ -2154,14 +2176,14 @@ static void Cmd_PTrack_f (void)
 		sv_client->spec_track = 0;
 		ent = EDICT_NUM(sv_client - svs.clients + 1);
 		tent = EDICT_NUM(0);
-		ent->v->goalentity = EDICT_TO_PROG(tent);
+		ent->v->goalentity = PR_EntityReference(tent);
 		return;
 	}
 	sv_client->spec_track = i + 1; // now tracking
 
 	ent = EDICT_NUM(sv_client - svs.clients + 1);
 	tent = EDICT_NUM(i + 1);
-	ent->v->goalentity = EDICT_TO_PROG(tent);
+	ent->v->goalentity = PR_EntityReference(tent);
 }
 
 /*
@@ -2635,7 +2657,7 @@ static void SetUpClientEdict (client_t *cl, edict_t *ent)
 	PR_SetEntityString(ent, ent->v->netname, cl->name);
 	// so spec will have right goalentity - if speccing someone
 	if(cl->spectator && cl->spec_track > 0)
-		ent->v->goalentity = EDICT_TO_PROG(svs.clients[cl->spec_track-1].edict);
+		ent->v->goalentity = PR_EntityReference(svs.clients[cl->spec_track-1].edict);
 
 	ent->v->colormap = NUM_FOR_EDICT(ent);
 
@@ -3467,7 +3489,7 @@ static void AddLinksToPmove ( areanode_t *node )
 		pmove_maxs[i] = pmove.origin[i] + 256;
 	}
 
-	pl = EDICT_TO_PROG(sv_player);
+	pl = PR_EntityReference(sv_player);
 
 	// touch linked edicts
 	for (l = node->solid_edicts.next ; l != &node->solid_edicts ; l = next)
@@ -3825,7 +3847,7 @@ FIXME
 		if (pmove.onground)
 		{
 			pr_global_struct->trace_allsolid = (int) sv_player->v->flags | FL_ONGROUND;
-			pr_global_struct->trace_ent = EDICT_TO_PROG(EDICT_NUM(pmove.physents[pmove.groundent].info));
+			PR_SetGlobal_trace_ent(EDICT_NUM(pmove.physents[pmove.groundent].info));
 		} else {
 			pr_global_struct->trace_allsolid = (int) sv_player->v->flags & ~FL_ONGROUND;
 		}
@@ -3849,7 +3871,7 @@ FIXME
 	if (pmove.onground)
 	{
 		sv_player->v->flags = (int) sv_player->v->flags | FL_ONGROUND;
-		sv_player->v->groundentity = EDICT_TO_PROG(EDICT_NUM(pmove.physents[pmove.groundent].info));
+		sv_player->v->groundentity = PR_EntityReference(EDICT_NUM(pmove.physents[pmove.groundent].info));
 	} else {
 		sv_player->v->flags = (int) sv_player->v->flags & ~FL_ONGROUND;
 	}

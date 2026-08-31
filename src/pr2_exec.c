@@ -24,6 +24,9 @@
 #ifdef USE_PR2
 
 #include "qwsvdef.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/entities.h"
+#endif
 #include "vm_local.h"
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/adapter.h"
@@ -185,6 +188,15 @@ char *PR2_GetEntityString(string_t num)
 //===========================================================================
 void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		const char *const field = QC_EntityStringFieldName(ed, target);
+		if (field == NULL || !QC_SetEntityString(ed, field, s)) {
+			SV_Error("qc2cpp failed to set entity string");
+		}
+		return;
+	}
+	#endif
 	if (!sv_vm) {
 		PR1_SetString(target, s);
 		return;
@@ -192,6 +204,15 @@ void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 }
 void PR2_SetGlobalString(string_t* target, char* s)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		(void)target;
+		if (!QC_SetMapName(s)) {
+			SV_Error("qc2cpp failed to set global string");
+		}
+		return;
+	}
+	#endif
 	if (!sv_vm) {
 		PR1_SetString(target, s);
 		return;
@@ -369,6 +390,15 @@ void PR2_GameSetChangeParms(void)
 //===========================================================================
 void PR2_EdictTouch(func_t f)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		(void)f;
+		QC_EdictTouch((qc_entity_id_t)PR_Global_self_word(),
+			(qc_entity_id_t)PR_Global_other_word(), (float)sv.time,
+			*PR_Global_frametime());
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_TOUCH, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -380,6 +410,14 @@ void PR2_EdictTouch(func_t f)
 //===========================================================================
 void PR2_EdictThink(func_t f)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		(void)f;
+		QC_EdictThink((qc_entity_id_t)PR_Global_self_word(), (float)sv.time,
+			*PR_Global_frametime());
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_THINK, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -391,6 +429,15 @@ void PR2_EdictThink(func_t f)
 //===========================================================================
 void PR2_EdictBlocked(func_t f)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		(void)f;
+		QC_EdictBlocked((qc_entity_id_t)PR_Global_self_word(),
+			(qc_entity_id_t)PR_Global_other_word(), (float)sv.time,
+			*PR_Global_frametime());
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_BLOCKED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -495,7 +542,7 @@ void PR2_GameConsoleCommand(void)
 
 			if (NET_CompareAdr(cl->netchan.remote_address, net_from))
 			{
-				pr_global_struct->self = EDICT_TO_PROG(cl->edict);
+				PR_SetGlobal_self(cl->edict);
 				break;
 			}
 		}
@@ -520,7 +567,7 @@ void PR2_ClearEdict(edict_t* e)
 {
 	if (sv_vm && sv_vm->pr2_references && (sv_vm->type == VMI_NATIVE || sv_vm->type == VMI_BYTECODE || sv_vm->type == VMI_COMPILED)) {
 		int old_self = pr_global_struct->self;
-		pr_global_struct->self = EDICT_TO_PROG(e);
+		PR_SetGlobal_self(e);
 		VM_Call(sv_vm, 0, GAME_CLEAR_EDICT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 		pr_global_struct->self = old_self;
 	}
@@ -535,8 +582,8 @@ qbool PR2_SendEntity(edict_t* e, edict_t* to, int sendflags)
 	qbool ret_val = false;
 	int old_self = pr_global_struct->self;
 	int old_other = pr_global_struct->other;
-	pr_global_struct->self = EDICT_TO_PROG(e);
-	pr_global_struct->other = to ? EDICT_TO_PROG(to) : 0;
+	PR_SetGlobal_self(e);
+	PR_SetGlobal_other(to);
 	if (sv_vm)
 	{
 		ret_val = VM_Call(sv_vm, 1, GAME_EDICT_CSQCSEND, (int)sendflags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);

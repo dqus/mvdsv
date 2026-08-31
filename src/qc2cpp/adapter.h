@@ -14,6 +14,11 @@ void QC_Shutdown(void);
 void QC_UnloadProgs(void);
 void QC_LoadEntities(const char *data);
 void QC_StartFrame(float time, float frametime, qbool is_bot_frame);
+void QC_EdictTouch(qc_entity_id_t touched, qc_entity_id_t toucher, float time,
+	float frametime);
+void QC_EdictThink(qc_entity_id_t self, float time, float frametime);
+void QC_EdictBlocked(qc_entity_id_t pusher, qc_entity_id_t obstacle, float time,
+	float frametime);
 void QC_Unpublish(void *context);
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic);
 

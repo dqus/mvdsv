@@ -22,6 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/entities.h"
+#endif
 
 /*
 
@@ -96,14 +99,23 @@ void SV_CheckVelocity (edict_t *ent)
 	//
 	for (i=0 ; i<3 ; i++)
 	{
+		const char *classname_text = PR_GetEntityString(ent->v->classname);
+#ifdef MVDSV_QC2CPP_ENABLED
+		char classname[MAX_QPATH] = {0};
+		if (QC_Active()) {
+			if (QC_CopyEntityString(ent, "classname", classname, sizeof(classname), NULL)
+				== QC_PLUGIN_OK) classname_text = classname;
+			else classname_text = "";
+		}
+#endif
 		if (IS_NAN(ent->v->velocity[i]))
 		{
-			Con_DPrintf ("Got a NaN velocity on %s\n", PR_GetEntityString(ent->v->classname));
+			Con_DPrintf ("Got a NaN velocity on %s\n", classname_text);
 			ent->v->velocity[i] = 0;
 		}
 		if (IS_NAN(ent->v->origin[i]))
 		{
-			Con_DPrintf ("Got a NaN origin on %s\n", PR_GetEntityString(ent->v->classname));
+			Con_DPrintf ("Got a NaN origin on %s\n", classname_text);
 			ent->v->origin[i] = 0;
 		}
 /*		if (ent->v->velocity[i] > sv_maxvelocity.value)
@@ -291,7 +303,7 @@ int SV_FlyMove (edict_t *ent, float time1, trace_t *steptrace, int type)
 			if (trace.e.ent->v->solid == SOLID_BSP)
 			{
 				ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-				ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
+				ent->v->groundentity = PR_EntityReference(trace.e.ent);
 			}
 		}
 		if (!trace.plane.normal[2])
@@ -767,7 +779,7 @@ void SV_Physics_Toss (edict_t *ent)
 		if (ent->v->velocity[2] < 60 || ent->v->movetype != MOVETYPE_BOUNCE )
 		{
 			ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-			ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
+			ent->v->groundentity = PR_EntityReference(trace.e.ent);
 			VectorClear (ent->v->velocity);
 			VectorClear (ent->v->avelocity);
 		}
@@ -892,7 +904,7 @@ void SV_RunNQNewmis (void)
 	double save_frametime;
 	int i, pl;
 
-	pl = EDICT_TO_PROG(sv_player);
+	pl = PR_EntityReference(sv_player);
 	ent = NEXT_EDICT(sv.edicts);
 	for (i=1 ; i<sv.num_edicts ; i++, ent = NEXT_EDICT(ent))
 	{
@@ -1015,7 +1027,7 @@ void SV_Physics (void)
 		sv_player = cl->edict;
 
 		if (sv_client->spectator && sv_client->spec_track > 0)
-			sv_player->v->goalentity = EDICT_TO_PROG(svs.clients[sv_client->spec_track-1].edict);
+			sv_player->v->goalentity = PR_EntityReference(svs.clients[sv_client->spec_track-1].edict);
 	}
 
 	sv_player = savesvpl;
