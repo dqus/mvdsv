@@ -3,9 +3,14 @@
 This file records implementation progress for the approved canonical adapter
 specification and its execution plan in qc2cpp.
 
-## Tasks 8–10 — transport selection, canonical globals and entities
+## Tasks 8–11 — transport selection, canonical state and world services
 
 Implemented on branch `codex/mvdsv-qc2cpp-adapter`.
+
+Task 11 passes a complete mandatory host table at plugin query time. World and
+map imports are real MVDSV operations; imports owned by the following two tasks
+fail closed until their explicit movement or network implementation replaces
+them. The coverage ledger is `tests/qc2cpp/host-imports.tsv`.
 
 - The native transport resolves only `<fs_gamedir>/<sv_progsname>.<platform suffix>`
   with `RTLD_NOW | RTLD_LOCAL`, then obtains only `qc_game_plugin_query_v1`.
@@ -32,5 +37,6 @@ Implemented on branch `codex/mvdsv-qc2cpp-adapter`.
 - Fixed entity callbacks are dispatched through their qc2cpp fixed entries;
   their shared words are presence markers, never PR1 function offsets.
 
-The game host bindings are deliberately not complete yet. Tasks 10–13 add the
-semantic engine services before a real generated game is expected to boot.
+The game host bindings are deliberately not complete yet. Tasks 12–13 add the
+remaining movement and network services before a real generated game is
+expected to boot.

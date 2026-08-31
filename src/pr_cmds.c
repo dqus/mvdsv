@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/services.h"
+#endif
+
 static tokenizecontext_t pr1_tokencontext;
 
 #define	RETURN_EDICT(e) (((int *)pr_globals)[OFS_RETURN] = PR_EntityReference(e))
@@ -120,16 +124,16 @@ This is the only valid way to move an object without using the physics of the wo
 setorigin (entity, origin)
 =================
 */
+void SV_QC_SetOrigin(edict_t *entity, const float origin[3])
+{
+	VectorCopy(origin, entity->v->origin);
+	SV_AntilagReset(entity);
+	SV_LinkEdict(entity, false);
+}
+
 void PF_setorigin (void)
 {
-	edict_t	*e;
-	float	*org;
-
-	e = G_EDICT(OFS_PARM0);
-	org = G_VECTOR(OFS_PARM1);
-	VectorCopy (org, e->v->origin);
-	SV_AntilagReset (e);
-	SV_LinkEdict (e, false);
+	SV_QC_SetOrigin(G_EDICT(OFS_PARM0), G_VECTOR(OFS_PARM1));
 }
 
 
@@ -142,18 +146,17 @@ the size box is rotated by the current angle
 setsize (entity, minvector, maxvector)
 =================
 */
+void SV_QC_SetSize(edict_t *entity, const float mins[3], const float maxs[3])
+{
+	VectorCopy(mins, entity->v->mins);
+	VectorCopy(maxs, entity->v->maxs);
+	VectorSubtract(maxs, mins, entity->v->size);
+	SV_LinkEdict(entity, false);
+}
+
 void PF_setsize (void)
 {
-	edict_t	*e;
-	float	*min, *max;
-
-	e = G_EDICT(OFS_PARM0);
-	min = G_VECTOR(OFS_PARM1);
-	max = G_VECTOR(OFS_PARM2);
-	VectorCopy (min, e->v->mins);
-	VectorCopy (max, e->v->maxs);
-	VectorSubtract (max, min, e->v->size);
-	SV_LinkEdict (e, false);
+	SV_QC_SetSize(G_EDICT(OFS_PARM0), G_VECTOR(OFS_PARM1), G_VECTOR(OFS_PARM2));
 }
 
 
@@ -165,52 +168,57 @@ setmodel(entity, model)
 Also sets size, mins, and maxs for inline bmodels
 =================
 */
-static void PF_setmodel (void)
+int SV_QC_SetModel(edict_t *entity, const char *name)
 {
 	int			i;
-	edict_t		*e;
 	char		*m, **check;
 	cmodel_t	*mod;
-
-	e = G_EDICT(OFS_PARM0);
-	m = G_STRING(OFS_PARM1);
+	m = (char *)name;
 
 // check to see if model was properly precached
 	for (i = 0, check = sv.model_precache; i < MAX_MODELS && *check ; i++, check++)
 		if (!strcmp(*check, m))
 			goto ok;
-	PR_RunError ("PF_setmodel: no precache: %s\n", m);
+	return 0;
 ok:
-
-	e->v->model = G_INT(OFS_PARM1);
-	e->v->modelindex = i;
+	entity->v->modelindex = i;
 
 // if it is an inline model, get the size information for it
 	if (m[0] == '*')
 	{
 		mod = CM_InlineModel (m);
-		VectorCopy (mod->mins, e->v->mins);
-		VectorCopy (mod->maxs, e->v->maxs);
-		VectorSubtract (mod->maxs, mod->mins, e->v->size);
-		SV_LinkEdict (e, false);
+		VectorCopy(mod->mins, entity->v->mins);
+		VectorCopy(mod->maxs, entity->v->maxs);
+		VectorSubtract(mod->maxs, mod->mins, entity->v->size);
+		SV_LinkEdict(entity, false);
 	}
 	else if (pr_nqprogs)
 	{
 		// hacks to make NQ progs happy
-		if (!strcmp(PR1_GetString(e->v->model), "maps/b_explob.bsp"))
+		if (!strcmp(PR1_GetString(entity->v->model), "maps/b_explob.bsp"))
 		{
-			VectorClear (e->v->mins);
-			VectorSet (e->v->maxs, 32, 32, 64);
+			VectorClear(entity->v->mins);
+			VectorSet(entity->v->maxs, 32, 32, 64);
 		}
 		else
 		{
 			// FTE does this, so we do, too; I'm not sure if it makes a difference
-			VectorSet (e->v->mins, -16, -16, -16);
-			VectorSet (e->v->maxs, 16, 16, 16);
+			VectorSet(entity->v->mins, -16, -16, -16);
+			VectorSet(entity->v->maxs, 16, 16, 16);
 		}
-		VectorSubtract (e->v->maxs, e->v->mins, e->v->size);
-		SV_LinkEdict (e, false);
+		VectorSubtract(entity->v->maxs, entity->v->mins, entity->v->size);
+		SV_LinkEdict(entity, false);
 	}
+	return 1;
+}
+
+static void PF_setmodel (void)
+{
+	edict_t *const entity = G_EDICT(OFS_PARM0);
+	char *const name = G_STRING(OFS_PARM1);
+	entity->v->model = G_INT(OFS_PARM1);
+	if (!SV_QC_SetModel(entity, name))
+		PR_RunError("PF_setmodel: no precache: %s\n", name);
 }
 
 /*
@@ -1341,54 +1349,64 @@ void PF_precache_file (void)
 	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
 }
 
-void PF_precache_sound (void)
+int SV_QC_PrecacheSound(const char *name)
 {
-	char	*s;
 	int		i;
 
 	if (sv.state != ss_loading)
-		PR_RunError ("PF_Precache_*: Precache can only be done in spawn functions");
-
-	s = G_STRING(OFS_PARM0);
-	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	PR_CheckEmptyString (s);
+		return 0;
+	if (name == NULL || name[0] <= ' ')
+		return 0;
 
 	for (i=0 ; i<MAX_SOUNDS ; i++)
 	{
 		if (!sv.sound_precache[i])
 		{
-			sv.sound_precache[i] = s;
-			return;
+			sv.sound_precache[i] = (char *)name;
+			return 1;
 		}
-		if (!strcmp(sv.sound_precache[i], s))
-			return;
+		if (!strcmp(sv.sound_precache[i], name))
+			return 1;
 	}
-	PR_RunError ("PF_precache_sound: overflow");
+	return 0;
 }
 
-void PF_precache_model (void)
+void PF_precache_sound (void)
 {
-	char	*s;
-	int		i;
+	char *const name = G_STRING(OFS_PARM0);
+	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
+	if (!SV_QC_PrecacheSound(name))
+		PR_RunError("PF_precache_sound failed");
+}
+
+int SV_QC_PrecacheModel(const char *name)
+{
+	int i;
 
 	if (sv.state != ss_loading)
-		PR_RunError ("PF_Precache_*: Precache can only be done in spawn functions");
-
-	s = G_STRING(OFS_PARM0);
-	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	PR_CheckEmptyString (s);
+		return 0;
+	if (name == NULL || name[0] <= ' ')
+		return 0;
 
 	for (i=0 ; i<MAX_MODELS ; i++)
 	{
 		if (!sv.model_precache[i])
 		{
-			sv.model_precache[i] = s;
-			return;
+			sv.model_precache[i] = (char *)name;
+			return 1;
 		}
-		if (!strcmp(sv.model_precache[i], s))
-			return;
+		if (!strcmp(sv.model_precache[i], name))
+			return 1;
 	}
-	PR_RunError ("PF_precache_model: overflow");
+	return 0;
+}
+
+void PF_precache_model (void)
+{
+	char *const name = G_STRING(OFS_PARM0);
+	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
+	if (!SV_QC_PrecacheModel(name))
+		PR_RunError("PF_precache_model failed");
 }
 
 static void PF_precache_vwep_model (void)
@@ -1520,18 +1538,13 @@ PF_lightstyle
 void(float style, string value) lightstyle
 ===============
 */
-void PF_lightstyle (void)
+void SV_QC_LightStyle(int style, const char *value)
 {
-	int		style;
-	char	*val;
 	client_t	*client;
 	int			j;
 
-	style = G_FLOAT(OFS_PARM0);
-	val = G_STRING(OFS_PARM1);
-
 	// change the string in sv
-	sv.lightstyles[style] = val;
+	sv.lightstyles[style] = (char *)value;
 
 	// send message to all clients on this server
 	if (sv.state != ss_active)
@@ -1540,19 +1553,24 @@ void PF_lightstyle (void)
 	for (j=0, client = svs.clients ; j<MAX_CLIENTS ; j++, client++)
 		if ( client->state == cs_spawned )
 		{
-			ClientReliableWrite_Begin (client, svc_lightstyle, strlen(val)+3);
+			ClientReliableWrite_Begin (client, svc_lightstyle, strlen(value)+3);
 			ClientReliableWrite_Char (client, style);
-			ClientReliableWrite_String (client, val);
+			ClientReliableWrite_String (client, (char *)value);
 		}
 	if (sv.mvdrecording)
 	{
-		if (MVDWrite_Begin( dem_all, 0, strlen(val)+3))
+		if (MVDWrite_Begin( dem_all, 0, strlen(value)+3))
 		{
 			MVD_MSG_WriteByte(svc_lightstyle);
 			MVD_MSG_WriteChar(style);
-			MVD_MSG_WriteString(val);
+			MVD_MSG_WriteString(value);
 		}
 	}
+}
+
+void PF_lightstyle (void)
+{
+	SV_QC_LightStyle((int)G_FLOAT(OFS_PARM0), G_STRING(OFS_PARM1));
 }
 
 void PF_rint (void)
@@ -2204,12 +2222,9 @@ void PF_WriteEntity (void)
 
 int SV_ModelIndex (char *name);
 
-void PF_makestatic (void)
+void SV_QC_MakeStatic(edict_t *ent, const char *model_name)
 {
 	entity_state_t* s;
-	edict_t	*ent;
-
-	ent = G_EDICT(OFS_PARM0);
 	if (sv.static_entity_count >= sizeof(sv.static_entities) / sizeof(sv.static_entities[0])) {
 		ED_Free (ent);
 		return;
@@ -2218,7 +2233,7 @@ void PF_makestatic (void)
 	s = &sv.static_entities[sv.static_entity_count];
 	memset(s, 0, sizeof(sv.static_entities[0]));
 	s->number = sv.static_entity_count + 1;
-	s->modelindex = SV_ModelIndex(PR_GetEntityString(ent->v->model));
+	s->modelindex = SV_ModelIndex((char *)model_name);
 	if (!s->modelindex) {
 		ED_Free (ent);
 		return;
@@ -2243,6 +2258,12 @@ void PF_makestatic (void)
 
 	// throw the entity away now
 	ED_Free (ent);
+}
+
+void PF_makestatic (void)
+{
+	edict_t *const entity = G_EDICT(OFS_PARM0);
+	SV_QC_MakeStatic(entity, PR_GetEntityString(entity->v->model));
 }
 
 //=============================================================================
@@ -2275,9 +2296,8 @@ void PF_setspawnparms (void)
 PF_changelevel
 ==============
 */
-void PF_changelevel (void)
+void SV_QC_ChangeLevel(const char *map)
 {
-	char	*s;
 	static	int	last_spawncount;
 
 	// make sure we don't issue two changelevels
@@ -2285,8 +2305,12 @@ void PF_changelevel (void)
 		return;
 	last_spawncount = svs.spawncount;
 
-	s = G_STRING(OFS_PARM0);
-	Cbuf_AddText (va("map %s\n",s));
+	Cbuf_AddText(va("map %s\n", map));
+}
+
+void PF_changelevel (void)
+{
+	SV_QC_ChangeLevel(G_STRING(OFS_PARM0));
 }
 
 

@@ -144,3 +144,22 @@ add_dependencies(qc2cpp_entities_test qc2cpp_fixture_plugin
 	qc2cpp_bad_entities_capacity_plugin qc2cpp_bad_entities_stride_plugin
 	qc2cpp_bad_entities_overflow_plugin)
 add_test(NAME qc2cpp_entities COMMAND qc2cpp_entities_test $<TARGET_FILE_DIR:qc2cpp_fixture_plugin>)
+
+add_executable(qc2cpp_services_world_test
+	services_world_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/services_world.c)
+set_target_properties(qc2cpp_services_world_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_services_world_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_services_world_test PRIVATE -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter)
+target_compile_definitions(qc2cpp_services_world_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_services_world_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_services_world COMMAND qc2cpp_services_world_test)
