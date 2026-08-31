@@ -42,6 +42,13 @@ qc2cpp_add_bad_globals_fixture(qc2cpp_bad_globals_offset_plugin bad_globals_offs
 qc2cpp_add_bad_globals_fixture(qc2cpp_bad_globals_size_plugin bad_globals_size
 	QC2CPP_FIXTURE_BAD_GLOBAL_SIZE)
 
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_entities_capacity_plugin bad_entities_capacity
+	QC2CPP_FIXTURE_BAD_ENTITY_CAPACITY)
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_entities_stride_plugin bad_entities_stride
+	QC2CPP_FIXTURE_BAD_ENTITY_STRIDE)
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_entities_overflow_plugin bad_entities_overflow
+	QC2CPP_FIXTURE_BAD_ENTITY_OVERFLOW)
+
 add_library(qc2cpp_no_query_plugin MODULE no_query_plugin.c)
 set_target_properties(qc2cpp_no_query_plugin PROPERTIES
 	C_STANDARD 11
@@ -111,3 +118,29 @@ add_dependencies(qc2cpp_globals_test qc2cpp_fixture_plugin
 	qc2cpp_bad_globals_abi_plugin qc2cpp_bad_globals_offset_plugin
 	qc2cpp_bad_globals_size_plugin)
 add_test(NAME qc2cpp_globals COMMAND qc2cpp_globals_test $<TARGET_FILE_DIR:qc2cpp_fixture_plugin>)
+
+add_executable(qc2cpp_entities_test
+	entities_test.c
+${PROJECT_SOURCE_DIR}/src/qc2cpp/entities.c
+${PROJECT_SOURCE_DIR}/src/qc2cpp/transport.c
+${PROJECT_SOURCE_DIR}/src/qc2cpp/native.c
+${PROJECT_SOURCE_DIR}/src/qc2cpp/wasm.c)
+set_target_properties(qc2cpp_entities_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_entities_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_entities_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qc2cpp_entities_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	MVDSV_QC2CPP_NATIVE=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_entities_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+add_dependencies(qc2cpp_entities_test qc2cpp_fixture_plugin
+	qc2cpp_bad_entities_capacity_plugin qc2cpp_bad_entities_stride_plugin
+	qc2cpp_bad_entities_overflow_plugin)
+add_test(NAME qc2cpp_entities COMMAND qc2cpp_entities_test $<TARGET_FILE_DIR:qc2cpp_fixture_plugin>)

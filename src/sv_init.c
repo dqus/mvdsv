@@ -389,24 +389,43 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 #endif
 	PR_InitProg();
 
-	for (i = 0; i < sv.max_edicts; i++)
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		for (i = 0; i < sv.max_edicts; i++) {
+			sv.edicts[i].e.area.ed = &sv.edicts[i];
+		}
+		fofs_items2 = 0;
+		fofs_maxspeed = 0;
+		fofs_gravity = 0;
+		fofs_movement = 0;
+		fofs_vw_index = 0;
+		fofs_hideentity = 0;
+		fofs_trackent = 0;
+		fofs_visibility = 0;
+		fofs_hide_players = 0;
+		fofs_teleported = 0;
+	} else
+#endif
 	{
-		sv.edicts[i].v = (entvars_t *)((byte *)sv.game_edicts + i * pr_edict_size);
-		sv.edicts[i].e.entnum = i;
-		sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
-		PR_ClearEdict(&sv.edicts[i]);
-	}
+		for (i = 0; i < sv.max_edicts; i++)
+		{
+			sv.edicts[i].v = (entvars_t *)((byte *)sv.game_edicts + i * pr_edict_size);
+			sv.edicts[i].e.entnum = i;
+			sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
+			PR_ClearEdict(&sv.edicts[i]);
+		}
 
-	fofs_items2 = ED_FindFieldOffset ("items2"); // ZQ_ITEMS2 extension
-	fofs_maxspeed = ED_FindFieldOffset ("maxspeed");
-	fofs_gravity = ED_FindFieldOffset ("gravity");
-	fofs_movement = ED_FindFieldOffset ("movement");
-	fofs_vw_index = ED_FindFieldOffset ("vw_index");
-	fofs_hideentity = ED_FindFieldOffset ("hideentity");
-	fofs_trackent = ED_FindFieldOffset ("trackent");
-	fofs_visibility = ED_FindFieldOffset ("visclients");
-	fofs_hide_players = ED_FindFieldOffset ("hideplayers");
-	fofs_teleported = ED_FindFieldOffset ("teleported");
+		fofs_items2 = ED_FindFieldOffset ("items2"); // ZQ_ITEMS2 extension
+		fofs_maxspeed = ED_FindFieldOffset ("maxspeed");
+		fofs_gravity = ED_FindFieldOffset ("gravity");
+		fofs_movement = ED_FindFieldOffset ("movement");
+		fofs_vw_index = ED_FindFieldOffset ("vw_index");
+		fofs_hideentity = ED_FindFieldOffset ("hideentity");
+		fofs_trackent = ED_FindFieldOffset ("trackent");
+		fofs_visibility = ED_FindFieldOffset ("visclients");
+		fofs_hide_players = ED_FindFieldOffset ("hideplayers");
+		fofs_teleported = ED_FindFieldOffset ("teleported");
+	}
 
 #ifdef MVD_PEXT1_HIGHLAGTELEPORT
 	if (fofs_teleported) {

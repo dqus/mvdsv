@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static tokenizecontext_t pr1_tokencontext;
 
-#define	RETURN_EDICT(e) (((int *)pr_globals)[OFS_RETURN] = EDICT_TO_PROG(e))
+#define	RETURN_EDICT(e) (((int *)pr_globals)[OFS_RETURN] = PR_EntityReference(e))
 #define	RETURN_STRING(s) (PR1_SetString(&((int *)pr_globals)[OFS_RETURN], s))
 
 /*
@@ -674,9 +674,9 @@ void PF_traceline (void)
 	VectorCopy (trace.plane.normal, PR_GLOBAL(trace_plane_normal));
 	PR_GLOBAL(trace_plane_dist) =  trace.plane.dist;	
 	if (trace.e.ent)
-		PR_GLOBAL(trace_ent) = EDICT_TO_PROG(trace.e.ent);
+		PR_SetGlobal_trace_ent(trace.e.ent);
 	else
-		PR_GLOBAL(trace_ent) = EDICT_TO_PROG(sv.edicts);
+		PR_SetGlobal_trace_ent(sv.edicts);
 }
 
 /*
@@ -1236,7 +1236,7 @@ static void PF_findradius (void)
 		if (DotProduct(eorg, eorg) > rad_2)
 			continue;
 
-		ent->v->chain = EDICT_TO_PROG(chain);
+	ent->v->chain = PR_EntityReference(chain);
 		chain = ent;
 	}
 
@@ -1508,7 +1508,7 @@ void PF_droptofloor (void)
 		VectorCopy (trace.endpos, ent->v->origin);
 		SV_LinkEdict (ent, false);
 		ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-		ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
+	ent->v->groundentity = PR_EntityReference(trace.e.ent);
 		G_FLOAT(OFS_RETURN) = 1;
 	}
 }
@@ -2543,9 +2543,9 @@ static void PF_tracebox (void)
         VectorCopy (trace.plane.normal, PR_GLOBAL(trace_plane_normal));
         PR_GLOBAL(trace_plane_dist) =  trace.plane.dist;
         if (trace.e.ent)
-                PR_GLOBAL(trace_ent) = EDICT_TO_PROG(trace.e.ent);
+                PR_SetGlobal_trace_ent(trace.e.ent);
         else
-                PR_GLOBAL(trace_ent) = EDICT_TO_PROG(sv.edicts);
+                PR_SetGlobal_trace_ent(sv.edicts);
 }
 
 /*

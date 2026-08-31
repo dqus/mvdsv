@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/entities.h"
+#endif
 
 
 //=============================================================================
@@ -821,7 +824,16 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 	}
 
 	// ignore ents without visible models
-	if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model))
+	if (!ent->v->modelindex)
+		return false;
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		char model[MAX_QPATH];
+		if (QC_CopyEntityString(ent, "model", model, sizeof(model), NULL) != QC_PLUGIN_OK
+			|| model[0] == '\0') return false;
+	} else
+#endif
+	if (!*PR_GetEntityString(ent->v->model))
 		return false;
 
 	if ( pvs && ent->e.num_leafs >= 0 )

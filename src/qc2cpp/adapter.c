@@ -3,6 +3,7 @@
 #include "progs.h"
 #include "qc2cpp/adapter.h"
 #include "qc2cpp/adapter_state.h"
+#include "qc2cpp/entities.h"
 #include "qc2cpp/globals.h"
 #include "qc2cpp/transport.h"
 
@@ -40,8 +41,12 @@ void QC_InitProg(void)
 		SV_Error("qc2cpp mode %d has no active game", qc_state.mode);
 	}
 	QC_AdapterStateEnter(&qc_state);
-	(void)game->init(game->context, (int32_t)(sv.time * 1000.0), (uint32_t)time(NULL));
+	const qc_guest_address_t entity_publication = game->init(game->context,
+		(int32_t)(sv.time * 1000.0), (uint32_t)time(NULL));
 	QC_AdapterStateLeave(&qc_state);
+	if (!QC_ConfigureEntities(entity_publication) || !QC_BindEntities()) {
+		SV_Error("qc2cpp game did not publish compatible entity storage");
+	}
 	if (!QC_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
 		SV_Error("qc2cpp game did not publish valid shared globals");
 	}
@@ -63,6 +68,7 @@ void QC_UnloadProgs(void)
 		return;
 	}
 	QC_ClearGlobals();
+	QC_ClearEntities();
 	QC_TransportClose(qc_transport);
 	qc_transport = NULL;
 	QC_AdapterStateReset(&qc_state);
@@ -91,10 +97,46 @@ void QC_StartFrame(float time, float frametime, qbool is_bot_frame)
 	QC_AdapterStateLeave(&qc_state);
 }
 
+void QC_EdictTouch(qc_entity_id_t touched, qc_entity_id_t toucher, float time,
+	float frametime)
+{
+	const qc_game_api_v1_t *game = QC_Game();
+	if (game == NULL) {
+		SV_Error("qc2cpp game cannot dispatch edict touch");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	game->edict_touch(game->context, touched, toucher, time, frametime);
+	QC_AdapterStateLeave(&qc_state);
+}
+
+void QC_EdictThink(qc_entity_id_t self, float time, float frametime)
+{
+	const qc_game_api_v1_t *game = QC_Game();
+	if (game == NULL) {
+		SV_Error("qc2cpp game cannot dispatch edict think");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	game->edict_think(game->context, self, time, frametime);
+	QC_AdapterStateLeave(&qc_state);
+}
+
+void QC_EdictBlocked(qc_entity_id_t pusher, qc_entity_id_t obstacle, float time,
+	float frametime)
+{
+	const qc_game_api_v1_t *game = QC_Game();
+	if (game == NULL) {
+		SV_Error("qc2cpp game cannot dispatch edict blocked");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	game->edict_blocked(game->context, pusher, obstacle, time, frametime);
+	QC_AdapterStateLeave(&qc_state);
+}
+
 void QC_Unpublish(void *context)
 {
 	(void)context;
 	QC_ClearGlobals();
+	QC_ClearEntities();
 }
 
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic)
