@@ -25,11 +25,15 @@
 
 #include "qwsvdef.h"
 #include "vm_local.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/adapter.h"
+#endif
 
 gameData_t gamedata;
 extern field_t *fields;
 
-// 0 = pr1 (qwprogs.dat etc), 1 = native (.so/.dll), 2 = q3vm (.qvm), 3 = q3vm (.qvm) with JIT
+// 0 = pr1 (qwprogs.dat etc), 1 = native (.so/.dll), 2 = q3vm (.qvm), 3 = q3vm (.qvm) with JIT,
+// 4 = qc2cpp native, 5 = qc2cpp Wasm.
 cvar_t sv_progtype = { "sv_progtype","0" };
 
 // 0 = standard, 1 = pr2 mods set string_t fields as byte offsets to location of actual strings
@@ -59,7 +63,7 @@ void PR2_Init(void)
 	{
 		usedll = Q_atoi(COM_Argv(p + 1));
 
-		if (usedll > VMI_COMPILED || usedll < VMI_NONE)
+		if (usedll > 5 || usedll < VMI_NONE)
 			usedll = VMI_NONE;
 		Cvar_SetValue(&sv_progtype,usedll);
 	}
@@ -397,6 +401,12 @@ qbool PR2_UserInfoChanged(int after)
 //===========================================================================
 void PR2_GameShutDown(void)
 {
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_Shutdown();
+		return;
+	}
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_SHUTDOWN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -408,6 +418,12 @@ void PR2_GameShutDown(void)
 //===========================================================================
 void PR2_UnLoadProgs(void)
 {
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_UnloadProgs();
+		return;
+	}
+#endif
 	if (sv_vm)
 	{
 		VM_Free( sv_vm );
@@ -424,6 +440,12 @@ void PR2_UnLoadProgs(void)
 //===========================================================================
 void PR2_LoadProgs(void)
 {
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (sv_progtype.value == QC_PROGTYPE_NATIVE || sv_progtype.value == QC_PROGTYPE_WASM) {
+		QC_LoadProgs();
+		return;
+	}
+#endif
 	sv_vm = VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value );
 
 	if ( sv_vm )
@@ -576,6 +598,12 @@ void PR2_InitProg(void)
 
 	Cvar_SetValue(&sv_pr2references, 0.0f);
 
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_InitProg();
+		return;
+	}
+	#endif
 	if (!sv_vm) {
 		PR1_InitProg();
 		return;
