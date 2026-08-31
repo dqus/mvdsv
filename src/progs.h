@@ -123,6 +123,7 @@ void NQP_Reset (void);
 
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/adapter.h"
+#include "qc2cpp/entities.h"
 #include "qc2cpp/globals.h"
 
 static inline qbool PR_UsesQc2cppGlobals(void) {
@@ -170,11 +171,19 @@ static inline void PR_SetGlobal_other_word(int value) {
 	if (PR_UsesQc2cppGlobals()) QC_Globals()->other = (qc_shared_entity_slot_t)value;
 	else PR_GLOBAL(other) = value;
 }
+static inline void PR_SetGlobal_trace_ent_word(int value) {
+	if (PR_UsesQc2cppGlobals()) QC_Globals()->trace_ent = (qc_shared_entity_slot_t)value;
+	else PR_GLOBAL(trace_ent) = value;
+}
 static inline void PR_SetGlobal_self_slot(edict_t *entity) {
 	PR_SetGlobal_self_word(entity == NULL ? 0 : entity->e.entnum);
 }
 static inline void PR_SetGlobal_other_slot(edict_t *entity) {
 	PR_SetGlobal_other_word(entity == NULL ? 0 : entity->e.entnum);
+}
+static inline int PR_QcEntityReference(edict_t *entity) {
+	const qc_entity_id_t slot = QC_EdictToSlot(entity);
+	return slot == QC_INVALID_ENTITY_ID ? 0 : (int)slot;
 }
 #else
 static inline float *PR_Global_time(void) { return &PR_GLOBAL(time); }
@@ -190,6 +199,7 @@ static inline int PR_Global_self_word(void) { return PR_GLOBAL(self); }
 static inline int PR_Global_other_word(void) { return PR_GLOBAL(other); }
 static inline void PR_SetGlobal_self_word(int value) { PR_GLOBAL(self) = value; }
 static inline void PR_SetGlobal_other_word(int value) { PR_GLOBAL(other) = value; }
+static inline void PR_SetGlobal_trace_ent_word(int value) { PR_GLOBAL(trace_ent) = value; }
 #endif
 
 //============================================================================
@@ -224,6 +234,19 @@ int NUM_FOR_EDICT(edict_t *e);
 
 #define	EDICT_TO_PROG(e) ((byte *)(e)->v - (byte *)sv.game_edicts)
 #define PROG_TO_EDICT(e) (&sv.edicts[(e)/pr_edict_size])
+
+#ifdef MVDSV_QC2CPP_ENABLED
+#define PR_EntityReference(entity) \
+	(PR_UsesQc2cppGlobals() \
+		? PR_QcEntityReference((edict_t *)(entity)) \
+		: ((entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity))))
+#else
+#define PR_EntityReference(entity) \
+	((entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity)))
+#endif
+
+#define PR_SetGlobal_trace_ent(entity) \
+	PR_SetGlobal_trace_ent_word(PR_EntityReference(entity))
 
 #ifdef MVDSV_QC2CPP_ENABLED
 #define PR_SetGlobal_self(entity) do { \
