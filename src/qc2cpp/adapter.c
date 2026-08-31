@@ -5,12 +5,14 @@
 #include "qc2cpp/adapter_state.h"
 #include "qc2cpp/entities.h"
 #include "qc2cpp/globals.h"
+#include "qc2cpp/services.h"
 #include "qc2cpp/transport.h"
 
 #include <string.h>
 
 static qc_transport_t *qc_transport;
 static qc_adapter_state_t qc_state;
+static qc_host_api_v1_t qc_host;
 
 qbool QC_Active(void)
 {
@@ -25,9 +27,17 @@ const qc_game_api_v1_t *QC_Game(void)
 void QC_LoadProgs(void)
 {
 	qc_program_diagnostic_v1_t diagnostic = {0};
+	qc_host = (qc_host_api_v1_t){
+		.abi_version = QC_PLUGIN_ABI_VERSION_V1,
+		.struct_size = sizeof(qc_host),
+		.unpublish = QC_Unpublish,
+		.fatal = QC_Fatal,
+	};
+	QC_BindWorldServices(&qc_host);
+	QC_BindUnavailableServices(&qc_host);
 	QC_AdapterStateSelect(&qc_state, (int)sv_progtype.value);
 	const qc_plugin_status_t status = QC_TransportOpen((int)sv_progtype.value,
-		fs_gamedir, sv_progsname.string, NULL, &qc_transport, &diagnostic);
+		fs_gamedir, sv_progsname.string, &qc_host, &qc_transport, &diagnostic);
 	if (status != QC_PLUGIN_OK) {
 		SV_Error("qc2cpp mode %d failed to load %s: %.*s", (int)sv_progtype.value,
 			sv_progsname.string, (int)diagnostic.message_size, diagnostic.message);
