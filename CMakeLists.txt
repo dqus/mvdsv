@@ -5,6 +5,28 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 # Set project name and languge.
 project(mvdsv C)
 
+option(MVDSV_QC2CPP_NATIVE "Enable the qc2cpp native game transport" OFF)
+option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
+option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
+set(MVDSV_WASMTIME_ROOT "" CACHE PATH
+	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
+
+if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM OR MVDSV_QC2CPP_TESTS)
+	find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS native)
+	if(MVDSV_QC2CPP_WASM)
+		find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS wasmtime)
+		find_library(MVDSV_WASMTIME_LIBRARY NAMES wasmtime
+			HINTS "${MVDSV_WASMTIME_ROOT}/lib" NO_DEFAULT_PATH)
+		if(NOT MVDSV_WASMTIME_LIBRARY)
+			message(FATAL_ERROR "MVDSV_QC2CPP_WASM requires MVDSV_WASMTIME_ROOT with lib/libwasmtime")
+		endif()
+	endif()
+endif()
+
+if(MVDSV_QC2CPP_TESTS AND NOT MVDSV_QC2CPP_NATIVE)
+	message(FATAL_ERROR "MVDSV_QC2CPP_TESTS requires MVDSV_QC2CPP_NATIVE=ON")
+endif()
+
 
 ######################################################################################################
 
@@ -80,6 +102,16 @@ set(SRC_COMMON
 	"${DIR_SRC}/zone.c"
 	)
 
+if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
+	list(APPEND SRC_COMMON
+		"${DIR_SRC}/qc2cpp/transport.c"
+		"${DIR_SRC}/qc2cpp/native.c"
+		"${DIR_SRC}/qc2cpp/wasm.c"
+		"${DIR_SRC}/qc2cpp/adapter.c"
+		"${DIR_SRC}/qc2cpp/adapter_state.c"
+	)
+endif()
+
 # Check build target, and included sources
 if(UNIX)
 	list(APPEND SRC_COMMON
@@ -154,7 +186,7 @@ set_target_properties(${PROJECT_NAME}
 ######################################################################################################
 
 # Set include directories
-target_include_directories(${PROJECT_NAME} PRIVATE ${DIR_SRC}/qwprot/src)
+target_include_directories(${PROJECT_NAME} PRIVATE ${DIR_SRC} ${DIR_SRC}/qwprot/src)
 if(PCRE_INCLUDE_DIR)
 	target_include_directories(${PROJECT_NAME} PRIVATE ${PCRE_INCLUDE_DIR})
 endif()
@@ -208,6 +240,25 @@ endif()
 target_compile_options(${PROJECT_NAME} PRIVATE ${CFLAGS})
 
 target_link_libraries(${PROJECT_NAME} Threads::Threads)
+
+if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
+	target_link_libraries(${PROJECT_NAME} Qc2cppHost::native ${CMAKE_DL_LIBS})
+	target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_ENABLED=1)
+	if(MVDSV_QC2CPP_NATIVE)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_NATIVE=1)
+	endif()
+	if(MVDSV_QC2CPP_WASM)
+		target_link_libraries(${PROJECT_NAME} Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
+		set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY BUILD_RPATH
+			"${MVDSV_WASMTIME_ROOT}/lib")
+		target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_WASM=1)
+	endif()
+endif()
+
+if(MVDSV_QC2CPP_TESTS)
+	enable_testing()
+	add_subdirectory(tests/qc2cpp)
+endif()
 
 
 ######################################################################################################
