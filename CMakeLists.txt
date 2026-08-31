@@ -109,6 +109,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qc2cpp/wasm.c"
 		"${DIR_SRC}/qc2cpp/adapter.c"
 		"${DIR_SRC}/qc2cpp/adapter_state.c"
+		"${DIR_SRC}/qc2cpp/entities.c"
 		"${DIR_SRC}/qc2cpp/globals.c"
 	)
 endif()
