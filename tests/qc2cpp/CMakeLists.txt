@@ -1,0 +1,65 @@
+add_library(qc2cpp_fixture_plugin MODULE fixture_plugin.c)
+set_target_properties(qc2cpp_fixture_plugin PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF
+	PREFIX ""
+	OUTPUT_NAME "game")
+if(APPLE)
+	set_target_properties(qc2cpp_fixture_plugin PROPERTIES SUFFIX ".dylib")
+endif()
+target_link_libraries(qc2cpp_fixture_plugin PRIVATE Qc2cppHost::native)
+
+add_library(qc2cpp_bad_abi_plugin MODULE fixture_plugin.c)
+set_target_properties(qc2cpp_bad_abi_plugin PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF
+	PREFIX ""
+	OUTPUT_NAME "bad")
+target_compile_definitions(qc2cpp_bad_abi_plugin PRIVATE QC2CPP_FIXTURE_BAD_ABI=1)
+target_link_libraries(qc2cpp_bad_abi_plugin PRIVATE Qc2cppHost::native)
+
+add_library(qc2cpp_no_query_plugin MODULE no_query_plugin.c)
+set_target_properties(qc2cpp_no_query_plugin PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF
+	PREFIX ""
+	OUTPUT_NAME "no_query")
+if(APPLE)
+	set_target_properties(qc2cpp_bad_abi_plugin qc2cpp_no_query_plugin PROPERTIES SUFFIX ".dylib")
+endif()
+
+add_executable(qc2cpp_transport_test
+	transport_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/transport.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/native.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/wasm.c)
+set_target_properties(qc2cpp_transport_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_transport_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_options(qc2cpp_transport_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qc2cpp_transport_test PRIVATE MVDSV_QC2CPP_NATIVE=1)
+if(MVDSV_QC2CPP_WASM)
+	target_link_libraries(qc2cpp_transport_test PRIVATE Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
+	set_property(TARGET qc2cpp_transport_test APPEND PROPERTY BUILD_RPATH
+		"${MVDSV_WASMTIME_ROOT}/lib")
+	target_compile_definitions(qc2cpp_transport_test PRIVATE MVDSV_QC2CPP_WASM=1)
+endif()
+target_link_libraries(qc2cpp_transport_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+add_dependencies(qc2cpp_transport_test qc2cpp_fixture_plugin qc2cpp_bad_abi_plugin qc2cpp_no_query_plugin)
+add_test(NAME qc2cpp_transport COMMAND qc2cpp_transport_test $<TARGET_FILE_DIR:qc2cpp_fixture_plugin>)
+
+add_executable(qc2cpp_adapter_state_test
+	adapter_state_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/adapter_state.c)
+set_target_properties(qc2cpp_adapter_state_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_adapter_state_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_options(qc2cpp_adapter_state_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME qc2cpp_adapter_state COMMAND qc2cpp_adapter_state_test)
