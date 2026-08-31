@@ -20,6 +20,28 @@ set_target_properties(qc2cpp_bad_abi_plugin PROPERTIES
 target_compile_definitions(qc2cpp_bad_abi_plugin PRIVATE QC2CPP_FIXTURE_BAD_ABI=1)
 target_link_libraries(qc2cpp_bad_abi_plugin PRIVATE Qc2cppHost::native)
 
+function(qc2cpp_add_bad_globals_fixture target output definition)
+	add_library(${target} MODULE fixture_plugin.c)
+	set_target_properties(${target} PROPERTIES
+		C_STANDARD 11
+		C_STANDARD_REQUIRED YES
+		C_EXTENSIONS OFF
+		PREFIX ""
+		OUTPUT_NAME ${output})
+	if(APPLE)
+		set_target_properties(${target} PROPERTIES SUFFIX ".dylib")
+	endif()
+	target_compile_definitions(${target} PRIVATE ${definition}=1)
+	target_link_libraries(${target} PRIVATE Qc2cppHost::native)
+endfunction()
+
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_globals_abi_plugin bad_globals_abi
+	QC2CPP_FIXTURE_BAD_ENGINE_ABI)
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_globals_offset_plugin bad_globals_offset
+	QC2CPP_FIXTURE_BAD_ENGINE_OFFSET)
+qc2cpp_add_bad_globals_fixture(qc2cpp_bad_globals_size_plugin bad_globals_size
+	QC2CPP_FIXTURE_BAD_GLOBAL_SIZE)
+
 add_library(qc2cpp_no_query_plugin MODULE no_query_plugin.c)
 set_target_properties(qc2cpp_no_query_plugin PROPERTIES
 	C_STANDARD 11
@@ -63,3 +85,29 @@ set_target_properties(qc2cpp_adapter_state_test PROPERTIES
 target_include_directories(qc2cpp_adapter_state_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qc2cpp_adapter_state_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME qc2cpp_adapter_state COMMAND qc2cpp_adapter_state_test)
+
+add_executable(qc2cpp_globals_test
+	globals_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/globals.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/transport.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/native.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/wasm.c)
+set_target_properties(qc2cpp_globals_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_globals_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_globals_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qc2cpp_globals_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	MVDSV_QC2CPP_NATIVE=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_globals_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+add_dependencies(qc2cpp_globals_test qc2cpp_fixture_plugin
+	qc2cpp_bad_globals_abi_plugin qc2cpp_bad_globals_offset_plugin
+	qc2cpp_bad_globals_size_plugin)
+add_test(NAME qc2cpp_globals COMMAND qc2cpp_globals_test $<TARGET_FILE_DIR:qc2cpp_fixture_plugin>)
