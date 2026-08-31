@@ -1,0 +1,47 @@
+import	implementation	test	behavior
+qc_import_setorigin_v1	world	qc2cpp_services_world	copies origin, resets antilag and relinks
+qc_import_setmodel_v1	world	qc2cpp_services_world	writes semantic model and applies precached model index
+qc_import_setsize_v1	world	qc2cpp_services_world	writes bounds, size and relinks
+qc_import_sound_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_spawn_v1	world	qc2cpp_services_world	allocates an active engine edict and returns its slot
+qc_import_remove_v1	world	qc2cpp_services_world	frees the exact engine edict slot
+qc_import_traceline_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_checkclient_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_precache_sound_v1	world	qc2cpp_services_world	persists and records a loading-phase sound name
+qc_import_precache_model_v1	world	qc2cpp_services_world	persists and records a loading-phase model name
+qc_import_stuffcmd_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_bprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_sprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_dprint_v1	world	qc2cpp_services_world	prints a checked local text copy
+qc_import_walkmove_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_droptofloor_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_lightstyle_v1	world	qc2cpp_services_world	persists style text and emits normal active-server effects
+qc_import_checkbottom_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_pointcontents_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_aim_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_cvar_v1	world	qc2cpp_services_world	reads the named M cvar
+qc_import_localcmd_v1	world	qc2cpp_services_world	queues checked command text
+qc_import_WriteByte_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteChar_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteShort_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteLong_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteCoord_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteAngle_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteString_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteEntity_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_step_direction_v1	movement	qc2cpp_reentry	terminates until Task 12 implementation
+qc_import_map_metadata_v1	world	qc2cpp_services_world	returns NOT_HANDLED for QC-owned map keys
+qc_import_map_admit_v1	world	qc2cpp_services_world	applies QW deathmatch and skill spawnflag filtering
+qc_import_map_time_v1	world	qc2cpp_services_world	returns current server time
+qc_import_map_post_spawn_v1	world	qc2cpp_services_world	flushes normal signon state after a spawned entity
+qc_import_makestatic_v1	world	qc2cpp_services_world	creates a static signon entity then frees its source edict
+qc_import_changelevel_v1	world	qc2cpp_services_world	queues one normal map command per spawncount
+qc_import_cvar_set_v1	world	qc2cpp_services_world	sets an existing named M cvar
+qc_import_centerprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_ambientsound_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_precache_model2_v1	world	qc2cpp_services_world	uses the model precache operation
+qc_import_precache_sound2_v1	world	qc2cpp_services_world	uses the sound precache operation
+qc_import_setspawnparms_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_logfrag_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_infokey_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_multicast_v1	network	qc2cpp_client	terminates until Task 13 implementation
