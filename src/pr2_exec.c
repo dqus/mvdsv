@@ -207,6 +207,12 @@ extern const char *pr2_ent_data_ptr;
 
 void PR2_LoadEnts(char *data)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_LoadEntities(data);
+		return;
+	}
+	#endif
 	if (sv_vm)
 	{
 		pr2_ent_data_ptr = data;
@@ -225,6 +231,12 @@ void PR2_LoadEnts(char *data)
 //===========================================================================
 void PR2_GameStartFrame(qbool isBotFrame)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_StartFrame((float)sv.time, *PR_Global_frametime(), isBotFrame);
+		return;
+	}
+	#endif
 	if (isBotFrame && (!sv_vm || sv_vm->type == VMI_NONE || gamedata.APIversion < 15)) {
 		return;
 	}
