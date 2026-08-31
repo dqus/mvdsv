@@ -11,7 +11,15 @@ typedef struct fixture_global_object_s {
 	float teamplay;
 } fixture_global_object_t;
 
+typedef struct fixture_entity_object_s {
+	qc_shared_entity_state_v1_t shared;
+	uint32_t fixture_extension;
+} fixture_entity_object_t;
+
 static fixture_global_object_t fixture_globals;
+static fixture_entity_object_t fixture_entities[11];
+static uint8_t fixture_entity_strings[11][3][64];
+static qc_byte_count_t fixture_entity_string_sizes[11][3];
 static uint8_t fixture_mapname[64];
 static qc_byte_count_t fixture_mapname_size;
 static const uint8_t fixture_deathmatch_name[] = "deathmatch";
@@ -47,6 +55,35 @@ static qc_game_global_memory_v1_t fixture_global_memory = {
 #endif
 	.shared_state_size = sizeof(fixture_globals.shared),
 	.shared_state_abi_version = QC_SHARED_GLOBAL_STATE_ABI_VERSION_V1,
+};
+static qc_game_entity_memory_v1_t fixture_entity_memory = {
+	.abi_version = QC_GAME_ENTITY_MEMORY_ABI_VERSION_V1,
+	.struct_size = sizeof(fixture_entity_memory),
+	.shared_state_base =
+#if defined(QC2CPP_FIXTURE_BAD_ENTITY_OVERFLOW)
+		UINT64_MAX - 8U,
+#else
+		(qc_guest_address_t)(uintptr_t)&fixture_entities[0].shared,
+#endif
+	.entity_object_base =
+#if defined(QC2CPP_FIXTURE_BAD_ENTITY_OVERFLOW)
+		UINT64_MAX - 8U,
+#else
+		(qc_guest_address_t)(uintptr_t)&fixture_entities[0],
+#endif
+	.entity_stride =
+#if defined(QC2CPP_FIXTURE_BAD_ENTITY_STRIDE)
+		sizeof(qc_shared_entity_state_v1_t) - 4U,
+#else
+		sizeof(fixture_entities[0]),
+#endif
+	.max_entities =
+#if defined(QC2CPP_FIXTURE_BAD_ENTITY_CAPACITY)
+		UINT32_MAX,
+#else
+		11U,
+#endif
+	.shared_state_abi_version = QC_SHARED_ENTITY_STATE_ABI_VERSION_V1,
 };
 
 static qc_engine_type_id_t fixture_engine_type_id(const char *name)
@@ -95,8 +132,16 @@ static void fixture_configure_global_fields(void)
 	};
 }
 
+static int fixture_entity_string_field(const uint8_t *name, qc_byte_count_t size)
+{
+	if (size == 5U && memcmp(name, "model", 5U) == 0) return 0;
+	if (size == 7U && memcmp(name, "netname", 7U) == 0) return 1;
+	if (size == 9U && memcmp(name, "classname", 9U) == 0) return 2;
+	return -1;
+}
+
 static qc_guest_address_t fixture_init(void *context, int32_t level_msec,
-	uint32_t random_seed) { (void)context; (void)level_msec; (void)random_seed; fixture_configure_global_fields(); return 1U; }
+	uint32_t random_seed) { (void)context; (void)level_msec; (void)random_seed; memset(&fixture_globals, 0, sizeof(fixture_globals)); memset(fixture_entities, 0, sizeof(fixture_entities)); memset(fixture_entity_strings, 0, sizeof(fixture_entity_strings)); memset(fixture_entity_string_sizes, 0, sizeof(fixture_entity_string_sizes)); fixture_configure_global_fields(); return (qc_guest_address_t)(uintptr_t)&fixture_entity_memory; }
 static void fixture_shutdown(void *context) { (void)context; }
 static qc_guest_address_t fixture_address(void *context) { (void)context; return 0U; }
 static qc_guest_address_t fixture_global_memory_address(void *context)
@@ -130,30 +175,48 @@ static void fixture_edict_think(void *context, qc_entity_id_t self, float time, 
 static uint32_t fixture_client_say(void *context, qc_entity_id_t self, uint32_t team, const uint8_t *text, qc_byte_count_t size)
 { (void)context; (void)self; (void)team; (void)text; (void)size; return 0U; }
 static void fixture_paused_tic(void *context, uint32_t duration_msec) { (void)context; (void)duration_msec; }
-static void fixture_clear_edict(void *context, qc_entity_id_t self) { (void)context; (void)self; }
+static void fixture_clear_edict(void *context, qc_entity_id_t self) { (void)context; if (self < 11U) memset(&fixture_entities[self], 0, sizeof(fixture_entities[self])); }
 static uint32_t fixture_edict_csqc_send(void *context, qc_entity_id_t self, qc_entity_id_t other, uint32_t flags)
 { (void)context; (void)self; (void)other; (void)flags; return 0U; }
 static qc_plugin_status_t fixture_string_read(void *context, qc_object_scope_t scope, qc_entity_id_t entity, const uint8_t *name, qc_byte_count_t name_size, uint8_t *out, qc_byte_count_t capacity, qc_byte_count_t *required)
 {
 	(void)context;
-	if (scope != QC_SCOPE_GLOBAL || entity != 0U || name_size != 7U
-		|| memcmp(name, "mapname", 7U) != 0) return QC_PLUGIN_UNAVAILABLE;
-	if (required != NULL) *required = fixture_mapname_size;
-	if (capacity < fixture_mapname_size) return QC_PLUGIN_BUFFER_TOO_SMALL;
-	if (fixture_mapname_size != 0U) memcpy(out, fixture_mapname, fixture_mapname_size);
+	const uint8_t *value = NULL;
+	qc_byte_count_t size = 0U;
+	if (scope == QC_SCOPE_GLOBAL && entity == 0U && name_size == 7U
+		&& memcmp(name, "mapname", 7U) == 0) {
+		value = fixture_mapname;
+		size = fixture_mapname_size;
+	} else if (scope == QC_SCOPE_ENTITY && entity < 11U) {
+		const int field = fixture_entity_string_field(name, name_size);
+		if (field < 0) return QC_PLUGIN_UNAVAILABLE;
+		value = fixture_entity_strings[entity][field];
+		size = fixture_entity_string_sizes[entity][field];
+	} else return QC_PLUGIN_UNAVAILABLE;
+	if (required != NULL) *required = size;
+	if (capacity < size) return QC_PLUGIN_BUFFER_TOO_SMALL;
+	if (size != 0U) memcpy(out, value, size);
 	return QC_PLUGIN_OK;
 }
 static qc_plugin_status_t fixture_string_write(void *context, qc_object_scope_t scope, qc_entity_id_t entity, const uint8_t *name, qc_byte_count_t name_size, const uint8_t *bytes, qc_byte_count_t size)
 {
 	(void)context;
-	if (scope != QC_SCOPE_GLOBAL || entity != 0U || name_size != 7U
-		|| memcmp(name, "mapname", 7U) != 0 || size > sizeof(fixture_mapname)) return QC_PLUGIN_BAD_ARGUMENT;
-	if (size != 0U) memcpy(fixture_mapname, bytes, size);
-	fixture_mapname_size = size;
+	if (scope == QC_SCOPE_GLOBAL && entity == 0U && name_size == 7U
+		&& memcmp(name, "mapname", 7U) == 0) {
+		if (size > sizeof(fixture_mapname)) return QC_PLUGIN_BAD_ARGUMENT;
+		if (size != 0U) memcpy(fixture_mapname, bytes, size);
+		fixture_mapname_size = size;
+		return QC_PLUGIN_OK;
+	}
+	if (scope != QC_SCOPE_ENTITY || entity >= 11U) return QC_PLUGIN_BAD_ARGUMENT;
+	const int field = fixture_entity_string_field(name, name_size);
+	if (field < 0 || size > sizeof(fixture_entity_strings[entity][field])) return QC_PLUGIN_BAD_ARGUMENT;
+	if (size != 0U) memcpy(fixture_entity_strings[entity][field], bytes, size);
+	fixture_entity_string_sizes[entity][field] = size;
 	return QC_PLUGIN_OK;
 }
 static qc_plugin_status_t fixture_legacy_string_read(void *context, int32_t token, uint8_t *out, qc_byte_count_t capacity, qc_byte_count_t *required)
-{ (void)context; (void)token; (void)out; (void)capacity; if (required != NULL) *required = 0U; return QC_PLUGIN_OK; }
+{ static const uint8_t value[] = "legacy"; (void)context; if (token != 9) return QC_PLUGIN_UNAVAILABLE; if (required != NULL) *required = sizeof(value) - 1U; if (capacity < sizeof(value) - 1U) return QC_PLUGIN_BUFFER_TOO_SMALL; if (out != NULL) memcpy(out, value, sizeof(value) - 1U); return QC_PLUGIN_OK; }
 static qc_restore_status_t fixture_selection(void *context, const uint8_t *bitmap, qc_byte_count_t size)
 { (void)context; (void)bitmap; (void)size; return QC_RESTORE_OK; }
 static qc_byte_count_t fixture_save(void *context, uint8_t *out, qc_byte_count_t capacity)
@@ -170,6 +233,11 @@ static qc_plugin_status_t fixture_memory_view(void *context, qc_guest_address_t 
 	if (address == (qc_guest_address_t)(uintptr_t)&fixture_global_memory
 		&& size <= sizeof(fixture_global_memory)) {
 		*out_view = &fixture_global_memory;
+		return QC_PLUGIN_OK;
+	}
+	if (address == (qc_guest_address_t)(uintptr_t)&fixture_entity_memory
+		&& size <= sizeof(fixture_entity_memory)) {
+		*out_view = &fixture_entity_memory;
 		return QC_PLUGIN_OK;
 	}
 	if (address == (qc_guest_address_t)(uintptr_t)&fixture_engine_fields
@@ -195,6 +263,12 @@ static qc_plugin_status_t fixture_memory_view(void *context, qc_guest_address_t 
 	if (address >= globals_base && address - globals_base <= sizeof(fixture_globals)
 		&& size <= sizeof(fixture_globals) - (address - globals_base)) {
 		*out_view = (uint8_t *)&fixture_globals + (address - globals_base);
+		return QC_PLUGIN_OK;
+	}
+	const qc_guest_address_t entities_base = (qc_guest_address_t)(uintptr_t)&fixture_entities[0];
+	if (address >= entities_base && address - entities_base <= sizeof(fixture_entities)
+		&& size <= sizeof(fixture_entities) - (address - entities_base)) {
+		*out_view = (uint8_t *)fixture_entities + (address - entities_base);
 		return QC_PLUGIN_OK;
 	}
 	return QC_PLUGIN_UNAVAILABLE;
