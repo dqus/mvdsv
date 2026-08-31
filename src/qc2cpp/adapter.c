@@ -3,7 +3,10 @@
 #include "progs.h"
 #include "qc2cpp/adapter.h"
 #include "qc2cpp/adapter_state.h"
+#include "qc2cpp/globals.h"
 #include "qc2cpp/transport.h"
+
+#include <string.h>
 
 static qc_transport_t *qc_transport;
 static qc_adapter_state_t qc_state;
@@ -39,6 +42,9 @@ void QC_InitProg(void)
 	QC_AdapterStateEnter(&qc_state);
 	(void)game->init(game->context, (int32_t)(sv.time * 1000.0), (uint32_t)time(NULL));
 	QC_AdapterStateLeave(&qc_state);
+	if (!QC_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
+		SV_Error("qc2cpp game did not publish valid shared globals");
+	}
 }
 
 void QC_Shutdown(void)
@@ -56,14 +62,39 @@ void QC_UnloadProgs(void)
 	if (!QC_AdapterStateIdle(&qc_state)) {
 		return;
 	}
+	QC_ClearGlobals();
 	QC_TransportClose(qc_transport);
 	qc_transport = NULL;
 	QC_AdapterStateReset(&qc_state);
 }
 
+void QC_LoadEntities(const char *data)
+{
+	const qc_game_api_v1_t *game = QC_Game();
+	if (game == NULL || data == NULL) {
+		SV_Error("qc2cpp game cannot load map entities");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	game->load_entities(game->context, (const uint8_t *)data,
+		(qc_byte_count_t)strlen(data));
+	QC_AdapterStateLeave(&qc_state);
+}
+
+void QC_StartFrame(float time, float frametime, qbool is_bot_frame)
+{
+	const qc_game_api_v1_t *game = QC_Game();
+	if (game == NULL) {
+		SV_Error("qc2cpp game cannot start a frame");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	game->start_frame(game->context, time, frametime, is_bot_frame ? 1U : 0U);
+	QC_AdapterStateLeave(&qc_state);
+}
+
 void QC_Unpublish(void *context)
 {
 	(void)context;
+	QC_ClearGlobals();
 }
 
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic)
