@@ -279,6 +279,8 @@ qc_plugin_status_t qc_game_plugin_query_v1(const qc_host_api_v1_t *host,
 {
 	(void)host;
 	if (game == NULL) return QC_PLUGIN_BAD_ARGUMENT;
+	if (game->abi_version != QC_PLUGIN_ABI_VERSION_V1
+		|| game->struct_size < sizeof(*game)) return QC_PLUGIN_BAD_ABI;
 	*game = (qc_game_api_v1_t){
 		.abi_version =
 #if defined(QC2CPP_FIXTURE_BAD_ABI)

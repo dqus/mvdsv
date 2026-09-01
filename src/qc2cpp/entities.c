@@ -41,6 +41,7 @@ int QC_ConfigureEntities(qc_guest_address_t publication_address)
 	qc_entity_base = memory->shared_state_base;
 	qc_entity_stride = memory->entity_stride;
 	qc_entity_capacity = memory->max_entities;
+	sv.max_edicts = (int)qc_entity_capacity;
 	return 1;
 }
 

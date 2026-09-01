@@ -137,11 +137,13 @@ int QC_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 	qc_deathmatch = QC_ResolveGlobalFloat(game, &fields->global_fields, "deathmatch");
 	qc_coop = QC_ResolveGlobalFloat(game, &fields->global_fields, "coop");
 	qc_teamplay = QC_ResolveGlobalFloat(game, &fields->global_fields, "teamplay");
-	if (qc_deathmatch == NULL || qc_coop == NULL || qc_teamplay == NULL) {
+	if (qc_deathmatch == NULL || qc_teamplay == NULL) {
 		return 0;
 	}
 	*qc_deathmatch = deathmatch;
-	*qc_coop = coop;
+	if (qc_coop != NULL) {
+		*qc_coop = coop;
+	}
 	*qc_teamplay = teamplay;
 	return 1;
 }
