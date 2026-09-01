@@ -93,6 +93,27 @@ target_include_directories(qc2cpp_adapter_state_test PRIVATE ${PROJECT_SOURCE_DI
 target_compile_options(qc2cpp_adapter_state_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 add_test(NAME qc2cpp_adapter_state COMMAND qc2cpp_adapter_state_test)
 
+add_executable(qc2cpp_terminal_test terminal_test.c)
+set_target_properties(qc2cpp_terminal_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_terminal_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_terminal_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -ffunction-sections)
+if(APPLE)
+	target_link_options(qc2cpp_terminal_test PRIVATE -Wl,-dead_strip)
+endif()
+target_compile_definitions(qc2cpp_terminal_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_terminal_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_terminal COMMAND qc2cpp_terminal_test)
+
 add_executable(qc2cpp_globals_test
 	globals_test.c
 	${PROJECT_SOURCE_DIR}/src/qc2cpp/globals.c
