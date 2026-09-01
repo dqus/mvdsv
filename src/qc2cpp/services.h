@@ -14,6 +14,7 @@ int SV_QC_PrecacheModel(const char *name);
 void SV_QC_LightStyle(int style, const char *value);
 void SV_QC_MakeStatic(struct edict_s *entity, const char *model_name);
 void SV_QC_ChangeLevel(const char *map);
+void SV_QC_LogFrag(struct edict_s *killer, struct edict_s *victim);
 
 /* Explicit physics operations shared by PR1 builtins and qc2cpp imports. */
 struct edict_s *SV_QC_CheckClient(struct edict_s *self);
@@ -23,6 +24,7 @@ float SV_QC_DropToFloor(struct edict_s *entity);
 /* Task-owned portions of the mandatory V1 host table. */
 void QC_BindWorldServices(qc_host_api_v1_t *host);
 void QC_BindMovementServices(qc_host_api_v1_t *host);
+void QC_BindNetworkServices(qc_host_api_v1_t *host);
 
 /* Mandatory services owned by later tasks terminate instead of succeeding. */
 void QC_BindUnavailableServices(qc_host_api_v1_t *host);

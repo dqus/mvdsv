@@ -35,6 +35,7 @@
 
 gameData_t gamedata;
 extern field_t *fields;
+extern double sv_frametime;
 
 // 0 = pr1 (qwprogs.dat etc), 1 = native (.so/.dll), 2 = q3vm (.qvm), 3 = q3vm (.qvm) with JIT,
 // 4 = qc2cpp native, 5 = qc2cpp Wasm.
@@ -274,6 +275,12 @@ void PR2_GameStartFrame(qbool isBotFrame)
 //===========================================================================
 void PR2_GameClientConnect(int spec)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchClientConnect(sv_player, spec != 0 ? 1U : 0U);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_CONNECT, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -285,6 +292,12 @@ void PR2_GameClientConnect(int spec)
 //===========================================================================
 void PR2_GamePutClientInServer(int spec)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchPutClientInServer(sv_player, spec != 0 ? 1U : 0U);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_PUT_CLIENT_IN_SERVER, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -296,6 +309,12 @@ void PR2_GamePutClientInServer(int spec)
 //===========================================================================
 void PR2_GameClientDisconnect(int spec)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchClientDisconnect(sv_player, spec != 0 ? 1U : 0U);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_DISCONNECT, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -307,6 +326,13 @@ void PR2_GameClientDisconnect(int spec)
 //===========================================================================
 void PR2_GameClientPreThink(int spec)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchClientPreThink(sv_player, (float)sv.time, (float)sv_frametime,
+			spec != 0 ? 1U : 0U);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_PRETHINK, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -318,6 +344,13 @@ void PR2_GameClientPreThink(int spec)
 //===========================================================================
 void PR2_GameClientPostThink(int spec)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchClientPostThink(sv_player, (float)sv.time,
+			spec != 0 ? 1U : 0U);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_POSTTHINK, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -329,6 +362,11 @@ void PR2_GameClientPostThink(int spec)
 //===========================================================================
 qbool PR2_ClientCmd(void)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		return QC_DispatchClientCommand(sv_player) != 0U;
+	}
+	#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 0, GAME_CLIENT_COMMAND, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -340,6 +378,12 @@ qbool PR2_ClientCmd(void)
 //===========================================================================
 void PR2_ClientKill(void)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchClientKill(sv_player);
+		return;
+	}
+	#endif
 	if (sv_vm)
 		PR2_ClientCmd(); // PR2 have some universal way for command execution unlike QC based mods.
 	else
@@ -356,6 +400,12 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 	// PR2 mods get it from Cmd_Args() and such.
 	//
 
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		return QC_DispatchClientSay(sv_player, isTeamSay != 0 ? 1U : 0U,
+			(const uint8_t *)message, (qc_byte_count_t)strlen(message)) != 0U;
+	}
+	#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 1, GAME_CLIENT_SAY, isTeamSay, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -367,6 +417,12 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 //===========================================================================
 void PR2_GameSetNewParms(void)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchSetNewParms(PR_Global_parm1());
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_SETNEWPARMS, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -378,6 +434,12 @@ void PR2_GameSetNewParms(void)
 //===========================================================================
 void PR2_GameSetChangeParms(void)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		QC_DispatchSetChangeParms(sv_player, PR_Global_parm1());
+		return;
+	}
+	#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_SETCHANGEPARMS, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -450,6 +512,12 @@ void PR2_EdictBlocked(func_t f)
 //===========================================================================
 qbool PR2_UserInfoChanged(int after)
 {
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		return QC_DispatchClientUserInfoChanged(sv_player, after != 0 ? 1U : 0U)
+			!= 0U;
+	}
+	#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 1, GAME_CLIENT_USERINFO_CHANGED, after, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
