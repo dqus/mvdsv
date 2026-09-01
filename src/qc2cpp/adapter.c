@@ -180,16 +180,25 @@ static const qc_game_api_v1_t *QC_RequireGame(const char *entry)
 void QC_ClientConnect(qc_entity_id_t self, uint32_t spectator)
 {
 	QC_CALL_CLIENT("client connect", game->client_connect(game->context, self, spectator));
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverClientConnect();
+#endif
 }
 
 void QC_PutClientInServer(qc_entity_id_t self, uint32_t spectator)
 {
 	QC_CALL_CLIENT("put client in server", game->put_client_in_server(game->context, self, spectator));
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverPutClientInServer(self, spectator);
+#endif
 }
 
 void QC_ClientDisconnect(qc_entity_id_t self, uint32_t spectator)
 {
 	QC_CALL_CLIENT("client disconnect", game->client_disconnect(game->context, self, spectator));
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverClientDisconnect();
+#endif
 }
 
 uint32_t QC_ClientUserInfoChanged(qc_entity_id_t self, uint32_t after)
@@ -213,6 +222,9 @@ uint32_t QC_ClientCommand(qc_entity_id_t self)
 void QC_ClientKill(qc_entity_id_t self)
 {
 	QC_CALL_CLIENT("client kill", game->client_kill(game->context, self));
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverClientKill(self);
+#endif
 }
 
 uint32_t QC_ClientSay(qc_entity_id_t self, uint32_t team, const uint8_t *text,
@@ -230,6 +242,9 @@ void QC_ClientPreThink(qc_entity_id_t self, float time, float frametime,
 {
 	QC_CALL_CLIENT("client prethink", game->client_prethink(game->context, self,
 		time, frametime, spectator));
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverClientPreThink();
+#endif
 }
 
 void QC_ClientPostThink(qc_entity_id_t self, float time, uint32_t spectator)
@@ -246,6 +261,9 @@ void QC_ClientPostThink(qc_entity_id_t self, float time, uint32_t spectator)
 		game->client_postthink(game->context, self, time, globals->frametime, 0U);
 	}
 	QC_AdapterStateLeave(&qc_state);
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverClientPostThink(self, spectator);
+#endif
 }
 
 void QC_SetNewParms(float out_parms[16])

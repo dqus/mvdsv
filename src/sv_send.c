@@ -882,7 +882,7 @@ void SV_UpdateClientStats (client_t *client)
 	if (!client->spectator || client->spec_track > 0)
 		stats[STAT_ACTIVEWEAPON] = ent->v->weapon;
 	// stuff the sigil bits into the high bits of items for sbar
-	stats[STAT_ITEMS] = (int) ent->v->items | ((int) PR_GLOBAL(serverflags) << 28);
+	stats[STAT_ITEMS] = (int) ent->v->items | ((int) *PR_Global_serverflags() << 28);
 	if (fofs_items2)	// ZQ_ITEMS2 extension
 		stats[STAT_ITEMS] |= (int)EdictFieldFloat(ent, fofs_items2) << 23;
 
@@ -1293,7 +1293,7 @@ void MVD_WriteStats(void)
 			stats[STAT_VIEWHEIGHT] = ent->v->view_ofs[2];
 
 		// stuff the sigil bits into the high bits of items for sbar
-		stats[STAT_ITEMS] = (int) ent->v->items | ((int) PR_GLOBAL(serverflags) << 28);
+		stats[STAT_ITEMS] = (int) ent->v->items | ((int) *PR_Global_serverflags() << 28);
 
 		for (j = 0 ; j < MAX_CL_STATS; j++)
 		{
