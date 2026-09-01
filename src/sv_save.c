@@ -24,6 +24,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #ifdef SERVERONLY
 #include "qwsvdef.h"
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/adapter.h"
+#include "qc2cpp/save.h"
+#endif
 #else
 #include "quakedef.h"
 #include "vfs.h"
@@ -91,7 +95,19 @@ void SV_SaveGame_f(void)
 	} else if (strstr(Cmd_Argv(1), "..")) {
 		Con_Printf ("Relative pathfnames are not allowed.\n");
 		return;
+	}
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		if (!QC_SaveGame(Cmd_Argv(1))) {
+			Con_Printf("ERROR: couldn't save qc2cpp game.\n");
+			return;
+		}
+		Con_Printf("qc2cpp game saved.\n");
+		return;
 	} else if (sv.state != ss_active) {
+#else
+	} else if (sv.state != ss_active) {
+#endif
 		Con_Printf ("Not playing a local game.\n");
 		return;
 #ifndef SERVERONLY
@@ -185,6 +201,30 @@ void SV_LoadGame_f(void)
 		return;
 	}
 
+#ifdef MVDSV_QC2CPP_ENABLED
+	{
+		char magic[4];
+		const size_t magic_size = fread(magic, 1U, sizeof(magic), f);
+		if (magic_size == sizeof(magic) && memcmp(magic, "QCMS", sizeof(magic)) == 0) {
+			fclose(f);
+			if (QC_Active() && QC_LoadGame(Cmd_Argv(1))) {
+				return;
+			}
+			if (!QC_PrepareLoadGame(Cmd_Argv(1), mapname, sizeof(mapname))) {
+				Con_Printf("Error restoring qc2cpp save state\n");
+				return;
+			}
+			SV_SpawnServer(mapname, false, NULL, false, true);
+			return;
+		}
+		if (fseek(f, 0L, SEEK_SET) != 0) {
+			fclose(f);
+			Con_Printf("Error reading savegame data\n");
+			return;
+		}
+	}
+#endif
+
 	if (fscanf (f, "%i\n", &version) != 1) {
 		fclose (f);
 		Con_Printf ("Error reading savegame data\n");
@@ -234,7 +274,7 @@ void SV_LoadGame_f(void)
 	CL_BeginLocalConnection ();
 #endif
 
-	SV_SpawnServer(mapname, false, NULL, true);
+	SV_SpawnServer(mapname, false, NULL, true, false);
 
 	if (sv.state != ss_active) {
 		Con_Printf ("Couldn't load map\n");

@@ -229,6 +229,26 @@ target_compile_options(qc2cpp_save_format_test PRIVATE -Wall -Wextra -Wpedantic 
 target_link_libraries(qc2cpp_save_format_test PRIVATE Qc2cppHost::native)
 add_test(NAME qc2cpp_save_format COMMAND qc2cpp_save_format_test)
 
+add_executable(qc2cpp_restore_test
+	restore_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/save.c)
+set_target_properties(qc2cpp_restore_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_restore_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_restore_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qc2cpp_restore_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	MVDSV_QC2CPP_NATIVE=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_restore_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_restore COMMAND qc2cpp_restore_test)
+
 if(QC2CPP_COMPILER)
 	add_test(NAME qc2cpp_reentry_fixture
 		COMMAND ${CMAKE_COMMAND}

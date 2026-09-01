@@ -6,6 +6,7 @@ import os
 import pathlib
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -90,6 +91,28 @@ def assert_network_events(events, sessions=1, map_change=False):
         raise ProcessFailure(f"entity lifecycle corrupted the player self slot: {events}")
 
 
+def assert_saved_game_state(state, expected_think=None):
+    if (state.get("parm16") != 101.0 or state.get("world_health") != 101.0
+            or state.get("world_message") != "qcms-saved"
+            or state.get("probe_slot", 0) == 0 or state.get("probe_think", 0) == 0):
+        raise ProcessFailure(f"qc2cpp durable save state is incomplete: {state}")
+    if expected_think is not None and state.get("probe_think") != expected_think:
+        raise ProcessFailure(
+            f"qc2cpp callback identity did not restore: expected {expected_think}, got {state}")
+
+
+def assert_saved_callback_continues(process):
+    """Drive the restored callback through one due-think transition."""
+    process.send("qc2cpp_test_save_state trigger")
+    time.sleep(0.15)
+    after_trigger = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+    state = process.observe("qc2cpp_test_save_state read", "qc2cpp_test_save_state", timeout=8)
+    if state.get("probe_think", 0) == 0 or state.get("probe_trigger_dispatches") != 1:
+        raise ProcessFailure(
+            "qc2cpp restored callback did not execute through the think scheduler: "
+            f"snapshot={after_trigger}, state={state}")
+
+
 def assert_spectator_events(events):
     required = ("client_connect_count", "put_client_in_server_count",
         "client_disconnect_count", "spectator_put_client_in_server_count",
@@ -100,10 +123,15 @@ def assert_spectator_events(events):
         raise ProcessFailure(f"legacy game entry escaped qc2cpp dispatch: {events}")
 
 
-def server_command(server, basedir, mode, port="0"):
-    return [str(server.resolve()), "-basedir", str(basedir.resolve()), "-game", "qw", "-port", str(port),
+def server_command(server, basedir, mode, port="0", start_map=True, startup_command=None):
+    command = [str(server.resolve()), "-basedir", str(basedir.resolve()), "-game", "qw", "-port", str(port),
         "+sv_progtype", "4" if mode == "native" else "5",
-        "+sv_progsname", "game", "+deathmatch", "0", "+map", "e1m1"]
+        "+sv_progsname", "game", "+deathmatch", "0"]
+    if start_map:
+        command += ["+map", "e1m1"]
+    if startup_command is not None:
+        command += [f"+{startup_command[0]}", *startup_command[1:]]
+    return command
 
 
 def client_command(client, basedir, port):
@@ -121,10 +149,26 @@ def network_client_command(client, basedir, port, spectator=False):
     return command + ["+connect", f"127.0.0.1:{port}"]
 
 
+def connected_save_client_command(client, basedir, port):
+    return [str(client.resolve()), "-qc2cpp-save-connected-acceptance", "-nosound",
+        "-basedir", str(basedir.resolve()), "-game", "qw",
+        "+connect", f"127.0.0.1:{port}"]
+
+
 def available_udp_port():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as socket_handle:
         socket_handle.bind(("127.0.0.1", 0))
         return socket_handle.getsockname()[1]
+
+
+def require_log_marker(path, marker, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.is_file() and marker in path.read_text(encoding="utf-8"):
+            return
+        time.sleep(0.05)
+    contents = path.read_text(encoding="utf-8") if path.is_file() else "<missing>"
+    raise ProcessFailure(f"client did not observe {marker!r}: {contents}")
 
 
 def run_map_suite(server, artifacts, assets, output, mode):
@@ -218,12 +262,277 @@ def run_spectator_suite(server, artifacts, assets, output, mode, client):
         process.close()
 
 
+def run_save_suite(server, artifacts, assets, output, mode):
+    """A qc2cpp server saves through the QCMS container, not the legacy path."""
+    output.mkdir(parents=True, exist_ok=True)
+    # MVDSV's legacy filesystem paths are bounded; keep the real server's
+    # disposable game directory short just like the network acceptance suite.
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-save-{mode}-"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode)
+    process = RunningProcess(server_command(server, basedir, mode), run_root / "server.log")
+    try:
+        snapshot = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        assert_map_snapshot(snapshot, "e1m1")
+        # The test-only probe writes one durable global, one durable entity scalar,
+        # one arena-owned string and captures a real map callback identity.
+        saved_game_state = process.observe(
+            "qc2cpp_test_save_state save", "qc2cpp_test_save_state", timeout=8)
+        assert_saved_game_state(saved_game_state)
+        process.send("save qc2cpp-roundtrip")
+        # Console commands are consumed by the server frame loop.  A subsequent
+        # server-owned observation establishes that the preceding save command
+        # has actually run before checking its filesystem effect.
+        saved_snapshot = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        assert_map_snapshot(saved_snapshot, "e1m1")
+        save_path = basedir / "qw" / "save" / "qc2cpp-roundtrip.sav"
+        if not save_path.is_file():
+            raise ProcessFailure("qc2cpp save command did not create a save file")
+        if save_path.read_bytes()[:4] != b"QCMS":
+            raise ProcessFailure("qc2cpp save command did not create a QCMS container")
+        mutated_game_state = process.observe(
+            "qc2cpp_test_save_state mutate", "qc2cpp_test_save_state", timeout=8)
+        if (mutated_game_state.get("parm16") != 202.0
+                or mutated_game_state.get("world_health") != 202.0
+                or mutated_game_state.get("world_message") != "qcms-mutated"
+                or mutated_game_state.get("probe_think") != 0):
+            raise ProcessFailure(f"qc2cpp save-state mutation did not apply: {mutated_game_state}")
+        time.sleep(0.25)
+        before_load = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        process.send("load qc2cpp-roundtrip")
+        after_load = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        if after_load.get("time", 0) >= before_load.get("time", 0):
+            raise ProcessFailure(
+                f"qc2cpp load did not restore the saved server time: {before_load} -> {after_load}")
+        if after_load.get("globals_address") != saved_snapshot.get("globals_address"):
+            raise ProcessFailure(
+                f"qc2cpp load replaced published globals: {saved_snapshot} -> {after_load}")
+        events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events.get("init_count") != 1:
+            raise ProcessFailure(f"qc2cpp load replayed game initialization: {events}")
+        restored_game_state = process.observe(
+            "qc2cpp_test_save_state read", "qc2cpp_test_save_state", timeout=8)
+        assert_saved_game_state(restored_game_state, saved_game_state["probe_think"])
+        assert_saved_callback_continues(process)
+        corrupt_path = basedir / "qw" / "save" / "qc2cpp-corrupt.sav"
+        corrupt_path.write_bytes(b"QCMS\x01\x00")
+        before_rejection = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        process.send("load qc2cpp-corrupt")
+        after_rejection = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        if after_rejection.get("globals_address") != before_rejection.get("globals_address"):
+            raise ProcessFailure(
+                f"malformed QCMS changed published globals: {before_rejection} -> {after_rejection}")
+        if after_rejection.get("time", 0) < before_rejection.get("time", 0):
+            raise ProcessFailure(
+                f"malformed QCMS changed server time: {before_rejection} -> {after_rejection}")
+    finally:
+        process.close()
+
+
+def run_cross_save_suite(server, source_artifacts, destination_artifacts, assets, output,
+                         source_mode, destination_mode):
+    """Restore a client-free QCMS file in a separately booted transport."""
+    output.mkdir(parents=True, exist_ok=True)
+    source_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-save-source-{source_mode}-"))
+    source_basedir = prepare_game_directory(source_root, assets, source_artifacts, source_mode)
+    source = RunningProcess(
+        server_command(server, source_basedir, source_mode), source_root / "server.log")
+    try:
+        assert_map_snapshot(
+            source.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
+        source_game_state = source.observe(
+            "qc2cpp_test_save_state save", "qc2cpp_test_save_state", timeout=8)
+        assert_saved_game_state(source_game_state)
+        time.sleep(0.25)
+        source.send("save qccross")
+        source_saved = source.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        assert_map_snapshot(source_saved, "e1m1")
+        snapshot_path = source_basedir / "qw" / "save" / "qccross.sav"
+        if not snapshot_path.is_file() or snapshot_path.read_bytes()[:4] != b"QCMS":
+            raise ProcessFailure("source transport did not produce a QCMS snapshot")
+        snapshot_bytes = snapshot_path.read_bytes()
+    finally:
+        source.close()
+
+    destination_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-save-destination-{destination_mode}-"))
+    destination_basedir = prepare_game_directory(
+        destination_root, assets, destination_artifacts, destination_mode)
+    destination_save = destination_basedir / "qw" / "save" / "qccross.sav"
+    destination_save.parent.mkdir(parents=True)
+    destination_save.write_bytes(snapshot_bytes)
+    destination = RunningProcess(
+        server_command(server, destination_basedir, destination_mode,
+                       start_map=False, startup_command=("load", "qccross")),
+        destination_root / "server.log")
+    try:
+        after_load = destination.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        # The source and destination keep ticking while console commands and
+        # observer requests are delivered.  The restored clock must therefore
+        # continue from the saved epoch, rather than being a new-map clock.
+        elapsed_after_save = after_load.get("time", 0) - source_saved.get("time", 0)
+        if elapsed_after_save < 0 or elapsed_after_save > 0.5:
+            raise ProcessFailure(
+                "cross-transport restore did not continue from the saved server time: "
+                f"source={source_saved}, after={after_load}")
+        if after_load.get("globals_address") == 0:
+            raise ProcessFailure(f"cross-transport restore did not publish globals: {after_load}")
+        restored_game_state = destination.observe(
+            "qc2cpp_test_save_state read", "qc2cpp_test_save_state", timeout=8)
+        assert_saved_game_state(restored_game_state, source_game_state["probe_think"])
+        assert_saved_callback_continues(destination)
+        events = destination.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events.get("init_count") != 1:
+            raise ProcessFailure(f"cross-transport load replayed game initialization: {events}")
+    finally:
+        destination.close()
+
+
+def run_connected_save_suite(server, artifacts, assets, output, mode, client):
+    """A connected snapshot restores only while its original QW client remains live."""
+    output.mkdir(parents=True, exist_ok=True)
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qcc-{mode}-", dir="/tmp"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode)
+    client_basedir = prepare_client_directory(run_root, assets)
+    port = available_udp_port()
+    process = RunningProcess(server_command(server, basedir, mode, port), run_root / "server.log")
+    client_log = run_root / "client.log"
+    client_process = None
+    try:
+        assert_map_snapshot(
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
+        with client_log.open("w", encoding="utf-8") as output_file:
+            client_process = subprocess.Popen(
+                connected_save_client_command(client, client_basedir, port),
+                stdout=output_file, stderr=subprocess.STDOUT, text=True)
+            deadline = time.monotonic() + 12
+            while True:
+                if client_process.poll() is not None:
+                    raise ProcessFailure("connected-save FTE client exited before becoming active")
+                if time.monotonic() >= deadline:
+                    raise ProcessFailure("connected-save FTE client did not become active")
+                events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=1)
+                if (events.get("client_connect_count", 0) == 1
+                        and events.get("put_client_in_server_count", 0) == 1):
+                    break
+                time.sleep(0.05)
+            first_userid = events.get("last_client_userid", 0)
+            if first_userid <= 0:
+                raise ProcessFailure(f"connected-save client has no observable userid: {events}")
+            process.send("save qc2cpp-connected")
+            saved = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+            save_path = basedir / "qw" / "save" / "qc2cpp-connected.sav"
+            if not save_path.is_file() or save_path.read_bytes()[:4] != b"QCMS":
+                raise ProcessFailure("connected client did not produce a QCMS save")
+            # Let the QW netchannel clear its prior reliable packet before the
+            # restore queues the owner/client refresh.  The client remains
+            # actively issuing movement commands throughout this interval.
+            time.sleep(1.0)
+            before_load = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+            process.send("load qc2cpp-connected")
+            after_load = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+            if after_load.get("time", 0) >= before_load.get("time", 0):
+                raise ProcessFailure(
+                    f"connected QCMS did not restore saved time: {before_load} -> {after_load}")
+            if after_load.get("globals_address") != saved.get("globals_address"):
+                raise ProcessFailure(
+                    f"connected QCMS replaced published globals: {saved} -> {after_load}")
+            events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+            if (events.get("client_connect_count", 0) != 1
+                    or events.get("put_client_in_server_count", 0) != 1
+                    or events.get("init_count") != 1):
+                raise ProcessFailure(f"connected QCMS replayed player or game startup: {events}")
+            if (events.get("restore_replication_begin_count") != 1
+                    or events.get("restore_replication_complete_count") != 1):
+                raise ProcessFailure(f"connected QCMS did not rebuild replication: {events}")
+            require_log_marker(
+                client_log, "[qc2cpp-save-connected] replication", timeout=4)
+            post_restore_prethink_count = events.get("client_prethink_count", 0)
+            post_restore_postthink_count = events.get("client_postthink_count", 0)
+        if client_process.wait(timeout=15) != 0:
+            raise ProcessFailure("connected-save FTE client failed")
+        if "[qc2cpp-save-connected] disconnect" not in client_log.read_text(encoding="utf-8"):
+            raise ProcessFailure("connected-save FTE client did not complete its bounded disconnect")
+        events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events.get("client_disconnect_count", 0) != 1:
+            raise ProcessFailure(f"connected-save client disconnect was not observed: {events}")
+        if (events.get("client_prethink_count", 0) <= post_restore_prethink_count
+                or events.get("client_postthink_count", 0) <= post_restore_postthink_count):
+            raise ProcessFailure(
+                "connected QCMS restore did not resume real client gameplay callbacks")
+        process.send("save qc2cpp-clientfree")
+        client_free_path = basedir / "qw" / "save" / "qc2cpp-clientfree.sav"
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        if not client_free_path.is_file() or client_free_path.read_bytes()[:4] != b"QCMS":
+            raise ProcessFailure("client-free QCMS replacement save was not created")
+        before_rejected_load = process.observe(
+            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        process.send("load qc2cpp-connected")
+        after_rejected_load = process.observe(
+            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        if after_rejected_load.get("time", 0) < before_rejected_load.get("time", 0):
+            raise ProcessFailure(
+                "a client-free replacement save re-authorized an old connected QCMS snapshot")
+
+        # The authorization is snapshot-local, not a client identity token: a
+        # new real client may occupy the same server slot but must not recover
+        # the old client's image.
+        reused_userid = process.observe(
+            f"qc2cpp_test_reuse_userid {first_userid}",
+            "qc2cpp_test_userid", timeout=8)
+        if reused_userid.get("userid") != first_userid:
+            raise ProcessFailure(f"server rejected userid reuse setup: {reused_userid}")
+        second_client_log = run_root / "client-reconnect.log"
+        with second_client_log.open("w", encoding="utf-8") as output_file:
+            client_process = subprocess.Popen(
+                connected_save_client_command(client, client_basedir, port),
+                stdout=output_file, stderr=subprocess.STDOUT, text=True)
+        deadline = time.monotonic() + 12
+        while True:
+            if client_process.poll() is not None:
+                raise ProcessFailure("replacement FTE client exited before becoming active")
+            if time.monotonic() >= deadline:
+                raise ProcessFailure("replacement FTE client did not become active")
+            events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=1)
+            if (events.get("client_connect_count", 0) == 2
+                    and events.get("put_client_in_server_count", 0) == 2):
+                break
+            time.sleep(0.05)
+        if events.get("last_client_userid") != first_userid:
+            raise ProcessFailure(
+                f"replacement client did not reuse the saved userid: {events}")
+        before_reconnect_rejection = process.observe(
+            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        process.send("load qc2cpp-connected")
+        after_reconnect_rejection = process.observe(
+            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        if after_reconnect_rejection.get("time", 0) < before_reconnect_rejection.get("time", 0):
+            raise ProcessFailure(
+                "a replacement client re-authorized an old connected QCMS snapshot")
+        released = process.observe(
+            "qc2cpp_test_release_connected_client",
+            "qc2cpp_test_release_connected_client", timeout=8)
+        if released.get("released") is not True:
+            raise ProcessFailure("server did not release replacement connected-save client")
+        if client_process.wait(timeout=15) != 0:
+            raise ProcessFailure("replacement connected-save FTE client failed")
+        events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events.get("client_disconnect_count", 0) != 2:
+            raise ProcessFailure(f"replacement client disconnect was not observed: {events}")
+    finally:
+        if client_process is not None and client_process.poll() is None:
+            client_process.terminate()
+            client_process.wait(timeout=3)
+        process.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", choices=("map", "client", "network", "spectator"), required=True)
+    parser.add_argument("--suite", choices=("map", "client", "network", "spectator", "save", "cross-save", "save-connected"), required=True)
     parser.add_argument("--mode", choices=("native", "wasm"), required=True)
     parser.add_argument("--server", type=pathlib.Path, required=True)
     parser.add_argument("--artifacts", type=pathlib.Path, required=True)
+    parser.add_argument("--destination-artifacts", type=pathlib.Path)
+    parser.add_argument("--source-mode", choices=("native", "wasm"))
+    parser.add_argument("--destination-mode", choices=("native", "wasm"))
     parser.add_argument("--assets", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--client", type=pathlib.Path)
@@ -232,6 +541,19 @@ def main():
         require_file(args.server)
         if args.suite == "map":
             run_map_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
+        elif args.suite == "save":
+            run_save_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
+        elif args.suite == "cross-save":
+            if args.destination_artifacts is None or args.source_mode is None or args.destination_mode is None:
+                raise ProcessFailure("cross-save requires source/destination modes and destination artifacts")
+            run_cross_save_suite(args.server, args.artifacts, args.destination_artifacts,
+                args.assets, args.output, args.source_mode, args.destination_mode)
+        elif args.suite == "save-connected":
+            if args.client is None:
+                raise ProcessFailure("save-connected suite requires --client")
+            require_file(args.client)
+            run_connected_save_suite(
+                args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
         else:
             if args.client is None:
                 raise ProcessFailure(f"{args.suite} suite requires --client")
