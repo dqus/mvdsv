@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
+#ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/save.h"
+#endif
+
 #ifndef SERVERONLY
 void CL_ClearState(void);
 void CL_ClearQueuedPackets(void);
@@ -243,7 +247,8 @@ clients along with it.
 This is called from the SV_Map_f() function, and when loading .sav files
 ================
 */
-void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading_savegame)
+void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading_savegame,
+	qbool restoring_qc2cpp)
 {
 	extern func_t ED_FindFunctionOffset (char *name);
 
@@ -383,6 +388,11 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// load progs to get entity field count
 	// which determines how big each edict is
 	// and allocate edicts
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (restoring_qc2cpp && !QC_PrepareLoadResources()) {
+		SV_Error("qc2cpp restore could not prepare saved resource ordering");
+	}
+	#endif
 	PR_LoadProgs ();
 #ifdef WITH_NQPROGS
 	PR_InitPatchTables();
@@ -624,8 +634,20 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 			Cvar_Create((char *)/*stupid const warning*/ *var, "0", 0);
 	}
 
+	// A QCMS restore initializes the selected backend and map resources, but its
+	// saved guest image replaces ordinary QC map startup below.
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (restoring_qc2cpp && (!QC_Active() || !QC_HasPreparedLoadGame())) {
+		SV_Error("qc2cpp restore lost its prepared image");
+	}
+#else
+	if (restoring_qc2cpp) {
+		SV_Error("qc2cpp restore support is unavailable");
+	}
+#endif
+
 	// run the frame start qc function to let progs check cvars
-	if (!pr_nqprogs)
+	if (!restoring_qc2cpp && !pr_nqprogs)
 		SV_ProgStartFrame (false);
 
 	// ********* External Entity support (.ent file(s) in gamedir/maps) pinched from ZQuake *********
@@ -661,7 +683,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		entitystring = CM_EntityString();
 	}
 
-	PR_LoadEnts(entitystring);
+	if (!restoring_qc2cpp) {
+		PR_LoadEnts(entitystring);
+	}
 	// ********* End of External Entity support code *********
 
 	// look up some model indexes for specialized message compression
@@ -671,24 +695,31 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// or prog writes to the signon message are errors
 	sv.state = ss_active;
 
-	// run two frames to allow everything to settle
-	SV_Physics ();
-	sv.time += 0.1;
-	SV_Physics ();
-	sv.time += 0.1;
-	sv.old_time = sv.time;
+	// run two frames to allow ordinary map startup to settle
+	if (!restoring_qc2cpp) {
+		SV_Physics ();
+		sv.time += 0.1;
+		SV_Physics ();
+		sv.time += 0.1;
+		sv.old_time = sv.time;
+	}
 
 	// save movement vars
 	SV_SetMoveVars();
 
 	// create a baseline for more efficient communications
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (restoring_qc2cpp && !QC_CommitPreparedLoadGame()) {
+		SV_Error("qc2cpp restore validation failed after map setup");
+	}
+	#endif
 	SV_CreateBaseline ();
 	sv.signon_buffer_size[sv.num_signon_buffers-1] = sv.signon.cursize;
 
 	Info_SetValueForKey (svs.info, "map", sv.mapname, MAX_SERVERINFO_STRING);
 
 	// calltimeofday.
-	{
+	if (!restoring_qc2cpp) {
 		extern void PF_calltimeofday (void);
 		*PR_Global_time() = sv.time;
 		PR_SetGlobal_self(NULL);

@@ -6,6 +6,7 @@
 #include "qc2cpp/entities.h"
 #include "qc2cpp/globals.h"
 #include "qc2cpp/services.h"
+#include "qc2cpp/save.h"
 #if defined(MVDSV_QC2CPP_TESTS)
 #include "qc2cpp/test_observer.h"
 #endif
@@ -90,6 +91,7 @@ void QC_UnloadProgs(void)
 	}
 	QC_ClearGlobals();
 	QC_ClearEntities();
+	QC_SaveInvalidateConnectedSnapshot();
 	QC_TransportClose(qc_transport);
 	qc_transport = NULL;
 
@@ -180,8 +182,9 @@ static const qc_game_api_v1_t *QC_RequireGame(const char *entry)
 void QC_ClientConnect(qc_entity_id_t self, uint32_t spectator)
 {
 	QC_CALL_CLIENT("client connect", game->client_connect(game->context, self, spectator));
+	QC_SaveInvalidateConnectedSnapshot();
 #if defined(MVDSV_QC2CPP_TESTS)
-	QC_TestObserverClientConnect();
+	QC_TestObserverClientConnect(self);
 #endif
 }
 
@@ -196,6 +199,7 @@ void QC_PutClientInServer(qc_entity_id_t self, uint32_t spectator)
 void QC_ClientDisconnect(qc_entity_id_t self, uint32_t spectator)
 {
 	QC_CALL_CLIENT("client disconnect", game->client_disconnect(game->context, self, spectator));
+	QC_SaveInvalidateConnectedSnapshot();
 #if defined(MVDSV_QC2CPP_TESTS)
 	QC_TestObserverClientDisconnect();
 #endif
@@ -275,6 +279,44 @@ void QC_SetChangeParms(qc_entity_id_t self, float out_parms[16])
 {
 	QC_CALL_CLIENT("set change parms", game->set_change_parms(game->context, self,
 		out_parms));
+}
+
+qc_restore_status_t QC_SetSaveSelection(const uint8_t *bitmap, qc_byte_count_t size)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("set save selection");
+	QC_AdapterStateEnter(&qc_state);
+	const qc_restore_status_t result = game->set_save_selection(game->context, bitmap, size);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+qc_byte_count_t QC_SaveGuest(uint8_t *out, qc_byte_count_t capacity)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("save");
+	QC_AdapterStateEnter(&qc_state);
+	const qc_byte_count_t result = game->save(game->context, out, capacity);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+qc_restore_status_t QC_ValidateGuestRestore(const uint8_t *data, qc_byte_count_t size,
+	const uint8_t *selection, qc_byte_count_t selection_size)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("validate restore");
+	QC_AdapterStateEnter(&qc_state);
+	const qc_restore_status_t result = game->validate_restore(game->context, data, size,
+		selection, selection_size);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+qc_restore_status_t QC_RestoreGuest(const uint8_t *data, qc_byte_count_t size)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("restore");
+	QC_AdapterStateEnter(&qc_state);
+	const qc_restore_status_t result = game->restore(game->context, data, size);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
 }
 
 void QC_Unpublish(void *context)

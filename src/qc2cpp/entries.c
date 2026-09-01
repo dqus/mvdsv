@@ -29,6 +29,9 @@ void QC_DispatchEdictTouch(edict_t *touched, edict_t *toucher, float time,
 
 void QC_DispatchEdictThink(edict_t *thinking, float thinktime, float frametime)
 {
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverEdictThink(thinking);
+#endif
 	QC_EdictThink(QC_EntrySlot(thinking, "think"), thinktime, frametime);
 }
 
