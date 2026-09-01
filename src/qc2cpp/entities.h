@@ -14,6 +14,7 @@ int QC_ConfigureEntities(qc_guest_address_t publication_address);
 int QC_BindEntities(void);
 void QC_ClearEntities(void);
 qc_shared_entity_state_v1_t *QC_Entity(qc_entity_id_t slot);
+uint32_t QC_EntityCapacity(void);
 qc_entity_id_t QC_EdictToSlot(const struct edict_s *edict);
 struct edict_s *QC_SlotToEdict(qc_entity_id_t slot);
 void QC_ClearEdict(struct edict_s *edict);

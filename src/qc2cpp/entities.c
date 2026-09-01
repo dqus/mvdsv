@@ -91,6 +91,11 @@ qc_shared_entity_state_v1_t *QC_Entity(qc_entity_id_t slot)
 	return entity;
 }
 
+uint32_t QC_EntityCapacity(void)
+{
+	return qc_entity_capacity;
+}
+
 qc_entity_id_t QC_EdictToSlot(const edict_t *edict)
 {
 	const uintptr_t first = (uintptr_t)&sv.edicts[0];
