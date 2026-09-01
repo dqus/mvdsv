@@ -30,6 +30,7 @@
 #include "vm_local.h"
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/adapter.h"
+#include "qc2cpp/entries.h"
 #endif
 
 gameData_t gamedata;
@@ -393,8 +394,8 @@ void PR2_EdictTouch(func_t f)
 	#ifdef MVDSV_QC2CPP_ENABLED
 	if (QC_Active()) {
 		(void)f;
-		QC_EdictTouch((qc_entity_id_t)PR_Global_self_word(),
-			(qc_entity_id_t)PR_Global_other_word(), (float)sv.time,
+		QC_DispatchEdictTouch(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
+			QC_SlotToEdict((qc_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
 			*PR_Global_frametime());
 		return;
 	}
@@ -413,8 +414,8 @@ void PR2_EdictThink(func_t f)
 	#ifdef MVDSV_QC2CPP_ENABLED
 	if (QC_Active()) {
 		(void)f;
-		QC_EdictThink((qc_entity_id_t)PR_Global_self_word(), (float)sv.time,
-			*PR_Global_frametime());
+		QC_DispatchEdictThink(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
+			*PR_Global_time(), *PR_Global_frametime());
 		return;
 	}
 	#endif
@@ -432,8 +433,8 @@ void PR2_EdictBlocked(func_t f)
 	#ifdef MVDSV_QC2CPP_ENABLED
 	if (QC_Active()) {
 		(void)f;
-		QC_EdictBlocked((qc_entity_id_t)PR_Global_self_word(),
-			(qc_entity_id_t)PR_Global_other_word(), (float)sv.time,
+		QC_DispatchEdictBlocked(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
+			QC_SlotToEdict((qc_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
 			*PR_Global_frametime());
 		return;
 	}

@@ -1,0 +1,11 @@
+site	entry	self	other	time	frametime	restore	test
+SV_RunThink	think	thinking entity	world	clamped nextthink	shared global	no generic rollback	qc2cpp_reentry
+SV_Impact first side	touch	first impact entity	second impact entity	single initial sv.time write	shared global	SV_Impact restores self and other after both sides	qc2cpp_reentry
+SV_Impact second side	touch	second impact entity	first impact entity	live callback time	shared global	SV_Impact restores self and other after both sides	qc2cpp_reentry
+SV_Push blocked	blocked	pusher	blocking entity	current shared global	shared global	legacy surrounding state only	qc2cpp_entry_routes
+SV_Physics_Pusher think	think	pusher	world	sv.time	shared global	no generic rollback	qc2cpp_entry_routes
+SV_TouchLinks	touch	trigger	linked entity	temporary sv.time	shared global	SV_TouchLinks restores self other and time	qc2cpp_entry_routes
+SV_User bot blocked	blocked	player	current canonical other	current shared global	shared global	legacy surrounding state only	qc2cpp_entry_routes
+SV_User player touch	touch	touched entity	player	current shared global	shared global	legacy surrounding state only	qc2cpp_entry_routes
+SV_User optional hook	absent	-	-	-	-	no separate optional QC hook	qc2cpp_entry_routes
+reentry QC fixture	generated callbacks	fixture-defined	fixture-defined	fixture-defined	fixture-defined	transpile and native generated-project build	qc2cpp_reentry_fixture
