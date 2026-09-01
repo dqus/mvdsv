@@ -142,3 +142,24 @@ test-build-only and only records these facts.
 Each transport-specific acceptance-assets target depends on `mvdsv`. This
 prevents both the aggregate and direct native/Wasm target paths from checking a
 new generated game against an old server binary after an adapter source edit.
+
+## Task 17 — validated transport-independent save image
+
+`qc_save_image_t` now owns a parsed `QCMS` V1 container independently of a
+live server, transport or game instance. Its three fixed little-endian sections
+are metadata, bounded engine state and the opaque logical guest payload. The
+metadata identifies the logical game, map checksum and entity capacity; it does
+not encode backend choice, addresses or a Wasmtime version. The engine section
+explicitly records time, serverflags, lightstyles, precache order, edict
+active/free/freetime data, and client slot flags/spawn parameters.
+
+`QC_SaveParse` accepts only the fixed section order and rejects truncation,
+unknown versions, duplicate/trailing or overrun sections, invalid logical names
+or capacities, non-finite timing, oversized resource lists and duplicate or
+out-of-capacity client slots. It leaves its output null on every rejection.
+`QC_SaveEncode` writes the
+same bounded, explicit representation into caller-owned `malloc` memory; it
+does not serialize padded C structures. The same focused test target is built
+and run under both native and Wasm adapter configurations. Server file I/O and
+the atomic temporary-file/rename policy remain at the Task 18 integration seam,
+where `QC_SaveGame` selects a concrete save path.
