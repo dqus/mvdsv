@@ -32,6 +32,11 @@ void QC_ClientPreThink(qc_entity_id_t self, float time, float frametime,
 void QC_ClientPostThink(qc_entity_id_t self, float time, uint32_t spectator);
 void QC_SetNewParms(float out_parms[16]);
 void QC_SetChangeParms(qc_entity_id_t self, float out_parms[16]);
+qc_restore_status_t QC_SetSaveSelection(const uint8_t *bitmap, qc_byte_count_t size);
+qc_byte_count_t QC_SaveGuest(uint8_t *out, qc_byte_count_t capacity);
+qc_restore_status_t QC_ValidateGuestRestore(const uint8_t *data, qc_byte_count_t size,
+	const uint8_t *selection, qc_byte_count_t selection_size);
+qc_restore_status_t QC_RestoreGuest(const uint8_t *data, qc_byte_count_t size);
 void QC_Unpublish(void *context);
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic);
 
