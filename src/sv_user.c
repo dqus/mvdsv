@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/entries.h"
 #include "qc2cpp/entities.h"
 #endif
 
@@ -3853,7 +3854,14 @@ FIXME
 		}
 
 		// Give the mod a chance to replace the command
-		PR_EdictBlocked (sv_player->v->blocked);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (QC_Active())
+			QC_DispatchEdictBlocked(sv_player,
+				QC_SlotToEdict((qc_entity_id_t)PR_Global_other_word()),
+				*PR_Global_time(), *PR_Global_frametime());
+		else
+		#endif
+			PR_EdictBlocked(sv_player->v->blocked);
 
 		// Run the command again
 		SV_RunCmd (ucmd, false, true);
@@ -3896,7 +3904,13 @@ FIXME
 				continue;
 		PR_SetGlobal_self(ent);
 		PR_SetGlobal_other(sv_player);
-			PR_EdictTouch (ent->v->touch);
+			#ifdef MVDSV_QC2CPP_ENABLED
+			if (QC_Active())
+				QC_DispatchEdictTouch(ent, sv_player, *PR_Global_time(),
+					*PR_Global_frametime());
+			else
+			#endif
+				PR_EdictTouch(ent->v->touch);
 			playertouch[n/8] |= 1 << (n%8);
 		}
 	}

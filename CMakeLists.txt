@@ -8,6 +8,8 @@ project(mvdsv C)
 option(MVDSV_QC2CPP_NATIVE "Enable the qc2cpp native game transport" OFF)
 option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
 option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
+set(QC2CPP_COMPILER "" CACHE FILEPATH
+	"Optional qc2cpp compiler used by external generated-fixture tests")
 set(MVDSV_WASMTIME_ROOT "" CACHE PATH
 	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
 
@@ -111,6 +113,8 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qc2cpp/adapter_state.c"
 		"${DIR_SRC}/qc2cpp/entities.c"
 		"${DIR_SRC}/qc2cpp/globals.c"
+		"${DIR_SRC}/qc2cpp/entries.c"
+		"${DIR_SRC}/qc2cpp/services_movement.c"
 		"${DIR_SRC}/qc2cpp/services_world.c"
 	)
 endif()

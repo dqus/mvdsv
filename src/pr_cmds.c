@@ -769,9 +769,9 @@ entity checkclient() = #17
 =================
 */
 #define	MAX_CHECK	16
-static void PF_checkclient (void)
+edict_t *SV_QC_CheckClient(edict_t *self)
 {
-	edict_t	*ent, *self;
+	edict_t	*ent;
 	int		l;
 	vec3_t	vieworg;
 	
@@ -786,22 +786,24 @@ static void PF_checkclient (void)
 	ent = EDICT_NUM(sv.lastcheck);
 	if (ent->e.free || ent->v->health <= 0)
 	{
-		RETURN_EDICT(sv.edicts);
-		return;
+		return sv.edicts;
 	}
 
 // if current entity can't possibly see the check entity, return 0
-	self = PROG_TO_EDICT(pr_global_struct->self);
 	VectorAdd (self->v->origin, self->v->view_ofs, vieworg);
 	l = CM_Leafnum(CM_PointInLeaf(vieworg)) - 1;
 	if ( (l<0) || !(checkpvs[l>>3] & (1<<(l&7)) ) )
 	{
-		RETURN_EDICT(sv.edicts);
-		return;
+		return sv.edicts;
 	}
 
 // might be able to see it
-	RETURN_EDICT(ent);
+	return ent;
+}
+
+static void PF_checkclient (void)
+{
+	RETURN_EDICT(SV_QC_CheckClient(PROG_TO_EDICT(pr_global_struct->self)));
 }
 
 //============================================================================
@@ -1463,22 +1465,14 @@ PF_walkmove
 float(float yaw, float dist) walkmove
 ===============
 */
-void PF_walkmove (void)
+float SV_QC_WalkMove(edict_t *ent, float yaw, float dist)
 {
-	edict_t	*ent;
-	float	yaw, dist;
 	vec3_t	move;
 	dfunction_t	*oldf;
-	int 	oldself;
-
-	ent = PROG_TO_EDICT(pr_global_struct->self);
-	yaw = G_FLOAT(OFS_PARM0);
-	dist = G_FLOAT(OFS_PARM1);
 
 	if ( !( (int)ent->v->flags & (FL_ONGROUND|FL_FLY|FL_SWIM) ) )
 	{
-		G_FLOAT(OFS_RETURN) = 0;
-		return;
+		return 0.0f;
 	}
 
 	yaw = yaw*M_PI*2 / 360;
@@ -1489,13 +1483,18 @@ void PF_walkmove (void)
 
 	// save program state, because SV_movestep may call other progs
 	oldf = pr_xfunction;
-	oldself = pr_global_struct->self;
+	const float result = SV_movestep(ent, move, true);
 
-	G_FLOAT(OFS_RETURN) = SV_movestep(ent, move, true);
-
-
-	// restore program state
+	// The caller owns the self restoration boundary.
 	pr_xfunction = oldf;
+	return result;
+}
+
+void PF_walkmove (void)
+{
+	edict_t *const ent = PROG_TO_EDICT(pr_global_struct->self);
+	const int oldself = pr_global_struct->self;
+	G_FLOAT(OFS_RETURN) = SV_QC_WalkMove(ent, G_FLOAT(OFS_PARM0), G_FLOAT(OFS_PARM1));
 	pr_global_struct->self = oldself;
 }
 
@@ -1506,13 +1505,10 @@ PF_droptofloor
 void() droptofloor
 ===============
 */
-void PF_droptofloor (void)
+float SV_QC_DropToFloor(edict_t *ent)
 {
-	edict_t		*ent;
 	vec3_t		end;
 	trace_t		trace;
-
-	ent = PROG_TO_EDICT(pr_global_struct->self);
 
 	VectorCopy (ent->v->origin, end);
 	end[2] -= 256;
@@ -1520,15 +1516,20 @@ void PF_droptofloor (void)
 	trace = SV_Trace (ent->v->origin, ent->v->mins, ent->v->maxs, end, false, ent);
 
 	if (trace.fraction == 1 || trace.allsolid)
-		G_FLOAT(OFS_RETURN) = 0;
+		return 0.0f;
 	else
 	{
 		VectorCopy (trace.endpos, ent->v->origin);
 		SV_LinkEdict (ent, false);
 		ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
 	ent->v->groundentity = PR_EntityReference(trace.e.ent);
-		G_FLOAT(OFS_RETURN) = 1;
+		return 1.0f;
 	}
+}
+
+void PF_droptofloor (void)
+{
+	G_FLOAT(OFS_RETURN) = SV_QC_DropToFloor(PROG_TO_EDICT(pr_global_struct->self));
 }
 
 /*

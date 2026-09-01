@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qwsvdef.h"
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/entities.h"
+#include "qc2cpp/entries.h"
 #endif
 
 /*
@@ -164,7 +165,12 @@ qbool SV_RunThink (edict_t *ent)
 		*PR_Global_time() = thinktime;
 		PR_SetGlobal_self(ent);
 		PR_SetGlobal_other(sv.edicts);
-		PR_EdictThink(ent->v->think);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (QC_Active())
+			QC_DispatchEdictThink(ent, thinktime, *PR_Global_frametime());
+		else
+		#endif
+			PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
 			return false;
@@ -192,14 +198,24 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		PR_SetGlobal_self(e1);
 		PR_SetGlobal_other(e2);
-		PR_EdictTouch(e1->v->touch);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (QC_Active())
+			QC_DispatchEdictTouch(e1, e2, *PR_Global_time(), *PR_Global_frametime());
+		else
+		#endif
+			PR_EdictTouch(e1->v->touch);
 	}
 
 	if (e2->v->touch && e2->v->solid != SOLID_NOT)
 	{
 		PR_SetGlobal_self(e2);
 		PR_SetGlobal_other(e1);
-		PR_EdictTouch(e2->v->touch);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (QC_Active())
+			QC_DispatchEdictTouch(e2, e1, *PR_Global_time(), *PR_Global_frametime());
+		else
+		#endif
+			PR_EdictTouch(e2->v->touch);
 	}
 
 	PR_SetGlobal_self_word(old_self);
@@ -552,7 +568,13 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		{
 			PR_SetGlobal_self(pusher);
 			PR_SetGlobal_other(check);
-			PR_EdictBlocked (pusher->v->blocked);
+			#ifdef MVDSV_QC2CPP_ENABLED
+			if (QC_Active())
+				QC_DispatchEdictBlocked(pusher, check, *PR_Global_time(),
+					*PR_Global_frametime());
+			else
+			#endif
+				PR_EdictBlocked (pusher->v->blocked);
 		}
 
 		// move back any entities we already moved
@@ -630,7 +652,12 @@ void SV_Physics_Pusher (edict_t *ent)
 		*PR_Global_time() = sv.time;
 		PR_SetGlobal_self(ent);
 		PR_SetGlobal_other(sv.edicts);
-		PR_EdictThink(ent->v->think);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (QC_Active())
+			QC_DispatchEdictThink(ent, *PR_Global_time(), *PR_Global_frametime());
+		else
+		#endif
+			PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
 			return;
