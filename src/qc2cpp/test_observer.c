@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct qc_test_observer_s {
@@ -42,6 +43,8 @@ static int forced_next_client_userid = -1;
 static void QC_TestReuseUserId_f(void);
 static void QC_TestSaveState_f(void);
 static void QC_TestReleaseConnectedClient_f(void);
+static void QC_TestFatal_f(void);
+static void QC_TestRestoreOom_f(void);
 static void QC_TestObserverSendRestoreMarker(const char *marker);
 
 static void QC_TestSnapshot_f(void)
@@ -91,6 +94,8 @@ void QC_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_save_state", QC_TestSaveState_f);
 	Cmd_AddCommand("qc2cpp_test_release_connected_client",
 		QC_TestReleaseConnectedClient_f);
+	Cmd_AddCommand("qc2cpp_test_fatal", QC_TestFatal_f);
+	Cmd_AddCommand("qc2cpp_test_restore_oom", QC_TestRestoreOom_f);
 }
 
 void QC_TestObserverInitBegin(void)
@@ -117,6 +122,11 @@ void QC_TestObserverStartFrame(void)
 void QC_TestObserverNormalUnpublish(void)
 {
 	++observer.normal_unpublish_count;
+}
+
+void QC_TestObserverTerminalUnpublish(void)
+{
+	Con_Printf("[qc2cpp-fatal] terminal-unpublish\n");
 }
 
 void QC_TestObserverLegacyGameEntry(void)
@@ -246,6 +256,57 @@ static void QC_TestReleaseConnectedClient_f(void)
 	}
 	QC_TestObserverSendRestoreMarker("[qc2cpp-save-connected] release");
 	Con_Printf("{\"qc2cpp_test_release_connected_client\":{\"released\":true}}\n");
+}
+
+static void QC_TestFatal_f(void)
+{
+	int slot;
+	if (Cmd_Argc() != 1) {
+		Con_Printf("Usage: qc2cpp_test_fatal\n");
+		return;
+	}
+	for (slot = 1; slot < sv.num_edicts; ++slot) {
+		if (!sv.edicts[slot].e.free && sv.edicts[slot].v != NULL
+			&& sv.edicts[slot].v->think != 0) {
+			break;
+		}
+	}
+	if (slot == sv.num_edicts) {
+		Con_Printf("qc2cpp fatal probe has no think callback\n");
+		return;
+	}
+	Con_Printf("[qc2cpp-fatal] trigger\n");
+	sv.edicts[slot].v->nextthink = (float)sv.time;
+	(void)SV_RunThink(&sv.edicts[slot]);
+	Con_Printf("[qc2cpp-fatal] outer-gameplay-resumed\n");
+}
+
+static void QC_TestRestoreOom_f(void)
+{
+	enum { restore_oom_bytes = 64U * 1024U };
+	char *value;
+	if (Cmd_Argc() != 1) {
+		Con_Printf("Usage: qc2cpp_test_restore_oom\n");
+		return;
+	}
+	if (sv.num_edicts <= 0 || sv.edicts[0].v == NULL) {
+		Con_Printf("qc2cpp restore-oom probe is unavailable\n");
+		return;
+	}
+	value = malloc((size_t)restore_oom_bytes + 1U);
+	if (value == NULL) {
+		Con_Printf("qc2cpp restore-oom probe could not allocate input\n");
+		return;
+	}
+	memset(value, 'x', restore_oom_bytes);
+	value[restore_oom_bytes] = '\0';
+	if (!QC_SetEntityString(&sv.edicts[0], "message", value)) {
+		free(value);
+		Con_Printf("qc2cpp restore-oom probe could not write world string\n");
+		return;
+	}
+	free(value);
+	Con_Printf("{\"qc2cpp_test_restore_oom\":{\"prepared\":true}}\n");
 }
 
 void QC_TestObserverClientConnect(uint32_t self)
