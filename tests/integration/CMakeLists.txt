@@ -106,6 +106,7 @@ add_custom_command(
     DEPENDS "${qc2cpp_generated}/CMakeLists.txt" "${qc2cpp_checker}"
     VERBATIM)
 add_custom_target(qc2cpp_acceptance_native_assets DEPENDS "${qc2cpp_native_game}")
+add_dependencies(qc2cpp_acceptance_native_assets mvdsv)
 
 set(qc2cpp_acceptance_asset_targets qc2cpp_acceptance_native_assets)
 add_test(NAME qc2cpp_server_map_native
@@ -124,6 +125,18 @@ if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
             --suite client --mode native --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/client-native"
+            --client "${qc2cpp_fte_client}")
+    add_test(NAME qc2cpp_network_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite network --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/network-native"
+            --client "${qc2cpp_fte_client}")
+    add_test(NAME qc2cpp_spectator_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite spectator --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/spectator-native"
             --client "${qc2cpp_fte_client}")
 endif()
 
@@ -156,12 +169,27 @@ if(MVDSV_QC2CPP_WASM)
         DEPENDS "${qc2cpp_generated}/CMakeLists.txt"
         VERBATIM)
     add_custom_target(qc2cpp_acceptance_wasm_assets DEPENDS "${qc2cpp_wasm_game}")
+    add_dependencies(qc2cpp_acceptance_wasm_assets mvdsv)
     list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_acceptance_wasm_assets)
     add_test(NAME qc2cpp_server_map_wasm
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/wasm")
+    if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
+        add_test(NAME qc2cpp_network_wasm
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+                --suite network --mode wasm --server $<TARGET_FILE:mvdsv>
+                --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+                --output "${qc2cpp_acceptance_root}/runs/network-wasm"
+                --client "${qc2cpp_fte_client}")
+        add_test(NAME qc2cpp_spectator_wasm
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+                --suite spectator --mode wasm --server $<TARGET_FILE:mvdsv>
+                --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+                --output "${qc2cpp_acceptance_root}/runs/spectator-wasm"
+                --client "${qc2cpp_fte_client}")
+    endif()
 endif()
 
 add_custom_target(qc2cpp_acceptance_assets DEPENDS ${qc2cpp_acceptance_asset_targets})
