@@ -54,8 +54,9 @@ qc_plugin_status_t QC_NativeOpen(const char *gamedir, const char *basename,
 	if (native_handle == NULL) {
 		const char *const loader_error = dlerror();
 		char message[sizeof(diagnostic->message)];
-		snprintf(message, sizeof(message), "qc2cpp native artifact %s could not be loaded: %s",
-			path, loader_error == NULL ? "unknown dynamic-loader error" : loader_error);
+		snprintf(message, sizeof(message),
+			"qc2cpp native artifact %.48s could not be loaded: %.64s", path,
+			loader_error == NULL ? "unknown dynamic-loader error" : loader_error);
 		QC_TransportDiagnostic(diagnostic, QC_PLUGIN_IO_ERROR,
 			message);
 		return QC_PLUGIN_IO_ERROR;

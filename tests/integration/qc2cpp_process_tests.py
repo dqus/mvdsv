@@ -22,6 +22,7 @@ from qc2cpp_acceptance import (
     assert_spectator_events,
     client_command,
     network_client_command,
+    prepare_game_directory,
     server_command,
 )
 
@@ -116,6 +117,24 @@ class ProcessRunnerTests(unittest.TestCase):
         self.assertEqual(command[:5], [str(pathlib.Path("mvdsv").resolve()), "-basedir",
             str(pathlib.Path("base").resolve()), "-game", "qw"])
         self.assertIn("4", command)
+
+    def test_acceptance_exposes_id1_paks_with_mvdsv_linux_filenames(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            assets = root / "id1"
+            assets.mkdir()
+            (assets / "PAK0.PAK").write_bytes(b"pak")
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            suffix = ".dylib" if sys.platform == "darwin" else ".so"
+            (artifacts / f"game{suffix}").write_bytes(b"game")
+
+            basedir = prepare_game_directory(root / "run", assets, artifacts, "native")
+
+            pak = basedir / "qw" / "pak0.pak"
+            self.assertTrue(pak.is_symlink())
+            self.assertEqual(pathlib.Path(pak.readlink()), assets / "PAK0.PAK")
+            self.assertIn("pak0.pak", [entry.name for entry in (basedir / "qw").iterdir()])
 
     def test_client_acceptance_requests_early_headless_renderer(self):
         command = client_command(
