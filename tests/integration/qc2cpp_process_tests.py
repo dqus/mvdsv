@@ -11,10 +11,11 @@ from qc2cpp_process import (
     ProcessFailure,
     RunningProcess,
     parse_json_observation,
+    run_client_acceptance,
     run_process,
     wait_for_events,
 )
-from qc2cpp_acceptance import server_command
+from qc2cpp_acceptance import client_command, server_command
 
 
 class ProcessRunnerTests(unittest.TestCase):
@@ -53,6 +54,26 @@ class ProcessRunnerTests(unittest.TestCase):
                     timeout=1,
                 )
 
+    def test_client_success_requires_post_parse_and_received_frame_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "client.log"
+            with self.assertRaisesRegex(ProcessFailure, "missing event"):
+                run_client_acceptance(
+                    [sys.executable, "-c", "print('connected', flush=True)"],
+                    output,
+                    timeout=1,
+                )
+
+    def test_client_success_requires_the_headless_renderer_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "client.log"
+            command = (
+                "print('[qc2cpp-acceptance] parsed-qw-server'); "
+                "print('[qc2cpp-acceptance] received-qw-frame')"
+            )
+            with self.assertRaisesRegex(ProcessFailure, "missing event"):
+                run_client_acceptance([sys.executable, "-c", command], output, timeout=1)
+
     def test_interactive_early_exit_preserves_startup_output(self):
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / "server.log"
@@ -80,6 +101,15 @@ class ProcessRunnerTests(unittest.TestCase):
         self.assertEqual(command[:5], [str(pathlib.Path("mvdsv").resolve()), "-basedir",
             str(pathlib.Path("base").resolve()), "-game", "qw"])
         self.assertIn("4", command)
+
+    def test_client_acceptance_requests_early_headless_renderer(self):
+        command = client_command(
+            pathlib.Path("fteqw"), pathlib.Path("client-base"), 27500)
+        self.assertEqual(command[:2], [str(pathlib.Path("fteqw").resolve()),
+            "-qc2cpp-acceptance"])
+        self.assertNotIn("+set", command)
+        self.assertIn("-nosound", command)
+        self.assertEqual(command[-2:], ["+connect", "127.0.0.1:27500"])
 
 
 if __name__ == "__main__":

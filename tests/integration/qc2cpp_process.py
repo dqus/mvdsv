@@ -144,6 +144,16 @@ def run_process(command, output_path, *, timeout):
         raise ProcessFailure(f"process early exit with return code {returncode}")
 
 
+def run_client_acceptance(command, output_path, *, timeout):
+    """Require FTE's enabled post-parse observations after a clean exit."""
+    run_process(command, output_path, timeout=timeout)
+    wait_for_events(output_path.read_text(encoding="utf-8").splitlines(), [
+        "[qc2cpp-acceptance] headless-renderer",
+        "[qc2cpp-acceptance] parsed-qw-server",
+        "[qc2cpp-acceptance] received-qw-frame",
+    ])
+
+
 def wait_for_events(events, expected):
     """Require *expected* to occur in order in an already captured event stream."""
     event_index = 0
