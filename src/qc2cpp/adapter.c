@@ -35,6 +35,7 @@ void QC_LoadProgs(void)
 	};
 	QC_BindWorldServices(&qc_host);
 	QC_BindMovementServices(&qc_host);
+	QC_BindNetworkServices(&qc_host);
 	QC_BindUnavailableServices(&qc_host);
 	QC_AdapterStateSelect(&qc_state, (int)sv_progtype.value);
 	const qc_plugin_status_t status = QC_TransportOpen((int)sv_progtype.value,
@@ -141,6 +142,105 @@ void QC_EdictBlocked(qc_entity_id_t pusher, qc_entity_id_t obstacle, float time,
 	QC_AdapterStateEnter(&qc_state);
 	game->edict_blocked(game->context, pusher, obstacle, time, frametime);
 	QC_AdapterStateLeave(&qc_state);
+}
+
+static const qc_game_api_v1_t *QC_RequireGame(const char *entry)
+{
+	const qc_game_api_v1_t *const game = QC_Game();
+	if (game == NULL) {
+		SV_Error("qc2cpp game cannot dispatch %s", entry);
+	}
+	return game;
+}
+
+#define QC_CALL_CLIENT(entry, invocation) \
+	do { \
+		const qc_game_api_v1_t *const game = QC_RequireGame(entry); \
+		QC_AdapterStateEnter(&qc_state); \
+		invocation; \
+		QC_AdapterStateLeave(&qc_state); \
+	} while (0)
+
+void QC_ClientConnect(qc_entity_id_t self, uint32_t spectator)
+{
+	QC_CALL_CLIENT("client connect", game->client_connect(game->context, self, spectator));
+}
+
+void QC_PutClientInServer(qc_entity_id_t self, uint32_t spectator)
+{
+	QC_CALL_CLIENT("put client in server", game->put_client_in_server(game->context, self, spectator));
+}
+
+void QC_ClientDisconnect(qc_entity_id_t self, uint32_t spectator)
+{
+	QC_CALL_CLIENT("client disconnect", game->client_disconnect(game->context, self, spectator));
+}
+
+uint32_t QC_ClientUserInfoChanged(qc_entity_id_t self, uint32_t after)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("client userinfo changed");
+	QC_AdapterStateEnter(&qc_state);
+	const uint32_t result = game->client_userinfo_changed(game->context, self, after);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+uint32_t QC_ClientCommand(qc_entity_id_t self)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("client command");
+	QC_AdapterStateEnter(&qc_state);
+	const uint32_t result = game->client_command(game->context, self);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+void QC_ClientKill(qc_entity_id_t self)
+{
+	QC_CALL_CLIENT("client kill", game->client_kill(game->context, self));
+}
+
+uint32_t QC_ClientSay(qc_entity_id_t self, uint32_t team, const uint8_t *text,
+	qc_byte_count_t size)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("client say");
+	QC_AdapterStateEnter(&qc_state);
+	const uint32_t result = game->client_say(game->context, self, team, text, size);
+	QC_AdapterStateLeave(&qc_state);
+	return result;
+}
+
+void QC_ClientPreThink(qc_entity_id_t self, float time, float frametime,
+	uint32_t spectator)
+{
+	QC_CALL_CLIENT("client prethink", game->client_prethink(game->context, self,
+		time, frametime, spectator));
+}
+
+void QC_ClientPostThink(qc_entity_id_t self, float time, uint32_t spectator)
+{
+	const qc_game_api_v1_t *const game = QC_RequireGame("client postthink");
+	const qc_shared_global_state_v1_t *const globals = QC_Globals();
+	if (globals == NULL) {
+		SV_Error("qc2cpp client postthink has no shared globals");
+	}
+	QC_AdapterStateEnter(&qc_state);
+	if (spectator != 0U) {
+		game->spectator_think(game->context, self, time, globals->frametime);
+	} else {
+		game->client_postthink(game->context, self, time, globals->frametime, 0U);
+	}
+	QC_AdapterStateLeave(&qc_state);
+}
+
+void QC_SetNewParms(float out_parms[16])
+{
+	QC_CALL_CLIENT("set new parms", game->set_new_parms(game->context, out_parms));
+}
+
+void QC_SetChangeParms(qc_entity_id_t self, float out_parms[16])
+{
+	QC_CALL_CLIENT("set change parms", game->set_change_parms(game->context, self,
+		out_parms));
 }
 
 void QC_Unpublish(void *context)
