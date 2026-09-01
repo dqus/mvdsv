@@ -163,3 +163,40 @@ target_compile_definitions(qc2cpp_services_world_test PRIVATE
 	__LITTLE_ENDIAN__Q__)
 target_link_libraries(qc2cpp_services_world_test PRIVATE Qc2cppHost::native)
 add_test(NAME qc2cpp_services_world COMMAND qc2cpp_services_world_test)
+
+add_executable(qc2cpp_reentry_test
+	reentry_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/entries.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/services_movement.c
+	${PROJECT_SOURCE_DIR}/src/sv_phys.c)
+set_target_properties(qc2cpp_reentry_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_reentry_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_reentry_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+set_source_files_properties(${PROJECT_SOURCE_DIR}/src/sv_phys.c PROPERTIES
+	COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-parameter")
+target_compile_definitions(qc2cpp_reentry_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_reentry_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_reentry COMMAND qc2cpp_reentry_test)
+
+add_test(NAME qc2cpp_entry_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/entry_routes_test.cmake)
+
+if(QC2CPP_COMPILER)
+	add_test(NAME qc2cpp_reentry_fixture
+		COMMAND ${CMAKE_COMMAND}
+			-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
+			-DFIXTURE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reentry
+			-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/reentry-generated
+			-P ${CMAKE_CURRENT_SOURCE_DIR}/reentry_fixture_test.cmake)
+endif()
