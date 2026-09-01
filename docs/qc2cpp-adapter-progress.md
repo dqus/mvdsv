@@ -117,3 +117,28 @@ multicast and frag-log services that had typed ABI imports but no
 `TargetServiceHooks` binding. qc2cpp now binds those existing imports; its
 generated-game contract invokes every such service, so a future missing binding
 fails closed rather than becoming a harmless-looking client test pass.
+
+## Task 16 — real QW gameplay, reconnect and spectator acceptance
+
+`qc2cpp_network_native` and `qc2cpp_network_wasm` keep a real FTE client
+connected through QW signon and active play. The enabled client drives normal
+forward input, `kill`, and disconnect; the server-side observer verifies the
+resulting guest callbacks and host-owned outcomes rather than treating a
+handshake as gameplay. Each network test performs two ordinary player sessions,
+changes from `e1m1` to `e1m2`, then completes a third session. It requires:
+
+- successful signon and active client state;
+- server-observed player movement, the real teledeath touch owner/toucher pair,
+  the QW `ClientKill`/`respawn` result (live player state and the stock
+  `-2` suicide-frag transition), and client disconnect callbacks;
+- no legacy gameplay entry, correct shared `self` during player allocation,
+  and a normal qc2cpp unpublish over the map change.
+
+`qc2cpp_spectator_native` and `qc2cpp_spectator_wasm` separately connect with
+the real QW `spectator` userinfo, then require the spectator spawn and
+`spectator_think` guest path before disconnecting. The test observer remains
+test-build-only and only records these facts.
+
+Each transport-specific acceptance-assets target depends on `mvdsv`. This
+prevents both the aggregate and direct native/Wasm target paths from checking a
+new generated game against an old server binary after an adapter source edit.

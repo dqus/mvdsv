@@ -48,6 +48,17 @@ class RunningProcess:
             if key in line:
                 return parse_json_observation(line, key)
 
+    def observe_until(self, command, key, predicate, *, timeout):
+        """Poll a server-owned observation until its real state satisfies *predicate*."""
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProcessFailure(f"timed out waiting for matching observation: {key}")
+            observation = self.observe(command, key, timeout=remaining)
+            if predicate(observation):
+                return observation
+
     def _record_output(self, text):
         self._output.write(text)
         self._output.flush()
@@ -151,6 +162,17 @@ def run_client_acceptance(command, output_path, *, timeout):
         "[qc2cpp-acceptance] headless-renderer",
         "[qc2cpp-acceptance] parsed-qw-server",
         "[qc2cpp-acceptance] received-qw-frame",
+    ])
+
+
+def run_client_network_acceptance(command, output_path, *, timeout):
+    """Require one real client to complete the bounded gameplay progression."""
+    run_process(command, output_path, timeout=timeout)
+    wait_for_events(output_path.read_text(encoding="utf-8").splitlines(), [
+        "[qc2cpp-network] active",
+        "[qc2cpp-network] forward",
+        "[qc2cpp-network] kill",
+        "[qc2cpp-network] disconnect",
     ])
 
 
