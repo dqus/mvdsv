@@ -54,6 +54,10 @@ qc_plugin_status_t QC_WasmOpen(const char *gamedir, const char *basename,
 	}
 	fclose(input);
 	qc_wasm_instance_t *instance = NULL;
+	*game = (qc_game_api_v1_t){
+		.abi_version = QC_PLUGIN_ABI_VERSION_V1,
+		.struct_size = sizeof(*game),
+	};
 	const qc_plugin_status_t status = qc_wasm_create_v1(bytes, (qc_byte_count_t)length,
 		host, &instance, game, diagnostic);
 	free(bytes);
@@ -76,9 +80,10 @@ qc_plugin_status_t QC_WasmOpen(const char *gamedir, const char *basename,
 
 void QC_WasmClose(void *handle)
 {
-	#if defined(MVDSV_QC2CPP_WASM)
+
+#if defined(MVDSV_QC2CPP_WASM)
 	qc_wasm_destroy_v1((qc_wasm_instance_t *)handle);
-	#else
+#else
 	(void)handle;
-	#endif
+#endif
 }
