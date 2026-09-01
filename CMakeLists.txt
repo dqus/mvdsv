@@ -127,6 +127,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qc2cpp/services_movement.c"
 		"${DIR_SRC}/qc2cpp/services_network.c"
 		"${DIR_SRC}/qc2cpp/services_world.c"
+		"${DIR_SRC}/qc2cpp/save_format.c"
 	)
 	if(MVDSV_QC2CPP_TESTS)
 		list(APPEND SRC_COMMON "${DIR_SRC}/qc2cpp/test_observer.c")
