@@ -52,8 +52,12 @@ qc_plugin_status_t QC_NativeOpen(const char *gamedir, const char *basename,
 	}
 	void *native_handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 	if (native_handle == NULL) {
+		const char *const loader_error = dlerror();
+		char message[sizeof(diagnostic->message)];
+		snprintf(message, sizeof(message), "qc2cpp native artifact %s could not be loaded: %s",
+			path, loader_error == NULL ? "unknown dynamic-loader error" : loader_error);
 		QC_TransportDiagnostic(diagnostic, QC_PLUGIN_IO_ERROR,
-			"qc2cpp native artifact could not be loaded");
+			message);
 		return QC_PLUGIN_IO_ERROR;
 	}
 	dlerror();
@@ -66,12 +70,18 @@ qc_plugin_status_t QC_NativeOpen(const char *gamedir, const char *basename,
 	}
 	qc_plugin_query_v1_t query = NULL;
 	memcpy(&query, &symbol, sizeof(query));
-	memset(game, 0, sizeof(*game));
+	*game = (qc_game_api_v1_t){
+		.abi_version = QC_PLUGIN_ABI_VERSION_V1,
+		.struct_size = sizeof(*game),
+	};
 	const qc_plugin_status_t status = query(host, game);
 	if (status != QC_PLUGIN_OK) {
+		char message[sizeof(diagnostic->message)];
+		snprintf(message, sizeof(message),
+			"qc2cpp native artifact query failed with plugin status %u", (unsigned)status);
 		dlclose(native_handle);
 		QC_TransportDiagnostic(diagnostic, status,
-			"qc2cpp native artifact query failed");
+			message);
 		return status;
 	}
 	const qc_plugin_status_t validation = qc_validate_game_api_v1(game);

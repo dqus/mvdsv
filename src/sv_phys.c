@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/entities.h"
 #include "qc2cpp/entries.h"
+#include "qc2cpp/globals.h"
 #endif
 
 /*
@@ -967,11 +968,27 @@ void SV_RunNewmis (void)
 	if (pr_nqprogs)
 		return;
 
-	if (!pr_global_struct->newmis)
-		return;
+#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active()) {
+		qc_shared_global_state_v1_t *const globals = QC_Globals();
+		if (globals == NULL || globals->newmis == 0U) {
+			return;
+		}
+		ent = QC_SlotToEdict(globals->newmis);
+		globals->newmis = 0U;
+		if (ent == NULL) {
+			return;
+		}
+	}
+	else
+#endif
+	{
+		if (!pr_global_struct->newmis)
+			return;
 
-	ent = PROG_TO_EDICT(pr_global_struct->newmis);
-	pr_global_struct->newmis = 0;
+		ent = PROG_TO_EDICT(pr_global_struct->newmis);
+		pr_global_struct->newmis = 0;
+	}
 
 	save_frametime = sv_frametime;
 	sv_frametime = 0.05;
