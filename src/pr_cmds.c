@@ -2322,18 +2322,14 @@ PF_logfrag
 logfrag (killer, killee)
 ==============
 */
-void PF_logfrag (void)
+void SV_QC_LogFrag(edict_t *ent1, edict_t *ent2)
 {
-	edict_t	*ent1, *ent2;
 	int		e1, e2;
 	char	*s;
 	// -> scream
 	time_t		t;
 	struct tm	*tblock;
 	// <-
-
-	ent1 = G_EDICT(OFS_PARM0);
-	ent2 = G_EDICT(OFS_PARM1);
 
 	e1 = NUM_FOR_EDICT(ent1);
 	e2 = NUM_FOR_EDICT(ent2);
@@ -2363,6 +2359,11 @@ void PF_logfrag (void)
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, va("%d\n", time(NULL)));
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, s);
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, "}====================\n");
+}
+
+void PF_logfrag (void)
+{
+	SV_QC_LogFrag(G_EDICT(OFS_PARM0), G_EDICT(OFS_PARM1));
 }
 
 /*

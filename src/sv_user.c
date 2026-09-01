@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #ifdef MVDSV_QC2CPP_ENABLED
+#include "qc2cpp/adapter.h"
 #include "qc2cpp/entries.h"
 #include "qc2cpp/entities.h"
 #endif
@@ -1004,19 +1005,32 @@ static void Cmd_Begin_f (void)
 		if (sv_client->spectator)
 			SV_SpawnSpectator ();
 
+		#ifndef MVDSV_QC2CPP_ENABLED
 		// copy spawn parms out of the client_t
 		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
 			PR_Global_parm1()[i] = sv_client->spawn_parms[i];
-
-		// call the spawn function
 		*PR_Global_time() = sv.time;
 		PR_SetGlobal_self(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+		#else
+		if (!QC_Active()) {
+			for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
+				PR_Global_parm1()[i] = sv_client->spawn_parms[i];
+			*PR_Global_time() = sv.time;
+			PR_SetGlobal_self(sv_player);
+			G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+		}
+		#endif
 		PR_GameClientConnect(sv_client->spectator);
 
 		// actually spawn the player
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (!QC_Active())
+		#endif
+		{
+			*PR_Global_time() = sv.time;
+			PR_SetGlobal_self(sv_player);
+		}
 		PR_GamePutClientInServer(sv_client->spectator);
 	}
 
@@ -1849,8 +1863,13 @@ static void SV_Say (qbool team)
 	// try handle say in the mod.
 	SV_EndRedirect ();
 
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+	}
 
 	j = PR_ClientSay(team, p);
 
@@ -2030,8 +2049,13 @@ static void Cmd_Kill_f (void)
 		return;
 	}
 
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+	}
 	PR_ClientKill();
 }
 
@@ -2401,8 +2425,13 @@ static void Cmd_SetInfo_f (void)
 
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
 
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+	}
 	if (PR_UserInfoChanged(0))
 		return; // does not allowed to be changed by mod.
 
@@ -2733,7 +2762,10 @@ static void Cmd_Join_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+		PR_SetGlobal_self(sv_player);
 	PR_GameClientDisconnect(1);
 
 	// this is like SVC_DirectConnect.
@@ -2749,22 +2781,37 @@ static void Cmd_Join_f (void)
 	SetUpClientEdict (sv_client, sv_client->edict);
 
 	// call the progs to get default spawn parms for the new client
-	PR_GameSetNewParms();
-
-	// copy spawn parms out of the client_t
-	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		sv_client->spawn_parms[i] = PR_Global_parm1()[i];
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active())
+		QC_DispatchSetNewParms(sv_client->spawn_parms);
+	else
+	#endif
+	{
+		PR_GameSetNewParms();
+		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
+			sv_client->spawn_parms[i] = PR_Global_parm1()[i];
+	}
 
 	// call the spawn function
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
-	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	}
 	PR_GameClientConnect(0);
 
 	// actually spawn the player
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
-	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	}
 	PR_GamePutClientInServer(0);
 
 	// look in SVC_DirectConnect() for for extended comment whats this for
@@ -2818,7 +2865,10 @@ static void Cmd_Observe_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+		PR_SetGlobal_self(sv_player);
 	PR_GameClientDisconnect(0);
 
 	// this is like SVC_DirectConnect.
@@ -2834,22 +2884,37 @@ static void Cmd_Observe_f (void)
 	SetUpClientEdict (sv_client, sv_client->edict);
 
 	// call the progs to get default spawn parms for the new client
-	PR_GameSetNewParms();
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (QC_Active())
+		QC_DispatchSetNewParms(sv_client->spawn_parms);
+	else
+	#endif
+	{
+		PR_GameSetNewParms();
+		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
+			sv_client->spawn_parms[i] = PR_Global_parm1()[i];
+	}
 
 	SV_SpawnSpectator ();
 
-	// copy spawn parms out of the client_t
-	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		sv_client->spawn_parms[i] = PR_Global_parm1()[i];
-
 	// call the spawn function
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
-	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
+	}
 	PR_GameClientConnect(1);
 
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+	}
 	PR_GamePutClientInServer(1); // let mod know we put spec not player
 
 	// look in SVC_DirectConnect() for for extended comment whats this for
@@ -3420,8 +3485,13 @@ static ucmd_t ucmds[] =
 
 static qbool SV_ExecutePRCommand (void)
 {
-	*PR_Global_time() = sv.time;
-	PR_SetGlobal_self(sv_player);
+	#ifdef MVDSV_QC2CPP_ENABLED
+	if (!QC_Active())
+	#endif
+	{
+		*PR_Global_time() = sv.time;
+		PR_SetGlobal_self(sv_player);
+	}
 	return PR_ClientCmd();
 }
 
@@ -3773,9 +3843,14 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		VectorCopy (sv_player->v->velocity, oldvelocity);
 		old_teleport_time = sv_player->v->teleport_time;
 
-		*PR_Global_frametime() = sv_frametime;
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (!QC_Active())
+		#endif
+		{
+			*PR_Global_frametime() = sv_frametime;
+			*PR_Global_time() = sv.time;
+			PR_SetGlobal_self(sv_player);
+		}
 		PR_GameClientPreThink(0);
 
 		if (pr_nqprogs)
@@ -4217,8 +4292,13 @@ void SV_PostRunCmd(void)
 #endif
 
 		onground = (int) sv_player->v->flags & FL_ONGROUND;
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (!QC_Active())
+		#endif
+		{
+			*PR_Global_time() = sv.time;
+			PR_SetGlobal_self(sv_player);
+		}
 		VectorCopy (sv_player->v->velocity, originalvel);
 		PR_GameClientPostThink(0);
 
@@ -4243,8 +4323,13 @@ void SV_PostRunCmd(void)
 	}
 	else
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		#ifdef MVDSV_QC2CPP_ENABLED
+		if (!QC_Active())
+		#endif
+		{
+			*PR_Global_time() = sv.time;
+			PR_SetGlobal_self(sv_player);
+		}
 		PR_GameClientPostThink(1);
 	}
 }

@@ -2,16 +2,16 @@ import	implementation	test	behavior
 qc_import_setorigin_v1	world	qc2cpp_services_world	copies origin, resets antilag and relinks
 qc_import_setmodel_v1	world	qc2cpp_services_world	writes semantic model and applies precached model index
 qc_import_setsize_v1	world	qc2cpp_services_world	writes bounds, size and relinks
-qc_import_sound_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_sound_v1	network	qc2cpp_client	uses the normal engine sound service with a checked sample name
 qc_import_spawn_v1	world	qc2cpp_services_world	allocates an active engine edict and returns its slot
 qc_import_remove_v1	world	qc2cpp_services_world	frees the exact engine edict slot
 qc_import_traceline_v1	movement	qc2cpp_reentry	preserves engine trace result and returns a canonical entity slot
 qc_import_checkclient_v1	movement	qc2cpp_reentry	uses the legacy PVS checkclient operation with canonical entity slots
 qc_import_precache_sound_v1	world	qc2cpp_services_world	persists and records a loading-phase sound name
 qc_import_precache_model_v1	world	qc2cpp_services_world	persists and records a loading-phase model name
-qc_import_stuffcmd_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_bprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_sprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_stuffcmd_v1	network	qc2cpp_client	appends checked command text to the selected client's reliable command stream
+qc_import_bprint_v1	network	qc2cpp_client	uses normal broadcast print routing
+qc_import_sprint_v1	network	qc2cpp_client	uses normal selected-client print routing
 qc_import_dprint_v1	world	qc2cpp_services_world	prints a checked local text copy
 qc_import_walkmove_v1	movement	qc2cpp_reentry	runs explicit walkmove and restores only canonical self after nested callbacks
 qc_import_droptofloor_v1	movement	qc2cpp_reentry	runs the legacy drop trace against the supplied canonical entity
@@ -21,14 +21,14 @@ qc_import_pointcontents_v1	movement	qc2cpp_reentry	uses the legacy point-content
 qc_import_aim_v1	movement	qc2cpp_reentry	copies the generated caller forward vector
 qc_import_cvar_v1	world	qc2cpp_services_world	reads the named M cvar
 qc_import_localcmd_v1	world	qc2cpp_services_world	queues checked command text
-qc_import_WriteByte_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteChar_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteShort_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteLong_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteCoord_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteAngle_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteString_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_WriteEntity_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_WriteByte_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteChar_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteShort_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteLong_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteCoord_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteAngle_v1	network	qc2cpp_client	writes to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteString_v1	network	qc2cpp_client	writes checked text to an explicit normal destination or selected MSG_ONE client
+qc_import_WriteEntity_v1	network	qc2cpp_client	converts the supplied entity slot directly to its engine entity number
 qc_import_step_direction_v1	movement	qc2cpp_reentry	runs normal engine step-direction movement
 qc_import_map_metadata_v1	world	qc2cpp_services_world	returns NOT_HANDLED for QC-owned map keys
 qc_import_map_admit_v1	world	qc2cpp_services_world	applies QW deathmatch and skill spawnflag filtering
@@ -37,11 +37,11 @@ qc_import_map_post_spawn_v1	world	qc2cpp_services_world	flushes normal signon st
 qc_import_makestatic_v1	world	qc2cpp_services_world	creates a static signon entity then frees its source edict
 qc_import_changelevel_v1	world	qc2cpp_services_world	queues one normal map command per spawncount
 qc_import_cvar_set_v1	world	qc2cpp_services_world	sets an existing named M cvar
-qc_import_centerprint_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_ambientsound_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_centerprint_v1	network	qc2cpp_client	writes a checked centerprint to the selected client
+qc_import_ambientsound_v1	network	qc2cpp_client	writes a checked precached ambient sound to normal signon state
 qc_import_precache_model2_v1	world	qc2cpp_services_world	uses the model precache operation
 qc_import_precache_sound2_v1	world	qc2cpp_services_world	uses the sound precache operation
-qc_import_setspawnparms_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_logfrag_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_infokey_v1	network	qc2cpp_client	terminates until Task 13 implementation
-qc_import_multicast_v1	network	qc2cpp_client	terminates until Task 13 implementation
+qc_import_setspawnparms_v1	network	qc2cpp_client	writes sixteen spawn parameters for the selected client
+qc_import_logfrag_v1	network	qc2cpp_client	writes a normal QW frag log record for two selected clients
+qc_import_infokey_v1	network	qc2cpp_client	reads userinfo through semantic client selection, not string offsets
+qc_import_multicast_v1	network	qc2cpp_client	uses the normal multicast operation with a checked origin

@@ -115,6 +115,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qc2cpp/globals.c"
 		"${DIR_SRC}/qc2cpp/entries.c"
 		"${DIR_SRC}/qc2cpp/services_movement.c"
+		"${DIR_SRC}/qc2cpp/services_network.c"
 		"${DIR_SRC}/qc2cpp/services_world.c"
 	)
 endif()
