@@ -163,3 +163,22 @@ does not serialize padded C structures. The same focused test target is built
 and run under both native and Wasm adapter configurations. Server file I/O and
 the atomic temporary-file/rename policy remain at the Task 18 integration seam,
 where `QC_SaveGame` selects a concrete save path.
+
+## Tasks 18–20 — restore, terminal failure, and operations
+
+`save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV
+flows. The acceptance matrix proves native/Wasm save combinations, connected
+in-place restore, ordinary reconnection, and a valid post-commit restore that
+exceeds the destination runtime. Invalid pre-commit input is recoverable;
+post-commit failure is terminal.
+
+Before the non-returning fatal boundary the adapter clears globals and entities
+exactly once. The existing `sv_error` guard prevents guest shutdown, active
+native unload, or executing Wasmtime-store destruction on that terminal path.
+Normal map changes retain normal shutdown/reload behavior. Native and Wasm
+subprocess tests exercise a real walkmove → touch nested fatal and require that
+the outer QC callback cannot resume.
+
+The maintained operator guide is [qc2cpp-adapter.md](qc2cpp-adapter.md). It
+links the canonical qc2cpp spec and covers modes 4/5, dependencies, deployment,
+QCMS compatibility, terminal behavior, acceptance, and Wasmtime updates.
