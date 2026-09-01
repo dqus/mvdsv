@@ -39,6 +39,9 @@ mkdir build && cmake -B build . && cmake --build build
 ```
 Build artifacts would be inside ``build/`` directory, for unix like systems it would be ``mvdsv``.
 
+For transpiled qc2cpp QuakeWorld games (native dynamic library or Wasm module),
+see [qc2cpp adapter operations](docs/qc2cpp-adapter.md).
+
 You can also use ``build_cmake.sh`` script, it mostly suitable for cross compilation
 and probably useless for experienced CMake user.
 Some examples:
