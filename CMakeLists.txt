@@ -18,6 +18,8 @@ set(QC2CPP_WASI_SDK_ROOT "" CACHE PATH
 	"WASI SDK root used to build the qc2cpp Wasm acceptance game")
 set(QC2CPP_ASSET_DIR "" CACHE PATH
 	"Local QW acceptance assets (PAKs and/or maps); never modified by the build")
+set(QC2CPP_FTE_CLIENT "" CACHE FILEPATH
+	"Optional FTE client with qc2cpp acceptance observations")
 set(MVDSV_WASMTIME_ROOT "" CACHE PATH
 	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
 
