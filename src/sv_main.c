@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#if defined(MVDSV_QC2CPP_TESTS)
+#include "qc2cpp/test_observer.h"
+#endif
 
 #ifdef SERVERONLY
 
@@ -4047,6 +4050,10 @@ void SV_Init (void)
 	_localinfo_.max = MAX_LOCALINFOS;
 
 	PR_Init ();
+
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverRegisterCommands();
+#endif
 
 	// send immediately
 	svs.last_heartbeat = -99999;

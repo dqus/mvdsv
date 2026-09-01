@@ -31,6 +31,18 @@
 #ifdef MVDSV_QC2CPP_ENABLED
 #include "qc2cpp/adapter.h"
 #include "qc2cpp/entries.h"
+#if defined(MVDSV_QC2CPP_TESTS)
+#include "qc2cpp/test_observer.h"
+#define QC_RECORD_LEGACY_GAME_ENTRY() do { \
+	if (sv_progtype.value == QC_PROGTYPE_NATIVE || sv_progtype.value == QC_PROGTYPE_WASM) { \
+		QC_TestObserverLegacyGameEntry(); \
+	} \
+} while (0)
+#else
+#define QC_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
+#endif
+#else
+#define QC_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
 #endif
 
 gameData_t gamedata;
@@ -236,6 +248,7 @@ void PR2_LoadEnts(char *data)
 		return;
 	}
 	#endif
+	QC_RECORD_LEGACY_GAME_ENTRY();
 	if (sv_vm)
 	{
 		pr2_ent_data_ptr = data;
@@ -260,6 +273,7 @@ void PR2_GameStartFrame(qbool isBotFrame)
 		return;
 	}
 	#endif
+	QC_RECORD_LEGACY_GAME_ENTRY();
 	if (isBotFrame && (!sv_vm || sv_vm->type == VMI_NONE || gamedata.APIversion < 15)) {
 		return;
 	}
@@ -732,6 +746,7 @@ void PR2_InitProg(void)
 		return;
 	}
 	#endif
+	QC_RECORD_LEGACY_GAME_ENTRY();
 	if (!sv_vm) {
 		PR1_InitProg();
 		return;

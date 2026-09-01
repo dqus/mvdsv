@@ -62,3 +62,30 @@ entries; no callback is reconstructed from a legacy function offset.
 
 Only network/client host services remain before a real generated game is
 expected to boot; Task 13 owns those explicit bindings.
+
+## Tasks 13–14 — QW bootstrap and real map-lifecycle acceptance
+
+The adapter now boots the transpiled QW corpus through both real transports.
+The optional `qc2cpp_acceptance_assets` target generates the QW project,
+builds the requested native library or fixed-memory Wasm module, and runs the
+generated-project checker before acceptance starts. It is deliberately opt-in:
+the ordinary MVDSV build never needs local game assets, qc2cpp, or a WASI SDK.
+
+- The generated QW runtime has 2,048 owner slots and a 512 KiB string arena;
+  this accommodates the real `e1m2` entity set and its map strings.
+- The generated Wasm game and the Wasmtime host require the same fixed,
+  non-shared wasm32 128/128-page (8 MiB) profile. It is still not growable.
+- `qc2cpp_server_map_native` and `qc2cpp_server_map_wasm` start a real MVDSV
+  server on `e1m1`, execute `map e1m2`, and require an exact owner-local
+  observer result: both maps reach frames, one normal unpublish occurs, and no
+  legacy gameplay entry or gameplay during initialization occurs.
+- The observer exists only in `MVDSV_QC2CPP_TESTS` builds. It records facts
+  without changing game state; production server binaries expose none of its
+  commands.
+- The process runner gives each execution a fresh temporary game directory,
+  reads timestamp-prefixed JSON observations with bounded waits, preserves a
+  failed server's combined log, and terminates it deterministically.
+- The acceptance generation target tracks every runtime, game ABI, checker and
+  Wasm-toolchain resource copied by qc2cpp, not just the compiler and QC
+  sources. A resource update therefore regenerates both transport projects
+  before their checker and server-lifecycle proofs run.

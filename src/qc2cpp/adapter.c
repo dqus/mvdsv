@@ -6,6 +6,9 @@
 #include "qc2cpp/entities.h"
 #include "qc2cpp/globals.h"
 #include "qc2cpp/services.h"
+#if defined(MVDSV_QC2CPP_TESTS)
+#include "qc2cpp/test_observer.h"
+#endif
 #include "qc2cpp/transport.h"
 
 #include <string.h>
@@ -52,10 +55,16 @@ void QC_InitProg(void)
 	if (game == NULL) {
 		SV_Error("qc2cpp mode %d has no active game", qc_state.mode);
 	}
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverInitBegin();
+#endif
 	QC_AdapterStateEnter(&qc_state);
 	const qc_guest_address_t entity_publication = game->init(game->context,
-		(int32_t)(sv.time * 1000.0), (uint32_t)time(NULL));
+		(int32_t)(sv.time * 1000.0), (uint32_t)time(NULL) & 0x00ffffffU);
 	QC_AdapterStateLeave(&qc_state);
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverInitEnd();
+#endif
 	if (!QC_ConfigureEntities(entity_publication) || !QC_BindEntities()) {
 		SV_Error("qc2cpp game did not publish compatible entity storage");
 	}
@@ -83,6 +92,10 @@ void QC_UnloadProgs(void)
 	QC_ClearEntities();
 	QC_TransportClose(qc_transport);
 	qc_transport = NULL;
+
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverNormalUnpublish();
+#endif
 	QC_AdapterStateReset(&qc_state);
 }
 
@@ -104,6 +117,9 @@ void QC_StartFrame(float time, float frametime, qbool is_bot_frame)
 	if (game == NULL) {
 		SV_Error("qc2cpp game cannot start a frame");
 	}
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverStartFrame();
+#endif
 	QC_AdapterStateEnter(&qc_state);
 	game->start_frame(game->context, time, frametime, is_bot_frame ? 1U : 0U);
 	QC_AdapterStateLeave(&qc_state);

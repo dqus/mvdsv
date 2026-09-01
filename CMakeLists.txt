@@ -10,6 +10,14 @@ option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
 option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
 set(QC2CPP_COMPILER "" CACHE FILEPATH
 	"Optional qc2cpp compiler used by external generated-fixture tests")
+set(QC2CPP_CHECKER "" CACHE FILEPATH
+	"Optional qc2cpp topology checker used by external acceptance tests")
+set(QC2CPP_QW_MANIFEST "" CACHE FILEPATH
+	"Optional QW progs.src manifest used by external acceptance tests")
+set(QC2CPP_WASI_SDK_ROOT "" CACHE PATH
+	"WASI SDK root used to build the qc2cpp Wasm acceptance game")
+set(QC2CPP_ASSET_DIR "" CACHE PATH
+	"Local QW acceptance assets (PAKs and/or maps); never modified by the build")
 set(MVDSV_WASMTIME_ROOT "" CACHE PATH
 	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
 
@@ -118,6 +126,9 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qc2cpp/services_network.c"
 		"${DIR_SRC}/qc2cpp/services_world.c"
 	)
+	if(MVDSV_QC2CPP_TESTS)
+		list(APPEND SRC_COMMON "${DIR_SRC}/qc2cpp/test_observer.c")
+	endif()
 endif()
 
 # Check build target, and included sources
@@ -264,8 +275,10 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 endif()
 
 if(MVDSV_QC2CPP_TESTS)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_TESTS=1)
 	enable_testing()
 	add_subdirectory(tests/qc2cpp)
+	add_subdirectory(tests/integration)
 endif()
 
 
