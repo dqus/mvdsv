@@ -8,4 +8,12 @@ SV_TouchLinks	touch	trigger	linked entity	temporary sv.time	shared global	SV_Tou
 SV_User bot blocked	blocked	player	current canonical other	current shared global	shared global	legacy surrounding state only	qc2cpp_entry_routes
 SV_User player touch	touch	touched entity	player	current shared global	shared global	legacy surrounding state only	qc2cpp_entry_routes
 SV_User optional hook	absent	-	-	-	-	no separate optional QC hook	qc2cpp_entry_routes
+SV_Begin client connect	client_connect	client edict	-	sv.time	engine frame state	no PR1 globals on QC route	qc2cpp_client_routes
+SV_Begin put client	put_client_in_server	client edict	-	sv.time	engine frame state	no PR1 globals on QC route	qc2cpp_client_routes
+SV_ExecuteUserCommand prethink	client_prethink	client edict	-	sv.time	command frametime	no PR1 globals on QC route	qc2cpp_client_routes
+SV_PostRunCmd player	client_postthink	client edict	-	sv.time	canonical QC frametime	no PR1 globals on QC route	qc2cpp_client_routes
+SV_PostRunCmd spectator	spectator_think	client edict	-	sv.time	canonical QC frametime	no PR1 globals on QC route	qc2cpp_client_routes
+Cmd_Kill_f	client_kill	client edict	-	sv.time	-	no generic command fallback	qc2cpp_client_routes
+SV_ExecutePRCommand	client_command	client edict	-	sv.time	-	normal engine fallback remains after unhandled result	qc2cpp_client_routes
+SV_Say	client_say	client edict	-	sv.time	-	normal chat fallback remains after unhandled result	qc2cpp_client_routes
 reentry QC fixture	generated callbacks	fixture-defined	fixture-defined	fixture-defined	fixture-defined	transpile and native generated-project build	qc2cpp_reentry_fixture

@@ -111,6 +111,28 @@ void QC_EdictBlocked(qc_entity_id_t first, qc_entity_id_t second, float time,
 	QC_EdictTouch(first, second, time, frametime);
 }
 
+void QC_ClientConnect(qc_entity_id_t self, uint32_t spectator)
+{ (void)self; (void)spectator; }
+void QC_PutClientInServer(qc_entity_id_t self, uint32_t spectator)
+{ (void)self; (void)spectator; }
+void QC_ClientDisconnect(qc_entity_id_t self, uint32_t spectator)
+{ (void)self; (void)spectator; }
+uint32_t QC_ClientUserInfoChanged(qc_entity_id_t self, uint32_t after)
+{ (void)self; (void)after; return 0U; }
+uint32_t QC_ClientCommand(qc_entity_id_t self) { (void)self; return 0U; }
+void QC_ClientKill(qc_entity_id_t self) { (void)self; }
+uint32_t QC_ClientSay(qc_entity_id_t self, uint32_t team, const uint8_t *text,
+	qc_byte_count_t size)
+{ (void)self; (void)team; (void)text; (void)size; return 0U; }
+void QC_ClientPreThink(qc_entity_id_t self, float time, float frametime,
+	uint32_t spectator)
+{ (void)self; (void)time; (void)frametime; (void)spectator; }
+void QC_ClientPostThink(qc_entity_id_t self, float time, uint32_t spectator)
+{ (void)self; (void)time; (void)spectator; }
+void QC_SetNewParms(float out_parms[16]) { (void)out_parms; }
+void QC_SetChangeParms(qc_entity_id_t self, float out_parms[16])
+{ (void)self; (void)out_parms; }
+
 trace_t SV_Trace(vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int type,
 	edict_t *passedict)
 {
