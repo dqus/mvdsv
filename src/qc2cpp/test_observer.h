@@ -8,6 +8,7 @@ void QC_TestObserverInitBegin(void);
 void QC_TestObserverInitEnd(void);
 void QC_TestObserverStartFrame(void);
 void QC_TestObserverNormalUnpublish(void);
+void QC_TestObserverTerminalUnpublish(void);
 void QC_TestObserverLegacyGameEntry(void);
 void QC_TestObserverClientConnect(uint32_t self);
 void QC_TestObserverPutClientInServer(uint32_t self, uint32_t spectator);
