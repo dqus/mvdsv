@@ -114,6 +114,11 @@ add_test(NAME qc2cpp_server_map_native
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
         --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
         --output "${qc2cpp_acceptance_root}/runs/native")
+add_test(NAME qc2cpp_save_native_native
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+        --suite save --mode native --server $<TARGET_FILE:mvdsv>
+        --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+        --output "${qc2cpp_acceptance_root}/runs/save-native-native")
 
 if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
     if(NOT EXISTS "${QC2CPP_FTE_CLIENT}")
@@ -137,6 +142,12 @@ if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
             --suite spectator --mode native --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/spectator-native"
+            --client "${qc2cpp_fte_client}")
+    add_test(NAME qc2cpp_save_connected_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite save-connected --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/save-connected-native"
             --client "${qc2cpp_fte_client}")
 endif()
 
@@ -176,6 +187,23 @@ if(MVDSV_QC2CPP_WASM)
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/wasm")
+    add_test(NAME qc2cpp_save_wasm_wasm
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite save --mode wasm --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/save-wasm-wasm")
+    add_test(NAME qc2cpp_save_native_wasm
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite cross-save --mode wasm --source-mode native --destination-mode wasm
+            --server $<TARGET_FILE:mvdsv> --artifacts "${qc2cpp_native_build}"
+            --destination-artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/save-native-wasm")
+    add_test(NAME qc2cpp_save_wasm_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite cross-save --mode wasm --source-mode wasm --destination-mode native
+            --server $<TARGET_FILE:mvdsv> --artifacts "${qc2cpp_wasm_build}"
+            --destination-artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/save-wasm-native")
     if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
         add_test(NAME qc2cpp_network_wasm
             COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
@@ -188,6 +216,12 @@ if(MVDSV_QC2CPP_WASM)
                 --suite spectator --mode wasm --server $<TARGET_FILE:mvdsv>
                 --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
                 --output "${qc2cpp_acceptance_root}/runs/spectator-wasm"
+                --client "${qc2cpp_fte_client}")
+        add_test(NAME qc2cpp_save_connected_wasm
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+                --suite save-connected --mode wasm --server $<TARGET_FILE:mvdsv>
+                --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+                --output "${qc2cpp_acceptance_root}/runs/save-connected-wasm"
                 --client "${qc2cpp_fte_client}")
     endif()
 endif()

@@ -21,7 +21,7 @@ enum {
 };
 
 typedef struct save_bytes_s {
-	uint8_t bytes[512];
+	uint8_t bytes[65536];
 	uint32_t size;
 } save_bytes_t;
 
@@ -223,8 +223,31 @@ static void test_rejects_nonfinite_server_time(void)
 static void test_rejects_an_overlong_precache_list(void)
 {
 	save_bytes_t input = make_valid_save();
-	overwrite_u32(&input, engine_precache_count_offset, 4097);
+	overwrite_u32(&input, engine_precache_count_offset, 4353);
 	require_rejected(input.bytes, input.size);
+}
+
+static void test_accepts_model_and_sound_precache_capacity(void)
+{
+	save_bytes_t input = make_valid_save();
+	qc_save_image_t *image = NULL;
+	uint32_t index;
+	const uint32_t count = 4352;
+	const uint32_t resources_size = count * 5U;
+	assert(input.size + resources_size <= sizeof(input.bytes));
+	memmove(input.bytes + engine_precache_count_offset + 4U + resources_size,
+		input.bytes + engine_precache_count_offset + 4U,
+		input.size - (engine_precache_count_offset + 4U));
+	input.size += resources_size;
+	overwrite_u32(&input, engine_precache_count_offset, count);
+	for (index = 0U; index < count; ++index) {
+		const uint32_t offset = engine_precache_count_offset + 4U + index * 5U;
+		overwrite_u32(&input, offset, 1U);
+		input.bytes[offset + 4U] = 'x';
+	}
+	overwrite_u32(&input, 48U, 64U + resources_size);
+	assert(QC_SaveParse(input.bytes, input.size, &image) == QC_PLUGIN_OK);
+	QC_SaveImageFree(image);
 }
 
 static save_bytes_t make_save_with_duplicate_client_slots(void)
@@ -282,6 +305,24 @@ static void test_rejects_a_client_slot_outside_entity_capacity(void)
 	require_rejected(input.bytes, input.size);
 }
 
+static void test_rejects_a_client_slot_without_a_player_entity(void)
+{
+	const save_bytes_t input = make_save_with_one_client_slot(fixture_capacity - 1U);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_accepts_connected_spawned_client_flags(void)
+{
+	save_bytes_t input = make_save_with_one_client_slot(1U);
+	qc_save_image_t *image = NULL;
+
+	overwrite_u32(&input, 40U, 1U);
+	overwrite_u32(&input, 120U, 3U);
+	assert(QC_SaveParse(input.bytes, input.size, &image) == QC_PLUGIN_OK);
+	assert(image->metadata.contains_connected_clients == 1U);
+	QC_SaveImageFree(image);
+}
+
 int main(void)
 {
 	test_parses_and_reencodes_a_transport_independent_image();
@@ -295,7 +336,10 @@ int main(void)
 	test_rejects_an_invalid_capacity();
 	test_rejects_nonfinite_server_time();
 	test_rejects_an_overlong_precache_list();
+	test_accepts_model_and_sound_precache_capacity();
 	test_rejects_duplicate_client_slots();
 	test_rejects_a_client_slot_outside_entity_capacity();
+	test_rejects_a_client_slot_without_a_player_entity();
+	test_accepts_connected_spawned_client_flags();
 	return 0;
 }

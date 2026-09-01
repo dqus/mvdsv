@@ -13,11 +13,14 @@ enum {
 	QC_SAVE_GUEST_SECTION = 3,
 	QC_SAVE_ENGINE_VERSION = 1,
 	QC_SAVE_MAX_LIGHTSTYLES = 64,
-	QC_SAVE_MAX_PRECACHES = 4096,
+	QC_SAVE_MAX_PRECACHES = 4096 + 256,
 	QC_SAVE_MAX_CLIENTS = 32,
 	QC_SAVE_MAX_RESOURCE_NAME = 255,
 	QC_SAVE_MAX_GUEST_BYTES = 8 * 1024 * 1024,
-	QC_SAVE_MAX_FILE_BYTES = 12 * 1024 * 1024
+	QC_SAVE_MAX_FILE_BYTES = 12 * 1024 * 1024,
+	QC_SAVE_CLIENT_CONNECTED = 1,
+	QC_SAVE_CLIENT_SPAWNED = 2,
+	QC_SAVE_CLIENT_SPECTATOR = 4
 };
 
 typedef struct qc_save_reader_s {
@@ -266,8 +269,11 @@ static qbool QC_SaveValidateEngine(const uint8_t *bytes, uint32_t size,
 		uint32_t prior;
 		uint32_t flags;
 		uint32_t parm;
-		if (!QC_SaveReadU32(&reader, &slot) || slot >= metadata->entity_capacity
-			|| !QC_SaveReadU32(&reader, &flags) || (flags & ~UINT32_C(1)) != 0U) {
+		if (!QC_SaveReadU32(&reader, &slot)
+			|| slot >= metadata->entity_capacity - 1U
+			|| !QC_SaveReadU32(&reader, &flags)
+			|| (flags & ~(QC_SAVE_CLIENT_CONNECTED | QC_SAVE_CLIENT_SPAWNED
+				| QC_SAVE_CLIENT_SPECTATOR)) != 0U) {
 			return false;
 		}
 		for (prior = 0; prior < index; ++prior) {
@@ -276,7 +282,7 @@ static qbool QC_SaveValidateEngine(const uint8_t *bytes, uint32_t size,
 			}
 		}
 		slots[index] = slot;
-		connected = connected || (flags & UINT32_C(1)) != 0U;
+		connected = connected || (flags & QC_SAVE_CLIENT_CONNECTED) != 0U;
 		for (parm = 0; parm < 16U; ++parm) {
 			if (!QC_SaveReadF32(&reader, &value) || !isfinite(value)) {
 				return false;
