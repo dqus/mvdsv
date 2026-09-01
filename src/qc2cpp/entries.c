@@ -4,6 +4,10 @@
 #include "qc2cpp/entities.h"
 #include "qc2cpp/entries.h"
 
+#if defined(MVDSV_QC2CPP_TESTS)
+#include "qc2cpp/test_observer.h"
+#endif
+
 static qc_entity_id_t QC_EntrySlot(const edict_t *entity, const char *entry)
 {
 	const qc_entity_id_t slot = QC_EdictToSlot(entity);
@@ -16,6 +20,9 @@ static qc_entity_id_t QC_EntrySlot(const edict_t *entity, const char *entry)
 void QC_DispatchEdictTouch(edict_t *touched, edict_t *toucher, float time,
 	float frametime)
 {
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverEdictTouch(touched, toucher);
+#endif
 	QC_EdictTouch(QC_EntrySlot(touched, "touch"), QC_EntrySlot(toucher, "touch"),
 		time, frametime);
 }
