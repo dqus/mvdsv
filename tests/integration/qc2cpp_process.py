@@ -108,6 +108,14 @@ class RunningProcess:
                 f"server early exit while sending {command!r}: {self._process.poll()}"
             ) from error
 
+    def wait_for_exit(self, *, timeout):
+        try:
+            returncode = self._process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            raise ProcessFailure(f"server did not exit within {timeout}s") from error
+        self._drain_available_output()
+        return returncode
+
     def close(self):
         try:
             if self._process.poll() is None and self._process.stdin is not None:
