@@ -89,3 +89,31 @@ the ordinary MVDSV build never needs local game assets, qc2cpp, or a WASI SDK.
   Wasm-toolchain resource copied by qc2cpp, not just the compiler and QC
   sources. A resource update therefore regenerates both transport projects
   before their checker and server-lifecycle proofs run.
+
+## Task 15 — bounded real FTE client observation
+
+The optional `QC2CPP_FTE_CLIENT` cache entry registers
+`qc2cpp_client_native`. It gives a real FTE client and the server separate
+temporary QW directories, supplies only local PAK assets by symlink, and runs
+the generated native game on a private UDP port. The runner accepts only these
+ordered observations from the explicitly enabled client:
+
+1. `headless-renderer` — FTE selected its existing null renderer before startup;
+2. `parsed-qw-server` — a real QW server message was parsed; and
+3. `received-qw-frame` — a subsequent client frame ran.
+
+The client exits after that bounded evidence. A normal successful run therefore
+proves actual packet parsing but intentionally does not claim spawn, movement,
+or active-play state; Task 16 owns those server-authoritative assertions. An
+unreachable port times out and fails, rather than being treated as a successful
+connection.
+
+The FTE source basis is upstream `f937b9d88f71fc4429db5fe56c6a98d922711b2e`;
+the explicitly enabled acceptance instrumentation is
+`b16545bffb7a06c6437a1b04ffe900f0dd3489fa`. Its existing Q1QVM server audit
+files retain their pinned digests. During the first real run, generated QW called
+logical print, info-key, numeric conversion,
+multicast and frag-log services that had typed ABI imports but no
+`TargetServiceHooks` binding. qc2cpp now binds those existing imports; its
+generated-game contract invokes every such service, so a future missing binding
+fails closed rather than becoming a harmless-looking client test pass.

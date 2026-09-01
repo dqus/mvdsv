@@ -114,6 +114,19 @@ add_test(NAME qc2cpp_server_map_native
         --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
         --output "${qc2cpp_acceptance_root}/runs/native")
 
+if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
+    if(NOT EXISTS "${QC2CPP_FTE_CLIENT}")
+        message(FATAL_ERROR "QC2CPP_FTE_CLIENT does not exist: ${QC2CPP_FTE_CLIENT}")
+    endif()
+    get_filename_component(qc2cpp_fte_client "${QC2CPP_FTE_CLIENT}" ABSOLUTE)
+    add_test(NAME qc2cpp_client_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite client --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/client-native"
+            --client "${qc2cpp_fte_client}")
+endif()
+
 if(MVDSV_QC2CPP_WASM)
     if("${QC2CPP_WASI_SDK_ROOT}" STREQUAL "" OR NOT EXISTS "${QC2CPP_WASI_SDK_ROOT}")
         message(FATAL_ERROR "MVDSV_QC2CPP_WASM acceptance requires QC2CPP_WASI_SDK_ROOT")
