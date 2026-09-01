@@ -30,7 +30,7 @@ def link_input(source, destination):
     os.symlink(source, destination)
 
 
-def prepare_game_directory(run_root, assets, artifact, mode):
+def prepare_game_directory(run_root, assets, artifact, mode, *, entity_override=False):
     game_directory = run_root / "base" / "qw"
     game_directory.mkdir(parents=True)
     pak_found = False
@@ -40,7 +40,14 @@ def prepare_game_directory(run_root, assets, artifact, mode):
             link_input(pak, game_directory / pak_name)
             pak_found = True
     maps = assets / "maps"
-    if maps.is_dir():
+    if entity_override:
+        # The fatal/OOM fixture owns worldspawn and needs no stock entity
+        # strings.  Retain the real BSP from the PAK while avoiding a second,
+        # unrelated arena-size dependency from the stock e1m1 entity lump.
+        (game_directory / "maps").mkdir()
+        (game_directory / "maps" / "e1m1.ent").write_text(
+            '{\n"classname" "worldspawn"\n}\n', encoding="ascii")
+    elif maps.is_dir():
         link_input(maps, game_directory / "maps")
     if not pak_found and not maps.is_dir():
         raise ProcessFailure(f"asset directory has neither PAK archives nor maps: {assets}")
@@ -194,6 +201,88 @@ def run_map_suite(server, artifacts, assets, output, mode):
             raise ProcessFailure(f"gameplay ran during qc2cpp init: {events}")
     finally:
         process.close()
+
+
+def run_fatal_suite(server, artifacts, assets, output, mode):
+    """A nested guest fatal must terminate before outer gameplay can resume."""
+    output.mkdir(parents=True, exist_ok=True)
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-fatal-{mode}-", dir=output))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode,
+                                    entity_override=True)
+    server_log = run_root / "server.log"
+    process = RunningProcess(server_command(server, basedir, mode), server_log)
+    try:
+        assert_map_snapshot(
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
+        process.send("qc2cpp_test_fatal")
+        if process.wait_for_exit(timeout=8) == 0:
+            raise ProcessFailure("nested qc2cpp fatal did not terminate the server")
+    finally:
+        process.close()
+    events = server_log.read_text(encoding="utf-8").splitlines()
+    required = (
+        "[qc2cpp-fatal] trigger",
+        "[qc2cpp-fatal] outer-gameplay-entered",
+        "[qc2cpp-fatal] nested-touch",
+        "[qc2cpp-fatal] terminal-unpublish",
+        "ERROR: SV_Error: qc2cpp fatal:",
+    )
+    for event in required:
+        if not any(event in line for line in events):
+            raise ProcessFailure(f"nested qc2cpp fatal did not emit {event!r}: {events}")
+    if sum("[qc2cpp-fatal] terminal-unpublish" in line for line in events) != 1:
+        raise ProcessFailure(f"nested qc2cpp fatal did not unpublish exactly once: {events}")
+    if any("outer-gameplay-resumed" in line for line in events):
+        raise ProcessFailure(f"nested qc2cpp fatal resumed outer gameplay: {events}")
+
+
+def run_restore_oom_suite(server, artifacts, destination_artifacts, assets, output, mode):
+    """A valid restore that exhausts the guest arena is terminal after commit."""
+    output.mkdir(parents=True, exist_ok=True)
+    # Save/load still passes through legacy bounded server paths; keep both
+    # disposable roots short enough that the terminal test observes restore,
+    # rather than an unrelated filesystem truncation.
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qcoom-{mode}-", dir="/tmp"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode,
+                                    entity_override=True)
+    source_log = run_root / "source.log"
+    process = RunningProcess(server_command(server, basedir, mode), source_log)
+    try:
+        assert_map_snapshot(
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
+        prepared = process.observe(
+            "qc2cpp_test_restore_oom", "qc2cpp_test_restore_oom", timeout=8)
+        if prepared.get("prepared") is not True:
+            raise ProcessFailure(f"restore-oom input was not prepared: {prepared}")
+        process.send("save qc2cpprestoreoom")
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=16)
+        save_path = basedir / "qw" / "save" / "qc2cpprestoreoom.sav"
+        if not save_path.is_file() or save_path.read_bytes()[:4] != b"QCMS":
+            raise ProcessFailure("restore-oom source did not create a QCMS snapshot")
+        snapshot_bytes = save_path.read_bytes()
+    finally:
+        process.close()
+
+    destination_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qcoom-destination-{mode}-", dir="/tmp"))
+    destination_basedir = prepare_game_directory(
+        destination_root, assets, destination_artifacts, mode, entity_override=True)
+    destination_save = destination_basedir / "qw" / "save" / "qc2cpprestoreoom.sav"
+    destination_save.parent.mkdir(parents=True)
+    destination_save.write_bytes(snapshot_bytes)
+    server_log = destination_root / "server.log"
+    destination = RunningProcess(server_command(
+        server, destination_basedir, mode, start_map=False,
+        startup_command=("load", "qc2cpprestoreoom")), server_log)
+    try:
+        if destination.wait_for_exit(timeout=12) == 0:
+            raise ProcessFailure("post-commit qc2cpp restore OOM did not terminate the server")
+    finally:
+        destination.close()
+    events = server_log.read_text(encoding="utf-8").splitlines()
+    if sum("[qc2cpp-fatal] terminal-unpublish" in line for line in events) != 1:
+        raise ProcessFailure(f"restore OOM did not unpublish exactly once: {events}")
+    if not any("logical restore exceeds runtime arena" in line for line in events):
+        raise ProcessFailure(f"restore OOM did not report the guest arena diagnostic: {events}")
 
 
 def run_client_suite(server, artifacts, assets, output, mode, client):
@@ -526,7 +615,7 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", choices=("map", "client", "network", "spectator", "save", "cross-save", "save-connected"), required=True)
+    parser.add_argument("--suite", choices=("map", "fatal", "restore-oom", "client", "network", "spectator", "save", "cross-save", "save-connected"), required=True)
     parser.add_argument("--mode", choices=("native", "wasm"), required=True)
     parser.add_argument("--server", type=pathlib.Path, required=True)
     parser.add_argument("--artifacts", type=pathlib.Path, required=True)
@@ -541,6 +630,13 @@ def main():
         require_file(args.server)
         if args.suite == "map":
             run_map_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
+        elif args.suite == "fatal":
+            run_fatal_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
+        elif args.suite == "restore-oom":
+            if args.destination_artifacts is None:
+                raise ProcessFailure("restore-oom requires destination artifacts")
+            run_restore_oom_suite(args.server, args.artifacts, args.destination_artifacts,
+                                  args.assets, args.output, args.mode)
         elif args.suite == "save":
             run_save_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
         elif args.suite == "cross-save":
