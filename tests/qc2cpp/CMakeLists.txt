@@ -102,9 +102,11 @@ target_include_directories(qc2cpp_terminal_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
 target_compile_options(qc2cpp_terminal_test PRIVATE
-	-Wall -Wextra -Wpedantic -Werror -ffunction-sections)
+	-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fvisibility=hidden)
 if(APPLE)
 	target_link_options(qc2cpp_terminal_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qc2cpp_terminal_test PRIVATE -Wl,--gc-sections)
 endif()
 target_compile_definitions(qc2cpp_terminal_test PRIVATE
 	MVDSV_QC2CPP_ENABLED=1
@@ -224,13 +226,13 @@ target_include_directories(qc2cpp_reentry_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
 target_compile_options(qc2cpp_reentry_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
 set_source_files_properties(${PROJECT_SOURCE_DIR}/src/sv_phys.c PROPERTIES
-	COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-parameter")
+	COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-parameter;-Wno-empty-body")
 target_compile_definitions(qc2cpp_reentry_test PRIVATE
 	MVDSV_QC2CPP_ENABLED=1
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qc2cpp_reentry_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qc2cpp_reentry_test PRIVATE Qc2cppHost::native m)
 add_test(NAME qc2cpp_reentry COMMAND qc2cpp_reentry_test)
 
 add_test(NAME qc2cpp_entry_routes
