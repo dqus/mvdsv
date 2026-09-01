@@ -164,6 +164,31 @@ target_compile_definitions(qc2cpp_services_world_test PRIVATE
 target_link_libraries(qc2cpp_services_world_test PRIVATE Qc2cppHost::native)
 add_test(NAME qc2cpp_services_world COMMAND qc2cpp_services_world_test)
 
+add_executable(qc2cpp_client_test
+
+	client_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/services_network.c)
+set_target_properties(qc2cpp_client_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_client_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qc2cpp_client_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qc2cpp_client_test PRIVATE
+	MVDSV_QC2CPP_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qc2cpp_client_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_client COMMAND qc2cpp_client_test)
+
+add_test(NAME qc2cpp_client_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/client_routes_test.cmake)
+
 add_executable(qc2cpp_reentry_test
 	reentry_test.c
 	${PROJECT_SOURCE_DIR}/src/qc2cpp/entries.c
