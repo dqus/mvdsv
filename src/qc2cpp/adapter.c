@@ -34,6 +34,7 @@ void QC_LoadProgs(void)
 		.fatal = QC_Fatal,
 	};
 	QC_BindWorldServices(&qc_host);
+	QC_BindMovementServices(&qc_host);
 	QC_BindUnavailableServices(&qc_host);
 	QC_AdapterStateSelect(&qc_state, (int)sv_progtype.value);
 	const qc_plugin_status_t status = QC_TransportOpen((int)sv_progtype.value,
