@@ -12,10 +12,18 @@ from qc2cpp_process import (
     RunningProcess,
     parse_json_observation,
     run_client_acceptance,
+    run_client_network_acceptance,
     run_process,
     wait_for_events,
 )
-from qc2cpp_acceptance import client_command, server_command
+from qc2cpp_acceptance import (
+    ProcessFailure as AcceptanceFailure,
+    assert_network_events,
+    assert_spectator_events,
+    client_command,
+    network_client_command,
+    server_command,
+)
 
 
 class ProcessRunnerTests(unittest.TestCase):
@@ -74,6 +82,13 @@ class ProcessRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ProcessFailure, "missing event"):
                 run_client_acceptance([sys.executable, "-c", command], output, timeout=1)
 
+    def test_network_client_requires_the_full_gameplay_progression(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = pathlib.Path(directory) / "client.log"
+            command = "print('[qc2cpp-network] active'); print('[qc2cpp-network] forward')"
+            with self.assertRaisesRegex(ProcessFailure, "missing event"):
+                run_client_network_acceptance([sys.executable, "-c", command], output, timeout=1)
+
     def test_interactive_early_exit_preserves_startup_output(self):
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / "server.log"
@@ -110,6 +125,131 @@ class ProcessRunnerTests(unittest.TestCase):
         self.assertNotIn("+set", command)
         self.assertIn("-nosound", command)
         self.assertEqual(command[-2:], ["+connect", "127.0.0.1:27500"])
+
+    def test_network_client_requests_the_bounded_gameplay_mode(self):
+        command = network_client_command(
+            pathlib.Path("fteqw"), pathlib.Path("client-base"), 27500)
+        self.assertEqual(command[:2], [str(pathlib.Path("fteqw").resolve()),
+            "-qc2cpp-network-acceptance"])
+        self.assertNotIn("-qc2cpp-acceptance", command)
+
+    def test_spectator_client_sets_spectator_before_connecting(self):
+        command = network_client_command(
+            pathlib.Path("fteqw"), pathlib.Path("client-base"), 27500, spectator=True)
+        self.assertLess(command.index("+spectator"), command.index("+connect"))
+        self.assertEqual(command[command.index("+spectator") + 1], "1")
+
+    def test_network_events_require_all_gameplay_callbacks(self):
+        with self.assertRaisesRegex(AcceptanceFailure, "callbacks"):
+            assert_network_events({"client_connect_count": 1, "legacy_game_entries": 0})
+
+    def test_network_events_require_a_respawned_player_after_kill(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 1,
+            "client_prethink_count": 1,
+            "client_postthink_count": 1,
+            "client_kill_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "teledeath_owner": 1,
+            "teledeath_toucher": 1,
+            "shared_self_after_put_client": 1,
+            "player_health_after_kill": 0,
+            "player_frags_after_kill": -2,
+            "player_moved_after_spawn": 1,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "respawn"):
+            assert_network_events(events)
+
+    def test_network_events_reject_a_noop_kill_callback(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 1,
+            "client_prethink_count": 1,
+            "client_postthink_count": 1,
+            "client_kill_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "teledeath_owner": 1,
+            "teledeath_toucher": 1,
+            "shared_self_after_put_client": 1,
+            "player_health_after_kill": 100,
+            "player_frags_after_kill": 0,
+            "player_moved_after_spawn": 1,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "kill transition"):
+            assert_network_events(events)
+
+    def test_network_events_require_server_acknowledged_player_movement(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 1,
+            "client_prethink_count": 1,
+            "client_postthink_count": 1,
+            "client_kill_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "teledeath_owner": 1,
+            "teledeath_toucher": 1,
+            "shared_self_after_put_client": 1,
+            "player_health_after_kill": 100,
+            "player_frags_after_kill": -2,
+            "player_moved_after_spawn": 0,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "movement"):
+            assert_network_events(events)
+
+    def test_network_events_require_each_reconnect_and_a_map_change(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 1,
+            "client_prethink_count": 1,
+            "client_postthink_count": 1,
+            "client_kill_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "teledeath_owner": 1,
+            "teledeath_toucher": 1,
+            "shared_self_after_put_client": 1,
+            "player_health_after_kill": 100,
+            "player_frags_after_kill": -2,
+            "player_moved_after_spawn": 1,
+            "normal_unpublish_count": 0,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "3 sessions"):
+            assert_network_events(events, sessions=3, map_change=True)
+
+    def test_spectator_events_require_the_spectator_guest_path(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "spectator_put_client_in_server_count": 0,
+            "spectator_think_count": 0,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "spectator"):
+            assert_spectator_events(events)
+
+    def test_network_events_reject_a_lifecycle_rewritten_self_slot(self):
+        events = {
+            "client_connect_count": 1,
+            "put_client_in_server_count": 2,
+            "client_prethink_count": 1,
+            "client_postthink_count": 1,
+            "client_kill_count": 1,
+            "client_disconnect_count": 1,
+            "legacy_game_entries": 0,
+            "teledeath_owner": 42,
+            "teledeath_toucher": 1,
+            "shared_self_after_put_client": 62,
+            "player_health_after_kill": 100,
+            "player_frags_after_kill": -2,
+            "player_moved_after_spawn": 1,
+        }
+        with self.assertRaisesRegex(AcceptanceFailure, "self slot"):
+            assert_network_events(events)
 
 
 if __name__ == "__main__":
