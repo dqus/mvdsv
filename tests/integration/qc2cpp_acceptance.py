@@ -30,14 +30,26 @@ def link_input(source, destination):
     os.symlink(source, destination)
 
 
+def find_asset_file(directory, name):
+    candidates = list(directory.iterdir())
+    for candidate in candidates:
+        if candidate.name == name and candidate.is_file():
+            return candidate
+    folded_name = name.casefold()
+    for candidate in candidates:
+        if candidate.name.casefold() == folded_name and candidate.is_file():
+            return candidate
+    return None
+
+
 def prepare_game_directory(run_root, assets, artifact, mode, *, entity_override=False):
     game_directory = run_root / "base" / "qw"
     game_directory.mkdir(parents=True)
     pak_found = False
     for pak_name in ("PAK0.PAK", "PAK1.PAK"):
-        pak = assets / pak_name
-        if pak.is_file():
-            link_input(pak, game_directory / pak_name)
+        pak = find_asset_file(assets, pak_name)
+        if pak is not None:
+            link_input(pak, game_directory / pak_name.lower())
             pak_found = True
     maps = assets / "maps"
     if entity_override:
@@ -62,9 +74,9 @@ def prepare_client_directory(run_root, assets):
     game_directory = base / "qw"
     game_directory.mkdir(parents=True)
     for pak_name in ("PAK0.PAK", "PAK1.PAK"):
-        pak = assets / pak_name
-        if pak.is_file():
-            link_input(pak, game_directory / pak_name)
+        pak = find_asset_file(assets, pak_name)
+        if pak is not None:
+            link_input(pak, game_directory / pak_name.lower())
     return base
 
 
