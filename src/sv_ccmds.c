@@ -455,7 +455,7 @@ void SV_Map (qbool now)
 		}
 		// <-
 
-		SV_SpawnServer (level, !strcasecmp(Cmd_Argv(0), "devmap"), entityfile, false);
+		SV_SpawnServer (level, !strcasecmp(Cmd_Argv(0), "devmap"), entityfile, false, false);
 
 #ifdef SERVERONLY
 		SV_BroadcastCommand ("changing\n"
