@@ -12,11 +12,13 @@
 #endif
 #include "qc2cpp/transport.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static qc_transport_t *qc_transport;
 static qc_adapter_state_t qc_state;
 static qc_host_api_v1_t qc_host;
+static qbool qc_published;
 
 qbool QC_Active(void)
 {
@@ -41,6 +43,7 @@ void QC_LoadProgs(void)
 	QC_BindMovementServices(&qc_host);
 	QC_BindNetworkServices(&qc_host);
 	QC_BindUnavailableServices(&qc_host);
+	qc_published = false;
 	QC_AdapterStateSelect(&qc_state, (int)sv_progtype.value);
 	const qc_plugin_status_t status = QC_TransportOpen((int)sv_progtype.value,
 		fs_gamedir, sv_progsname.string, &qc_host, &qc_transport, &diagnostic);
@@ -72,10 +75,14 @@ void QC_InitProg(void)
 	if (!QC_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
 		SV_Error("qc2cpp game did not publish valid shared globals");
 	}
+	qc_published = true;
 }
 
 void QC_Shutdown(void)
 {
+	if (QC_Active() && sv_error) {
+		return;
+	}
 	const qc_game_api_v1_t *game = QC_Game();
 	if (game != NULL && QC_AdapterStateIdle(&qc_state)) {
 		QC_AdapterStateEnter(&qc_state);
@@ -86,11 +93,15 @@ void QC_Shutdown(void)
 
 void QC_UnloadProgs(void)
 {
+	if (QC_Active() && sv_error) {
+		return;
+	}
 	if (!QC_AdapterStateIdle(&qc_state)) {
 		return;
 	}
 	QC_ClearGlobals();
 	QC_ClearEntities();
+	qc_published = false;
 	QC_SaveInvalidateConnectedSnapshot();
 	QC_TransportClose(qc_transport);
 	qc_transport = NULL;
@@ -322,13 +333,22 @@ qc_restore_status_t QC_RestoreGuest(const uint8_t *data, qc_byte_count_t size)
 void QC_Unpublish(void *context)
 {
 	(void)context;
+	if (!qc_published) {
+		return;
+	}
 	QC_ClearGlobals();
 	QC_ClearEntities();
+	qc_published = false;
+#if defined(MVDSV_QC2CPP_TESTS)
+	QC_TestObserverTerminalUnpublish();
+#endif
 }
 
 void QC_Fatal(void *context, const qc_program_diagnostic_v1_t *diagnostic)
 {
 	(void)context;
+	QC_Unpublish(NULL);
 	SV_Error("qc2cpp fatal: %.*s", diagnostic == NULL ? 0 : (int)diagnostic->message_size,
 		diagnostic == NULL ? "" : diagnostic->message);
+	abort();
 }
