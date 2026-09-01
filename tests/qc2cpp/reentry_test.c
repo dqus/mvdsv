@@ -30,7 +30,7 @@ globalvars_t legacy_globals;
 globalvars_t *pr_global_struct = &legacy_globals;
 float *pr_globals = (float *)&legacy_globals;
 int pr_edict_size;
-double sv_frametime;
+extern double sv_frametime;
 client_t *sv_client;
 edict_t *sv_player;
 movevars_t movevars;
