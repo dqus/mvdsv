@@ -217,6 +217,18 @@ add_test(NAME qc2cpp_entry_routes
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/entry_routes_test.cmake)
 
+add_executable(qc2cpp_save_format_test
+	save_format_test.c
+	${PROJECT_SOURCE_DIR}/src/qc2cpp/save_format.c)
+set_target_properties(qc2cpp_save_format_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qc2cpp_save_format_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_options(qc2cpp_save_format_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(qc2cpp_save_format_test PRIVATE Qc2cppHost::native)
+add_test(NAME qc2cpp_save_format COMMAND qc2cpp_save_format_test)
+
 if(QC2CPP_COMPILER)
 	add_test(NAME qc2cpp_reentry_fixture
 		COMMAND ${CMAKE_COMMAND}
