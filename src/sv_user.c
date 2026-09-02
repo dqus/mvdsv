@@ -928,19 +928,19 @@ static void Cmd_Spawn_f (void)
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_TOTALSECRETS);
-	ClientReliableWrite_Long (sv_client, *PR_Global_total_secrets());
+	ClientReliableWrite_Long (sv_client, PR_GLOBAL(total_secrets));
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_TOTALMONSTERS);
-	ClientReliableWrite_Long (sv_client, *PR_Global_total_monsters());
+	ClientReliableWrite_Long (sv_client, PR_GLOBAL(total_monsters));
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_SECRETS);
-	ClientReliableWrite_Long (sv_client, *PR_Global_found_secrets());
+	ClientReliableWrite_Long (sv_client, PR_GLOBAL(found_secrets));
 
 	ClientReliableWrite_Begin (sv_client, svc_updatestatlong, 6);
 	ClientReliableWrite_Byte (sv_client, STAT_MONSTERS);
-	ClientReliableWrite_Long (sv_client, *PR_Global_killed_monsters());
+	ClientReliableWrite_Long (sv_client, PR_GLOBAL(killed_monsters));
 
 	// get the client to check and download skins
 	// when that is completed, a begin command will be issued
@@ -1019,16 +1019,16 @@ static void Cmd_Begin_f (void)
 		#ifndef QCX_ENABLED
 		// copy spawn parms out of the client_t
 		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
-			PR_Global_parm1()[i] = sv_client->spawn_parms[i];
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+			(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 		#else
 		if (!QCX_Active()) {
 			for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
-				PR_Global_parm1()[i] = sv_client->spawn_parms[i];
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv_player);
+				(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv_player);
 			G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 		}
 		#endif
@@ -1039,8 +1039,8 @@ static void Cmd_Begin_f (void)
 		if (!QCX_Active())
 		#endif
 		{
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv_player);
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		}
 		PR_GamePutClientInServer(sv_client->spectator);
 	}
@@ -1878,8 +1878,8 @@ static void SV_Say (qbool team)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	}
 
 	j = PR_ClientSay(team, p);
@@ -2064,8 +2064,8 @@ static void Cmd_Kill_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	}
 	PR_ClientKill();
 }
@@ -2146,8 +2146,8 @@ static void Cmd_Pause_f (void)
 	}
 
 	if (GE_ShouldPause) {
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = newstate;
 		PR_ExecuteProgram (GE_ShouldPause);
 		if (!G_FLOAT(OFS_RETURN))
@@ -2440,8 +2440,8 @@ static void Cmd_SetInfo_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	}
 	if (PR_UserInfoChanged(0))
 		return; // does not allowed to be changed by mod.
@@ -2526,8 +2526,8 @@ void ProcessUserInfoChange (client_t* sv_client, const char* key, const char* ol
 
 	if (mod_UserInfo_Changed)
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_client->edict);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_client->edict);
 		PR_SetTmpString(&G_INT(OFS_PARM0), key);
 		PR_SetTmpString(&G_INT(OFS_PARM1), old_value);
 		PR_SetTmpString(&G_INT(OFS_PARM2), Info_Get(&sv_client->_userinfo_ctx_, key));
@@ -2776,7 +2776,7 @@ static void Cmd_Join_f (void)
 	#ifdef QCX_ENABLED
 	if (!QCX_Active())
 	#endif
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	PR_GameClientDisconnect(1);
 
 	// this is like SVC_DirectConnect.
@@ -2800,7 +2800,7 @@ static void Cmd_Join_f (void)
 	{
 		PR_GameSetNewParms();
 		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-			sv_client->spawn_parms[i] = PR_Global_parm1()[i];
+			sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 	}
 
 	// call the spawn function
@@ -2808,8 +2808,8 @@ static void Cmd_Join_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	}
 	PR_GameClientConnect(0);
@@ -2819,8 +2819,8 @@ static void Cmd_Join_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	}
 	PR_GamePutClientInServer(0);
@@ -2879,7 +2879,7 @@ static void Cmd_Observe_f (void)
 	#ifdef QCX_ENABLED
 	if (!QCX_Active())
 	#endif
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	PR_GameClientDisconnect(0);
 
 	// this is like SVC_DirectConnect.
@@ -2903,7 +2903,7 @@ static void Cmd_Observe_f (void)
 	{
 		PR_GameSetNewParms();
 		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-			sv_client->spawn_parms[i] = PR_Global_parm1()[i];
+			sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 	}
 
 	SV_SpawnSpectator ();
@@ -2913,8 +2913,8 @@ static void Cmd_Observe_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	}
 	PR_GameClientConnect(1);
@@ -2923,8 +2923,8 @@ static void Cmd_Observe_f (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	}
 	PR_GamePutClientInServer(1); // let mod know we put spec not player
 
@@ -3500,8 +3500,8 @@ static qbool SV_ExecutePRCommand (void)
 	if (!QCX_Active())
 	#endif
 	{
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	}
 	return PR_ClientCmd();
 }
@@ -3858,9 +3858,9 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		if (!QCX_Active())
 		#endif
 		{
-			*PR_Global_frametime() = sv_frametime;
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv_player);
+			PR_GLOBAL(frametime) = sv_frametime;
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		}
 		PR_GameClientPreThink(0);
 
@@ -3926,7 +3926,7 @@ FIXME
 	// Better would be to provide a way to simulate a move command, but at least this doesn't require API change
 	if (blocked && !second_attempt && sv_client->isBot && sv_player->v->blocked)
 	{
-		PR_SetGlobal_self(sv_player);
+		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 
 		// Don't store in the bot's entity as we will run this again
 		VectorSubtract (pmove.origin, offset, pr_global_struct->trace_endpos);
@@ -3934,7 +3934,7 @@ FIXME
 		if (pmove.onground)
 		{
 			pr_global_struct->trace_allsolid = (int) sv_player->v->flags | FL_ONGROUND;
-			PR_SetGlobal_trace_ent(EDICT_NUM(pmove.physents[pmove.groundent].info));
+			PR_GLOBAL(trace_ent) = PR_EntityReference(EDICT_NUM(pmove.physents[pmove.groundent].info));
 		} else {
 			pr_global_struct->trace_allsolid = (int) sv_player->v->flags & ~FL_ONGROUND;
 		}
@@ -3943,8 +3943,8 @@ FIXME
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
 			QCX_DispatchEdictBlocked(sv_player,
-				QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()),
-				*PR_Global_time(), *PR_Global_frametime());
+				QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)),
+				PR_GLOBAL(time), PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictBlocked(sv_player->v->blocked);
@@ -3988,12 +3988,12 @@ FIXME
 			ent = EDICT_NUM(n);
 			if (!ent->v->touch || (playertouch[n/8]&(1<<(n%8))))
 				continue;
-		PR_SetGlobal_self(ent);
-		PR_SetGlobal_other(sv_player);
+		PR_GLOBAL(self) = PR_EntityReference(ent);
+		PR_GLOBAL(other) = PR_EntityReference(sv_player);
 			#ifdef QCX_ENABLED
 			if (QCX_Active())
-				QCX_DispatchEdictTouch(ent, sv_player, *PR_Global_time(),
-					*PR_Global_frametime());
+				QCX_DispatchEdictTouch(ent, sv_player, PR_GLOBAL(time),
+					PR_GLOBAL(frametime));
 			else
 			#endif
 				PR_EdictTouch(ent->v->touch);
@@ -4307,8 +4307,8 @@ void SV_PostRunCmd(void)
 		if (!QCX_Active())
 		#endif
 		{
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv_player);
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		}
 		VectorCopy (sv_player->v->velocity, originalvel);
 		PR_GameClientPostThink(0);
@@ -4338,8 +4338,8 @@ void SV_PostRunCmd(void)
 		if (!QCX_Active())
 		#endif
 		{
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv_player);
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		}
 		PR_GameClientPostThink(1);
 	}
