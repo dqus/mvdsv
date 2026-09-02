@@ -31,7 +31,7 @@
 #ifdef QCX_ENABLED
 #include "qcx/adapter.h"
 #include "qcx/entries.h"
-#if defined(MVDSV_QC2CPP_TESTS)
+#if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #define QCX_RECORD_LEGACY_GAME_ENTRY() do { \
 	if (sv_progtype.value == QCX_PROGTYPE_NATIVE || sv_progtype.value == QCX_PROGTYPE_WASM) { \
