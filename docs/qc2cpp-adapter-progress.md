@@ -10,10 +10,10 @@ Implemented on branch `codex/mvdsv-qc2cpp-adapter`.
 Task 11 passes a complete mandatory host table at plugin query time. World and
 map imports are real MVDSV operations; imports owned by the following two tasks
 fail closed until their explicit movement or network implementation replaces
-them. The coverage ledger is `tests/qc2cpp/host-imports.tsv`.
+them. The coverage ledger is `tests/qcx/host-imports.tsv`.
 
 - The native transport resolves only `<fs_gamedir>/<sv_progsname>.<platform suffix>`
-  with `RTLD_NOW | RTLD_LOCAL`, then obtains only `qc_game_plugin_query_v1`.
+  with `RTLD_NOW | RTLD_LOCAL`, then obtains only `qcx_game_plugin_query_v1`.
 - Modes 4 (`qc2cpp-native`) and 5 (`qc2cpp-wasm`) enter the qc2cpp lifecycle
   before the legacy VM/PR1 path. A selected qc2cpp transport load failure is a
   server error; it does not fall through to PR1.
@@ -52,13 +52,13 @@ entries; no callback is reconstructed from a legacy function offset.
   callbacks pass their actual entities and current time to the engine entries.
   `SV_Impact` retains one initial time write and its legacy `self`/`other`
   restoration boundary; it does not roll back callback-produced time.
-- `tests/qc2cpp/reentry_test.c` links the real `sv_phys.c` boundaries against a
+- `tests/qcx/reentry_test.c` links the real `sv_phys.c` boundaries against a
   controlled qc2cpp game callback harness. It checks the two-sided impact
   sequence, live callback time, clamped think time and movement re-entry.
   `qc2cpp_entry_routes` checks the remaining direct source routes, and the
   optional `qc2cpp_reentry_fixture` transpiles plus builds the tracked QC
   fixture when `QC2CPP_COMPILER` is configured. The compact source of
-  truth for those distinct proofs is `tests/qc2cpp/entry-boundaries.tsv`.
+  truth for those distinct proofs is `tests/qcx/entry-boundaries.tsv`.
 
 Only network/client host services remain before a real generated game is
 expected to boot; Task 13 owns those explicit bindings.
@@ -145,7 +145,7 @@ new generated game against an old server binary after an adapter source edit.
 
 ## Task 17 — validated transport-independent save image
 
-`qc_save_image_t` now owns a parsed `QCMS` V1 container independently of a
+`qcx_save_image_t` now owns a parsed `QCMS` V1 container independently of a
 live server, transport or game instance. Its three fixed little-endian sections
 are metadata, bounded engine state and the opaque logical guest payload. The
 metadata identifies the logical game, map checksum and entity capacity; it does
@@ -153,16 +153,31 @@ not encode backend choice, addresses or a Wasmtime version. The engine section
 explicitly records time, serverflags, lightstyles, precache order, edict
 active/free/freetime data, and client slot flags/spawn parameters.
 
-`QC_SaveParse` accepts only the fixed section order and rejects truncation,
+`QCX_SaveParse` accepts only the fixed section order and rejects truncation,
 unknown versions, duplicate/trailing or overrun sections, invalid logical names
 or capacities, non-finite timing, oversized resource lists and duplicate or
 out-of-capacity client slots. It leaves its output null on every rejection.
-`QC_SaveEncode` writes the
+`QCX_SaveEncode` writes the
 same bounded, explicit representation into caller-owned `malloc` memory; it
 does not serialize padded C structures. The same focused test target is built
 and run under both native and Wasm adapter configurations. Server file I/O and
 the atomic temporary-file/rename policy remain at the Task 18 integration seam,
-where `QC_SaveGame` selects a concrete save path.
+where `QCX_SaveGame` selects a concrete save path.
+
+## Boundary-correction Task 3 — QCX private adapter surface
+
+The adapter implementation and its focused tests are now rooted at `src/qcx/`
+and `tests/qcx/`. Private adapter names use the `QCX_` / `qcx_` spelling; the
+product-facing configuration and acceptance-test names remain
+`MVDSV_QC2CPP_*` and `qc2cpp_*` respectively. `QCX_ENABLED` is only emitted
+for an enabled adapter build and configuration fails with
+`QCX_ENABLED requires USE_PR2` if PR2 dispatch is disabled.
+
+This consumes qc2cpp host-SDK commits `dd9f3e0` (public QCX ABI rename),
+`fe17ae3` (topology-audit alignment), and `a08f9ac` (zero-base EntityData
+publication). The native and Wasm focused adapter suites both cover the renamed
+private targets; product acceptance coverage remains under its existing
+`qc2cpp_*` names.
 
 ## Tasks 18–20 — restore, terminal failure, and operations
 

@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/entries.h"
+#ifdef QCX_ENABLED
+#include "qcx/entries.h"
 #endif
 
 /*
@@ -323,9 +323,9 @@ static void SV_TouchLinks ( edict_t *ent, areanode_t *node )
 		PR_SetGlobal_self(touch);
 		PR_SetGlobal_other(ent);
 		*PR_Global_time() = sv.time;
-		#ifdef MVDSV_QC2CPP_ENABLED
-		if (QC_Active())
-			QC_DispatchEdictTouch(touch, ent, *PR_Global_time(), *PR_Global_frametime());
+		#ifdef QCX_ENABLED
+		if (QCX_Active())
+			QCX_DispatchEdictTouch(touch, ent, *PR_Global_time(), *PR_Global_frametime());
 		else
 		#endif
 			PR_EdictTouch(touch->v->touch);

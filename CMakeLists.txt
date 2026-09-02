@@ -8,6 +8,7 @@ project(mvdsv C)
 option(MVDSV_QC2CPP_NATIVE "Enable the qc2cpp native game transport" OFF)
 option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
 option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
+option(USE_PR2 "Enable PR2 program dispatch" ON)
 set(QC2CPP_COMPILER "" CACHE FILEPATH
 	"Optional qc2cpp compiler used by external generated-fixture tests")
 set(QC2CPP_CHECKER "" CACHE FILEPATH
@@ -24,6 +25,9 @@ set(MVDSV_WASMTIME_ROOT "" CACHE PATH
 	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
 
 if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM OR MVDSV_QC2CPP_TESTS)
+	if(NOT USE_PR2)
+		message(FATAL_ERROR "QCX_ENABLED requires USE_PR2")
+	endif()
 	find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS native)
 	if(MVDSV_QC2CPP_WASM)
 		find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS wasmtime)
@@ -116,22 +120,22 @@ set(SRC_COMMON
 
 if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 	list(APPEND SRC_COMMON
-		"${DIR_SRC}/qc2cpp/transport.c"
-		"${DIR_SRC}/qc2cpp/native.c"
-		"${DIR_SRC}/qc2cpp/wasm.c"
-		"${DIR_SRC}/qc2cpp/adapter.c"
-		"${DIR_SRC}/qc2cpp/adapter_state.c"
-		"${DIR_SRC}/qc2cpp/entities.c"
-		"${DIR_SRC}/qc2cpp/globals.c"
-		"${DIR_SRC}/qc2cpp/entries.c"
-		"${DIR_SRC}/qc2cpp/services_movement.c"
-		"${DIR_SRC}/qc2cpp/services_network.c"
-		"${DIR_SRC}/qc2cpp/services_world.c"
-		"${DIR_SRC}/qc2cpp/save_format.c"
-		"${DIR_SRC}/qc2cpp/save.c"
+		"${DIR_SRC}/qcx/transport.c"
+		"${DIR_SRC}/qcx/native.c"
+		"${DIR_SRC}/qcx/wasm.c"
+		"${DIR_SRC}/qcx/adapter.c"
+		"${DIR_SRC}/qcx/adapter_state.c"
+		"${DIR_SRC}/qcx/entities.c"
+		"${DIR_SRC}/qcx/globals.c"
+		"${DIR_SRC}/qcx/entries.c"
+		"${DIR_SRC}/qcx/services_movement.c"
+		"${DIR_SRC}/qcx/services_network.c"
+		"${DIR_SRC}/qcx/services_world.c"
+		"${DIR_SRC}/qcx/save_format.c"
+		"${DIR_SRC}/qcx/save.c"
 	)
 	if(MVDSV_QC2CPP_TESTS)
-		list(APPEND SRC_COMMON "${DIR_SRC}/qc2cpp/test_observer.c")
+		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/test_observer.c")
 	endif()
 endif()
 
@@ -234,7 +238,9 @@ endif()
 
 # Set defines for the build
 target_compile_definitions(${PROJECT_NAME} PRIVATE SERVERONLY)
-target_compile_definitions(${PROJECT_NAME} PRIVATE USE_PR2)
+if(USE_PR2)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_PR2)
+endif()
 target_compile_definitions(${PROJECT_NAME} PRIVATE MVD_PEXT1_SERVERSIDEWEAPON)
 target_compile_definitions(${PROJECT_NAME} PRIVATE MVD_PEXT1_SERVERSIDEWEAPON2)
 target_compile_definitions(${PROJECT_NAME} PRIVATE FTE_PEXT2_VOICECHAT)
@@ -266,22 +272,22 @@ target_link_libraries(${PROJECT_NAME} Threads::Threads)
 
 if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 	target_link_libraries(${PROJECT_NAME} Qc2cppHost::native ${CMAKE_DL_LIBS})
-	target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_ENABLED=1)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_ENABLED=1)
 	if(MVDSV_QC2CPP_NATIVE)
-		target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_NATIVE=1)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_NATIVE=1)
 	endif()
 	if(MVDSV_QC2CPP_WASM)
 		target_link_libraries(${PROJECT_NAME} Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
 		set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY BUILD_RPATH
 			"${MVDSV_WASMTIME_ROOT}/lib")
-		target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_WASM=1)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_WASM=1)
 	endif()
 endif()
 
 if(MVDSV_QC2CPP_TESTS)
-	target_compile_definitions(${PROJECT_NAME} PRIVATE MVDSV_QC2CPP_TESTS=1)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_TESTS=1)
 	enable_testing()
-	add_subdirectory(tests/qc2cpp)
+	add_subdirectory(tests/qcx)
 	add_subdirectory(tests/integration)
 endif()
 

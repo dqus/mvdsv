@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/entities.h"
+#ifdef QCX_ENABLED
+#include "qcx/entities.h"
 #endif
 
 dprograms_t		*progs;
@@ -95,9 +95,9 @@ Sets everything to NULL
 */
 void ED_ClearEdict (edict_t *e)
 {
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_ClearEdict(e);
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_ClearEdict(e);
 	} else
 #endif
 	memset(e->v, 0, pr_edict_size);
