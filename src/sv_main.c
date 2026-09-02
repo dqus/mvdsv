@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#if defined(MVDSV_QC2CPP_TESTS)
+#if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #endif
 
@@ -4051,7 +4051,7 @@ void SV_Init (void)
 
 	PR_Init ();
 
-#if defined(MVDSV_QC2CPP_TESTS)
+#if defined(QCX_TESTS)
 	QCX_TestObserverRegisterCommands();
 #endif
 
