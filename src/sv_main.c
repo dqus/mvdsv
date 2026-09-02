@@ -404,7 +404,7 @@ void SV_DropClient(client_t* drop)
 	{
 		// call the prog function for removing a client
 		// this will set the body to a dead frame, among other things
-		PR_SetGlobal_self(drop->edict);
+		PR_GLOBAL(self) = PR_EntityReference(drop->edict);
 		PR_GameClientDisconnect(drop->spectator);
 	}
 
@@ -1480,7 +1480,7 @@ static void SVC_DirectConnect (void)
 	PR_GameSetNewParms();
 
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		newcl->spawn_parms[i] = PR_Global_parm1()[i];
+		newcl->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	// mvd/qtv related stuff
 	// Well, here is a chance what player connect after demo recording started,
@@ -3120,8 +3120,8 @@ static void SV_CheckTimeouts (void)
 	{
 		// nobody left, unpause the server
 		if (GE_ShouldPause) {
-			*PR_Global_time() = sv.time;
-			PR_SetGlobal_self(sv.edicts);
+			PR_GLOBAL(time) = sv.time;
+			PR_GLOBAL(self) = PR_EntityReference(sv.edicts);
 			G_FLOAT(OFS_PARM0) = 0 /* newstate = false */;
 			PR_ExecuteProgram (GE_ShouldPause);
 			if (!G_FLOAT(OFS_RETURN))

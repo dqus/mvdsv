@@ -165,7 +165,7 @@ static void SV_SaveSpawnparms (void)
 		return;		// no progs loaded yet
 
 	// serverflags is the only game related thing maintained
-	svs.serverflags = *PR_Global_serverflags();
+	svs.serverflags = PR_GLOBAL(serverflags);
 
 	for (i=0, sv_client = svs.clients ; i<MAX_CLIENTS ; i++, sv_client++)
 	{
@@ -176,10 +176,10 @@ static void SV_SaveSpawnparms (void)
 		sv_client->state = cs_connected;
 
 		// call the progs to get default spawn parms for the new client
-		PR_SetGlobal_self(sv_client->edict);
+		PR_GLOBAL(self) = PR_EntityReference(sv_client->edict);
 		PR_GameSetChangeParms();
 		for (j=0 ; j<NUM_SPAWN_PARMS ; j++)
-			sv_client->spawn_parms[j] = PR_Global_parm1()[j];
+			sv_client->spawn_parms[j] = (&PR_GLOBAL(parm1))[j];
 	}
 }
 
@@ -604,19 +604,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	ent->v->impulse = VERSION_NUM;
 	ent->v->items = pr_numbuiltins - 1;
 
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		if (!QCX_SetMapName(sv.mapname)) {
-			SV_Error("qc2cpp game rejected mapname");
-		}
-	}
-	else
-#endif
-	{
-		PR_SetGlobalString(PR_GLOBAL(mapname), sv.mapname);
-	}
+	PR_SetMapName(sv.mapname);
 	// serverflags are for cross level information (sigils)
-	*PR_Global_serverflags() = svs.serverflags;
+	PR_GLOBAL(serverflags) = svs.serverflags;
 	if (pr_nqprogs)
 	{
 		pr_globals[35] = deathmatch.value;
@@ -721,8 +711,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// calltimeofday.
 	if (!restoring_qc2cpp) {
 		extern void PF_calltimeofday (void);
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(NULL);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(NULL);
 
 		PF_calltimeofday();
 	}
