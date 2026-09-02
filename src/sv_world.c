@@ -316,23 +316,23 @@ static void SV_TouchLinks ( edict_t *ent, areanode_t *node )
 		if (!touch->v->touch || touch->v->solid != SOLID_TRIGGER)
 			continue;
 
-		old_self = PR_Global_self_word();
-		old_other = PR_Global_other_word();
-		old_time = *PR_Global_time();
+		old_self = PR_GLOBAL(self);
+		old_other = PR_GLOBAL(other);
+		old_time = PR_GLOBAL(time);
 
-		PR_SetGlobal_self(touch);
-		PR_SetGlobal_other(ent);
-		*PR_Global_time() = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(touch);
+		PR_GLOBAL(other) = PR_EntityReference(ent);
+		PR_GLOBAL(time) = sv.time;
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
-			QCX_DispatchEdictTouch(touch, ent, *PR_Global_time(), *PR_Global_frametime());
+			QCX_DispatchEdictTouch(touch, ent, PR_GLOBAL(time), PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictTouch(touch->v->touch);
 
-		PR_SetGlobal_self_word(old_self);
-		PR_SetGlobal_other_word(old_other);
-		*PR_Global_time() = old_time;
+		PR_GLOBAL(self) = (old_self);
+		PR_GLOBAL(other) = (old_other);
+		PR_GLOBAL(time) = old_time;
 	}
 }
 
