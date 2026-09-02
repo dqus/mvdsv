@@ -78,6 +78,7 @@ char*       PR2_GetEntityString(string_t reference);
 #define     PR_GetEntityString PR2_GetEntityString
 void        PR2_SetEntityString(edict_t* ed, string_t* target, char* value);
 void        PR2_SetGlobalString(string_t* target, char* value);
+void        PR_SetMapName(const char *value);
 #define     PR_SetEntityString(entity, address, value) PR2_SetEntityString(entity, &address, value)
 #define     PR_SetGlobalString(address, value) PR2_SetGlobalString(&address, value)
 void		PR2_RunError(char *error, ...);
