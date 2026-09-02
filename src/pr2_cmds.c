@@ -525,9 +525,9 @@ void PF2_traceline(float v1_x, float v1_y, float v1_z,
 	pr_global_struct->trace_plane_dist = trace.plane.dist;
 
 	if (trace.e.ent)
-		PR_SetGlobal_trace_ent(trace.e.ent);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(trace.e.ent);
 	else
-		PR_SetGlobal_trace_ent(sv.edicts);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(sv.edicts);
 }
 
 /*
@@ -576,9 +576,9 @@ void PF2_TraceCapsule(float v1_x, float v1_y, float v1_z,
 	pr_global_struct->trace_plane_dist = trace.plane.dist;
 
 	if (trace.e.ent)
-		PR_SetGlobal_trace_ent(trace.e.ent);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(trace.e.ent);
 	else
-		PR_SetGlobal_trace_ent(sv.edicts);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(sv.edicts);
 }
 
 /*
@@ -2262,7 +2262,7 @@ int PF2_Add_Bot(char *name, int bottomcolor, int topcolor, char *skin)
 
 	old_self = pr_global_struct->self;
 	pr_global_struct->time = sv.time;
-	PR_SetGlobal_self(newcl->edict);
+	PR_GLOBAL(self) = PR_EntityReference(newcl->edict);
 
 	PR2_GameClientConnect(0);
 	PR2_GamePutClientInServer(0);
@@ -2277,7 +2277,7 @@ void RemoveBot(client_t *cl)
 	if( !cl->isBot )
 		return;
 
-	PR_SetGlobal_self(cl->edict);
+	PR_GLOBAL(self) = PR_EntityReference(cl->edict);
 	if ( sv_vm )
 		PR2_GameClientDisconnect(0);
 
@@ -2490,7 +2490,7 @@ void PF2_SetUserInfo(int entnum, char *k, char *v, int flags)
 	if( sv_vm )
 	{
 		pr_global_struct->time = sv.time;
-		PR_SetGlobal_self(cl->edict);
+		PR_GLOBAL(self) = PR_EntityReference(cl->edict);
 
 		if (PR2_UserInfoChanged(0))
 			return;

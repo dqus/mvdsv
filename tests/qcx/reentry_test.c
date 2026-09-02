@@ -186,16 +186,16 @@ qbool SV_StepDirection(edict_t *entity, float yaw, float distance)
 void PR2_EdictTouch(func_t function)
 {
 	(void)function;
-	QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
-		QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
-		*PR_Global_frametime());
+	QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+		QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
+		PR_GLOBAL(frametime));
 }
 
 void PR2_EdictThink(func_t function)
 {
 	(void)function;
-	QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
-		*PR_Global_time(), *PR_Global_frametime());
+	QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+		PR_GLOBAL(time), PR_GLOBAL(frametime));
 }
 
 void PR2_EdictBlocked(func_t function) { (void)function; }

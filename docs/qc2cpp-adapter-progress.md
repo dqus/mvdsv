@@ -179,6 +179,21 @@ publication). The native and Wasm focused adapter suites both cover the renamed
 private targets; product acceptance coverage remains under its existing
 `qc2cpp_*` names.
 
+## Boundary-correction Task 4 — canonical globals and mapname
+
+QCX now binds the published `qcx_shared_global_state_v1_t` directly as
+`pr_global_struct` and `pr_globals`, after compile-time layout checks for the
+shared QW globals. The prior binding is restored before the QCX publication is
+cleared, so normal unload and non-terminal startup cleanup never leave a stale
+game-owned pointer behind. Server code addresses standard globals directly with
+`PR_GLOBAL`; no field-by-field `PR_Global_*` or `PR_SetGlobal_*` selection
+facades remain.
+
+`PR_SetMapName` is the only semantic mapname operation: it delegates to the
+QCX string writer for a selected QCX game and otherwise uses the legacy generic
+PR2 string path. The generic setter rejects an attempted legacy global-string
+write while QCX is active instead of assuming every target is mapname.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV

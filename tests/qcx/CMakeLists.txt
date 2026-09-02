@@ -147,6 +147,11 @@ add_dependencies(qcx_globals_test qcx_fixture_plugin
 	qcx_bad_globals_size_plugin)
 add_test(NAME qcx_globals COMMAND qcx_globals_test $<TARGET_FILE_DIR:qcx_fixture_plugin>)
 
+add_test(NAME qcx_globals_boundary
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/globals_boundary_test.cmake)
+
 add_executable(qcx_entities_test
 	entities_test.c
 ${PROJECT_SOURCE_DIR}/src/qcx/entities.c

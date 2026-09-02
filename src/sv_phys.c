@@ -163,12 +163,12 @@ qbool SV_RunThink (edict_t *ent)
 		// it is possible to start that way
 		// by a trigger with a local time.
 		ent->v->nextthink = 0;
-		*PR_Global_time() = thinktime;
-		PR_SetGlobal_self(ent);
-		PR_SetGlobal_other(sv.edicts);
+		PR_GLOBAL(time) = thinktime;
+		PR_GLOBAL(self) = PR_EntityReference(ent);
+		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
-			QCX_DispatchEdictThink(ent, thinktime, *PR_Global_frametime());
+			QCX_DispatchEdictThink(ent, thinktime, PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictThink(ent->v->think);
@@ -191,17 +191,17 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 {
 	int old_self, old_other;
 
-	old_self = PR_Global_self_word();
-	old_other = PR_Global_other_word();
+	old_self = PR_GLOBAL(self);
+	old_other = PR_GLOBAL(other);
 
-	*PR_Global_time() = sv.time;
+	PR_GLOBAL(time) = sv.time;
 	if (e1->v->touch && e1->v->solid != SOLID_NOT)
 	{
-		PR_SetGlobal_self(e1);
-		PR_SetGlobal_other(e2);
+		PR_GLOBAL(self) = PR_EntityReference(e1);
+		PR_GLOBAL(other) = PR_EntityReference(e2);
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
-			QCX_DispatchEdictTouch(e1, e2, *PR_Global_time(), *PR_Global_frametime());
+			QCX_DispatchEdictTouch(e1, e2, PR_GLOBAL(time), PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictTouch(e1->v->touch);
@@ -209,18 +209,18 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 
 	if (e2->v->touch && e2->v->solid != SOLID_NOT)
 	{
-		PR_SetGlobal_self(e2);
-		PR_SetGlobal_other(e1);
+		PR_GLOBAL(self) = PR_EntityReference(e2);
+		PR_GLOBAL(other) = PR_EntityReference(e1);
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
-			QCX_DispatchEdictTouch(e2, e1, *PR_Global_time(), *PR_Global_frametime());
+			QCX_DispatchEdictTouch(e2, e1, PR_GLOBAL(time), PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictTouch(e2->v->touch);
 	}
 
-	PR_SetGlobal_self_word(old_self);
-	PR_SetGlobal_other_word(old_other);
+	PR_GLOBAL(self) = (old_self);
+	PR_GLOBAL(other) = (old_other);
 }
 
 
@@ -567,12 +567,12 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		// otherwise, just stay in place until the obstacle is gone
 		if (pusher->v->blocked)
 		{
-			PR_SetGlobal_self(pusher);
-			PR_SetGlobal_other(check);
+			PR_GLOBAL(self) = PR_EntityReference(pusher);
+			PR_GLOBAL(other) = PR_EntityReference(check);
 			#ifdef QCX_ENABLED
 			if (QCX_Active())
-				QCX_DispatchEdictBlocked(pusher, check, *PR_Global_time(),
-					*PR_Global_frametime());
+				QCX_DispatchEdictBlocked(pusher, check, PR_GLOBAL(time),
+					PR_GLOBAL(frametime));
 			else
 			#endif
 				PR_EdictBlocked (pusher->v->blocked);
@@ -650,12 +650,12 @@ void SV_Physics_Pusher (edict_t *ent)
 	{
 		VectorCopy (ent->v->origin, oldorg);
 		ent->v->nextthink = 0;
-		*PR_Global_time() = sv.time;
-		PR_SetGlobal_self(ent);
-		PR_SetGlobal_other(sv.edicts);
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = PR_EntityReference(ent);
+		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
 		#ifdef QCX_ENABLED
 		if (QCX_Active())
-			QCX_DispatchEdictThink(ent, *PR_Global_time(), *PR_Global_frametime());
+			QCX_DispatchEdictThink(ent, PR_GLOBAL(time), PR_GLOBAL(frametime));
 		else
 		#endif
 			PR_EdictThink(ent->v->think);
@@ -878,9 +878,9 @@ void SV_Physics_Step (edict_t *ent)
 void SV_ProgStartFrame (qbool isBotFrame)
 {
 	// let the progs know that a new frame has started
-	PR_SetGlobal_self(sv.edicts);
-	PR_SetGlobal_other(sv.edicts);
-	*PR_Global_time() = sv.time;
+	PR_GLOBAL(self) = PR_EntityReference(sv.edicts);
+	PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
+	PR_GLOBAL(time) = sv.time;
 	PR_GameStartFrame(isBotFrame);
 }
 
@@ -1031,7 +1031,7 @@ void SV_Physics (void)
 	if (pr_nqprogs)
 		NQP_Reset ();
 
-	*PR_Global_frametime() = sv_frametime;
+	PR_GLOBAL(frametime) = sv_frametime;
 
 	SV_ProgStartFrame(false);
 
@@ -1045,7 +1045,7 @@ void SV_Physics (void)
 		if (ent->e.free)
 			continue;
 
-		if (*PR_Global_force_retouch())
+		if (PR_GLOBAL(force_retouch))
 			SV_LinkEdict (ent, true);	// force retouch even for stationary
 
 		if (i > 0 && i <= MAX_CLIENTS)
@@ -1055,8 +1055,8 @@ void SV_Physics (void)
 		SV_RunNewmis ();
 	}
 
-	if (*PR_Global_force_retouch())
-		(*PR_Global_force_retouch())--;
+	if (PR_GLOBAL(force_retouch))
+		(PR_GLOBAL(force_retouch))--;
 
 	savesvpl = sv_player;
 	savehc = sv_client;
@@ -1126,7 +1126,7 @@ void SV_RunBots(void)
 	savesvpl = sv_player;
 	savehc = sv_client;
 
-	*PR_Global_frametime() = sv_frametime;
+	PR_GLOBAL(frametime) = sv_frametime;
 	SV_ProgStartFrame (true);
 
 	//

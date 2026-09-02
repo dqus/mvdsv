@@ -27,6 +27,12 @@ qbool QCX_Active(void)
 	return qcx_active;
 }
 
+qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
+{
+	(void)entity;
+	return QCX_INVALID_ENTITY_ID;
+}
+
 static void assert_invalid_globals_fixture(const char *directory, const char *name)
 {
 	qcx_transport_t *transport = NULL;
@@ -59,23 +65,25 @@ int main(int argc, char **argv)
 	active_game = QCX_TransportGame(transport);
 	assert(active_game->init(active_game->context, 0, 1U) != 0U);
 	assert(QCX_ConfigureGlobals(1.0f, 2.0f, 3.0f));
+	assert(pr_global_struct == (globalvars_t *)QCX_Globals());
+	assert(pr_globals == (float *)QCX_Globals());
 	legacy_globals.time = 101.0f;
 	legacy_globals.self = 101;
 	legacy_globals.other = 102;
 	qcx_active = true;
-	*PR_Global_time() = 6.0f;
+	PR_GLOBAL(time) = 6.0f;
 	assert(QCX_Globals()->time == 6.0f);
 	assert(legacy_globals.time == 101.0f);
 	active_game->start_frame(active_game->context, 17.0f, 0.1f, 0U);
-	assert(*PR_Global_time() == 17.0f);
+	assert(PR_GLOBAL(time) == 17.0f);
 	assert(legacy_globals.time == 101.0f);
 	assert(QCX_Globals()->parm1 == 1.0f);
 	assert(QCX_Globals()->parm2 == 2.0f);
 	assert(QCX_Globals()->parm3 == 3.0f);
 	edict_t entity = {0};
 	entity.e.entnum = 7;
-	PR_SetGlobal_self(&entity);
-	PR_SetGlobal_other(NULL);
+	PR_GLOBAL(self) = entity.e.entnum;
+	PR_GLOBAL(other) = 0;
 	assert(QCX_Globals()->self == 7U);
 	assert(QCX_Globals()->other == 0U);
 	assert(legacy_globals.self == 101 && legacy_globals.other == 102);
@@ -90,15 +98,17 @@ int main(int argc, char **argv)
 	QCX_ClearGlobals();
 	qcx_active = false;
 	assert(QCX_Globals() == NULL);
-	assert(*PR_Global_time() == 101.0f);
+	assert(pr_global_struct == &legacy_globals);
+	assert(pr_globals == (float *)&legacy_globals);
+	assert(PR_GLOBAL(time) == 101.0f);
 	memset(&sv, 0, sizeof(sv));
 	sv.game_edicts = (entvars_t *)legacy_game_memory.bytes;
 	edict_t legacy_entity = {0};
 	legacy_entity.v = (entvars_t *)(legacy_game_memory.bytes + 128U);
 	legacy_globals.self = 0;
 	legacy_globals.other = 102;
-	PR_SetGlobal_self(&legacy_entity);
-	PR_SetGlobal_other(NULL);
+	PR_GLOBAL(self) = PR_EntityReference(&legacy_entity);
+	PR_GLOBAL(other) = PR_EntityReference(NULL);
 	assert(legacy_globals.self == 128);
 	assert(legacy_globals.other == 0);
 	active_game->shutdown(active_game->context);

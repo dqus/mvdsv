@@ -566,7 +566,7 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 	sv.time = qcx_restore_plan.time;
 	sv.old_time = sv.time;
 	svs.serverflags = qcx_restore_plan.serverflags;
-	*PR_Global_serverflags() = svs.serverflags;
+	PR_GLOBAL(serverflags) = svs.serverflags;
 	SV_ClearWorld();
 	for (index = 0U; index < qcx_restore_plan.num_edicts; ++index) {
 		if (!sv.edicts[index].e.free) SV_LinkEdict(&sv.edicts[index], false);

@@ -83,6 +83,7 @@ typedef struct
 
 #ifdef QCX_ENABLED
 #include "game/shared_entity_state.h"
+#include "game/shared_global_state.h"
 #include <stddef.h>
 
 typedef qcx_shared_entity_state_v1_t entvars_t;
@@ -101,6 +102,43 @@ _Static_assert(offsetof(entvars_t, netname) == QCX_SHARED_ENTITY_STATE_OFFSET_NE
 	"qc2cpp entity netname");
 _Static_assert(PROGHEADER_CRC == QCX_SHARED_ENTITY_STATE_PROGHEADER_CRC,
 	"qc2cpp entity ABI CRC");
+
+_Static_assert(sizeof(globalvars_t) == sizeof(qcx_shared_global_state_v1_t),
+	"qc2cpp globals size");
+_Static_assert(_Alignof(globalvars_t) == _Alignof(qcx_shared_global_state_v1_t),
+	"qc2cpp globals alignment");
+#define QCX_ASSERT_GLOBAL_OFFSET(field, shared_field) \
+	_Static_assert(offsetof(globalvars_t, field) == offsetof(qcx_shared_global_state_v1_t, shared_field), \
+		"qc2cpp global " #field)
+QCX_ASSERT_GLOBAL_OFFSET(self, self);
+QCX_ASSERT_GLOBAL_OFFSET(other, other);
+QCX_ASSERT_GLOBAL_OFFSET(world, world);
+QCX_ASSERT_GLOBAL_OFFSET(time, time);
+QCX_ASSERT_GLOBAL_OFFSET(frametime, frametime);
+QCX_ASSERT_GLOBAL_OFFSET(newmis, newmis);
+QCX_ASSERT_GLOBAL_OFFSET(force_retouch, force_retouch);
+QCX_ASSERT_GLOBAL_OFFSET(mapname, reserved_mapname);
+QCX_ASSERT_GLOBAL_OFFSET(serverflags, serverflags);
+QCX_ASSERT_GLOBAL_OFFSET(total_secrets, total_secrets);
+QCX_ASSERT_GLOBAL_OFFSET(total_monsters, total_monsters);
+QCX_ASSERT_GLOBAL_OFFSET(found_secrets, found_secrets);
+QCX_ASSERT_GLOBAL_OFFSET(killed_monsters, killed_monsters);
+QCX_ASSERT_GLOBAL_OFFSET(parm1, parm1);
+QCX_ASSERT_GLOBAL_OFFSET(parm16, parm16);
+QCX_ASSERT_GLOBAL_OFFSET(v_forward, v_forward);
+QCX_ASSERT_GLOBAL_OFFSET(v_up, v_up);
+QCX_ASSERT_GLOBAL_OFFSET(v_right, v_right);
+QCX_ASSERT_GLOBAL_OFFSET(trace_allsolid, trace_allsolid);
+QCX_ASSERT_GLOBAL_OFFSET(trace_startsolid, trace_startsolid);
+QCX_ASSERT_GLOBAL_OFFSET(trace_fraction, trace_fraction);
+QCX_ASSERT_GLOBAL_OFFSET(trace_endpos, trace_endpos);
+QCX_ASSERT_GLOBAL_OFFSET(trace_plane_normal, trace_plane_normal);
+QCX_ASSERT_GLOBAL_OFFSET(trace_plane_dist, trace_plane_dist);
+QCX_ASSERT_GLOBAL_OFFSET(trace_ent, trace_ent);
+QCX_ASSERT_GLOBAL_OFFSET(trace_inopen, trace_inopen);
+QCX_ASSERT_GLOBAL_OFFSET(trace_inwater, trace_inwater);
+QCX_ASSERT_GLOBAL_OFFSET(msg_entity, msg_entity);
+#undef QCX_ASSERT_GLOBAL_OFFSET
 #else
 typedef struct
 {

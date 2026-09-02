@@ -682,9 +682,9 @@ void PF_traceline (void)
 	VectorCopy (trace.plane.normal, PR_GLOBAL(trace_plane_normal));
 	PR_GLOBAL(trace_plane_dist) =  trace.plane.dist;	
 	if (trace.e.ent)
-		PR_SetGlobal_trace_ent(trace.e.ent);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(trace.e.ent);
 	else
-		PR_SetGlobal_trace_ent(sv.edicts);
+		PR_GLOBAL(trace_ent) = PR_EntityReference(sv.edicts);
 }
 
 /*
@@ -2569,9 +2569,9 @@ static void PF_tracebox (void)
         VectorCopy (trace.plane.normal, PR_GLOBAL(trace_plane_normal));
         PR_GLOBAL(trace_plane_dist) =  trace.plane.dist;
         if (trace.e.ent)
-                PR_SetGlobal_trace_ent(trace.e.ent);
+                PR_GLOBAL(trace_ent) = PR_EntityReference(trace.e.ent);
         else
-                PR_SetGlobal_trace_ent(sv.edicts);
+                PR_GLOBAL(trace_ent) = PR_EntityReference(sv.edicts);
 }
 
 /*
