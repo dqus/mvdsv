@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/save.h"
+#ifdef QCX_ENABLED
+#include "qcx/save.h"
 #endif
 
 #ifndef SERVERONLY
@@ -388,8 +388,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// load progs to get entity field count
 	// which determines how big each edict is
 	// and allocate edicts
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (restoring_qc2cpp && !QC_PrepareLoadResources()) {
+	#ifdef QCX_ENABLED
+	if (restoring_qc2cpp && !QCX_PrepareLoadResources()) {
 		SV_Error("qc2cpp restore could not prepare saved resource ordering");
 	}
 	#endif
@@ -399,8 +399,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 #endif
 	PR_InitProg();
 
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
 		for (i = 0; i < sv.max_edicts; i++) {
 			sv.edicts[i].e.area.ed = &sv.edicts[i];
 		}
@@ -604,9 +604,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	ent->v->impulse = VERSION_NUM;
 	ent->v->items = pr_numbuiltins - 1;
 
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		if (!QC_SetMapName(sv.mapname)) {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (!QCX_SetMapName(sv.mapname)) {
 			SV_Error("qc2cpp game rejected mapname");
 		}
 	}
@@ -636,8 +636,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 
 	// A QCMS restore initializes the selected backend and map resources, but its
 	// saved guest image replaces ordinary QC map startup below.
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (restoring_qc2cpp && (!QC_Active() || !QC_HasPreparedLoadGame())) {
+#ifdef QCX_ENABLED
+	if (restoring_qc2cpp && (!QCX_Active() || !QCX_HasPreparedLoadGame())) {
 		SV_Error("qc2cpp restore lost its prepared image");
 	}
 #else
@@ -708,8 +708,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	SV_SetMoveVars();
 
 	// create a baseline for more efficient communications
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (restoring_qc2cpp && !QC_CommitPreparedLoadGame()) {
+	#ifdef QCX_ENABLED
+	if (restoring_qc2cpp && !QCX_CommitPreparedLoadGame()) {
 		SV_Error("qc2cpp restore validation failed after map setup");
 	}
 	#endif

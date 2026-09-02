@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/services.h"
+#ifdef QCX_ENABLED
+#include "qcx/services.h"
 #endif
 
 static tokenizecontext_t pr1_tokencontext;

@@ -22,10 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/entities.h"
-#include "qc2cpp/entries.h"
-#include "qc2cpp/globals.h"
+#ifdef QCX_ENABLED
+#include "qcx/entities.h"
+#include "qcx/entries.h"
+#include "qcx/globals.h"
 #endif
 
 /*
@@ -102,11 +102,11 @@ void SV_CheckVelocity (edict_t *ent)
 	for (i=0 ; i<3 ; i++)
 	{
 		const char *classname_text = PR_GetEntityString(ent->v->classname);
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 		char classname[MAX_QPATH] = {0};
-		if (QC_Active()) {
-			if (QC_CopyEntityString(ent, "classname", classname, sizeof(classname), NULL)
-				== QC_PLUGIN_OK) classname_text = classname;
+		if (QCX_Active()) {
+			if (QCX_CopyEntityString(ent, "classname", classname, sizeof(classname), NULL)
+				== QCX_PLUGIN_OK) classname_text = classname;
 			else classname_text = "";
 		}
 #endif
@@ -166,9 +166,9 @@ qbool SV_RunThink (edict_t *ent)
 		*PR_Global_time() = thinktime;
 		PR_SetGlobal_self(ent);
 		PR_SetGlobal_other(sv.edicts);
-		#ifdef MVDSV_QC2CPP_ENABLED
-		if (QC_Active())
-			QC_DispatchEdictThink(ent, thinktime, *PR_Global_frametime());
+		#ifdef QCX_ENABLED
+		if (QCX_Active())
+			QCX_DispatchEdictThink(ent, thinktime, *PR_Global_frametime());
 		else
 		#endif
 			PR_EdictThink(ent->v->think);
@@ -199,9 +199,9 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		PR_SetGlobal_self(e1);
 		PR_SetGlobal_other(e2);
-		#ifdef MVDSV_QC2CPP_ENABLED
-		if (QC_Active())
-			QC_DispatchEdictTouch(e1, e2, *PR_Global_time(), *PR_Global_frametime());
+		#ifdef QCX_ENABLED
+		if (QCX_Active())
+			QCX_DispatchEdictTouch(e1, e2, *PR_Global_time(), *PR_Global_frametime());
 		else
 		#endif
 			PR_EdictTouch(e1->v->touch);
@@ -211,9 +211,9 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		PR_SetGlobal_self(e2);
 		PR_SetGlobal_other(e1);
-		#ifdef MVDSV_QC2CPP_ENABLED
-		if (QC_Active())
-			QC_DispatchEdictTouch(e2, e1, *PR_Global_time(), *PR_Global_frametime());
+		#ifdef QCX_ENABLED
+		if (QCX_Active())
+			QCX_DispatchEdictTouch(e2, e1, *PR_Global_time(), *PR_Global_frametime());
 		else
 		#endif
 			PR_EdictTouch(e2->v->touch);
@@ -569,9 +569,9 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		{
 			PR_SetGlobal_self(pusher);
 			PR_SetGlobal_other(check);
-			#ifdef MVDSV_QC2CPP_ENABLED
-			if (QC_Active())
-				QC_DispatchEdictBlocked(pusher, check, *PR_Global_time(),
+			#ifdef QCX_ENABLED
+			if (QCX_Active())
+				QCX_DispatchEdictBlocked(pusher, check, *PR_Global_time(),
 					*PR_Global_frametime());
 			else
 			#endif
@@ -653,9 +653,9 @@ void SV_Physics_Pusher (edict_t *ent)
 		*PR_Global_time() = sv.time;
 		PR_SetGlobal_self(ent);
 		PR_SetGlobal_other(sv.edicts);
-		#ifdef MVDSV_QC2CPP_ENABLED
-		if (QC_Active())
-			QC_DispatchEdictThink(ent, *PR_Global_time(), *PR_Global_frametime());
+		#ifdef QCX_ENABLED
+		if (QCX_Active())
+			QCX_DispatchEdictThink(ent, *PR_Global_time(), *PR_Global_frametime());
 		else
 		#endif
 			PR_EdictThink(ent->v->think);
@@ -968,13 +968,13 @@ void SV_RunNewmis (void)
 	if (pr_nqprogs)
 		return;
 
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		qc_shared_global_state_v1_t *const globals = QC_Globals();
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		qcx_shared_global_state_v1_t *const globals = QCX_Globals();
 		if (globals == NULL || globals->newmis == 0U) {
 			return;
 		}
-		ent = QC_SlotToEdict(globals->newmis);
+		ent = QCX_SlotToEdict(globals->newmis);
 		globals->newmis = 0U;
 		if (ent == NULL) {
 			return;

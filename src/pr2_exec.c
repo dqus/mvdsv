@@ -24,25 +24,25 @@
 #ifdef USE_PR2
 
 #include "qwsvdef.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/entities.h"
+#ifdef QCX_ENABLED
+#include "qcx/entities.h"
 #endif
 #include "vm_local.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/adapter.h"
-#include "qc2cpp/entries.h"
+#ifdef QCX_ENABLED
+#include "qcx/adapter.h"
+#include "qcx/entries.h"
 #if defined(MVDSV_QC2CPP_TESTS)
-#include "qc2cpp/test_observer.h"
-#define QC_RECORD_LEGACY_GAME_ENTRY() do { \
-	if (sv_progtype.value == QC_PROGTYPE_NATIVE || sv_progtype.value == QC_PROGTYPE_WASM) { \
-		QC_TestObserverLegacyGameEntry(); \
+#include "qcx/test_observer.h"
+#define QCX_RECORD_LEGACY_GAME_ENTRY() do { \
+	if (sv_progtype.value == QCX_PROGTYPE_NATIVE || sv_progtype.value == QCX_PROGTYPE_WASM) { \
+		QCX_TestObserverLegacyGameEntry(); \
 	} \
 } while (0)
 #else
-#define QC_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
+#define QCX_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
 #endif
 #else
-#define QC_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
+#define QCX_RECORD_LEGACY_GAME_ENTRY() do {} while (0)
 #endif
 
 gameData_t gamedata;
@@ -202,10 +202,10 @@ char *PR2_GetEntityString(string_t num)
 //===========================================================================
 void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		const char *const field = QC_EntityStringFieldName(ed, target);
-		if (field == NULL || !QC_SetEntityString(ed, field, s)) {
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		const char *const field = QCX_EntityStringFieldName(ed, target);
+		if (field == NULL || !QCX_SetEntityString(ed, field, s)) {
 			SV_Error("qc2cpp failed to set entity string");
 		}
 		return;
@@ -218,10 +218,10 @@ void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 }
 void PR2_SetGlobalString(string_t* target, char* s)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
 		(void)target;
-		if (!QC_SetMapName(s)) {
+		if (!QCX_SetMapName(s)) {
 			SV_Error("qc2cpp failed to set global string");
 		}
 		return;
@@ -242,13 +242,13 @@ extern const char *pr2_ent_data_ptr;
 
 void PR2_LoadEnts(char *data)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_LoadEntities(data);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_LoadEntities(data);
 		return;
 	}
 	#endif
-	QC_RECORD_LEGACY_GAME_ENTRY();
+	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (sv_vm)
 	{
 		pr2_ent_data_ptr = data;
@@ -267,13 +267,13 @@ void PR2_LoadEnts(char *data)
 //===========================================================================
 void PR2_GameStartFrame(qbool isBotFrame)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_StartFrame((float)sv.time, *PR_Global_frametime(), isBotFrame);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_StartFrame((float)sv.time, *PR_Global_frametime(), isBotFrame);
 		return;
 	}
 	#endif
-	QC_RECORD_LEGACY_GAME_ENTRY();
+	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (isBotFrame && (!sv_vm || sv_vm->type == VMI_NONE || gamedata.APIversion < 15)) {
 		return;
 	}
@@ -289,9 +289,9 @@ void PR2_GameStartFrame(qbool isBotFrame)
 //===========================================================================
 void PR2_GameClientConnect(int spec)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchClientConnect(sv_player, spec != 0 ? 1U : 0U);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchClientConnect(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
 	#endif
@@ -306,9 +306,9 @@ void PR2_GameClientConnect(int spec)
 //===========================================================================
 void PR2_GamePutClientInServer(int spec)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchPutClientInServer(sv_player, spec != 0 ? 1U : 0U);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchPutClientInServer(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
 	#endif
@@ -323,9 +323,9 @@ void PR2_GamePutClientInServer(int spec)
 //===========================================================================
 void PR2_GameClientDisconnect(int spec)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchClientDisconnect(sv_player, spec != 0 ? 1U : 0U);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchClientDisconnect(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
 	#endif
@@ -340,9 +340,9 @@ void PR2_GameClientDisconnect(int spec)
 //===========================================================================
 void PR2_GameClientPreThink(int spec)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchClientPreThink(sv_player, (float)sv.time, (float)sv_frametime,
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchClientPreThink(sv_player, (float)sv.time, (float)sv_frametime,
 			spec != 0 ? 1U : 0U);
 		return;
 	}
@@ -358,9 +358,9 @@ void PR2_GameClientPreThink(int spec)
 //===========================================================================
 void PR2_GameClientPostThink(int spec)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchClientPostThink(sv_player, (float)sv.time,
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchClientPostThink(sv_player, (float)sv.time,
 			spec != 0 ? 1U : 0U);
 		return;
 	}
@@ -376,9 +376,9 @@ void PR2_GameClientPostThink(int spec)
 //===========================================================================
 qbool PR2_ClientCmd(void)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		return QC_DispatchClientCommand(sv_player) != 0U;
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		return QCX_DispatchClientCommand(sv_player) != 0U;
 	}
 	#endif
 	if (sv_vm)
@@ -392,9 +392,9 @@ qbool PR2_ClientCmd(void)
 //===========================================================================
 void PR2_ClientKill(void)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchClientKill(sv_player);
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchClientKill(sv_player);
 		return;
 	}
 	#endif
@@ -414,10 +414,10 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 	// PR2 mods get it from Cmd_Args() and such.
 	//
 
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		return QC_DispatchClientSay(sv_player, isTeamSay != 0 ? 1U : 0U,
-			(const uint8_t *)message, (qc_byte_count_t)strlen(message)) != 0U;
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		return QCX_DispatchClientSay(sv_player, isTeamSay != 0 ? 1U : 0U,
+			(const uint8_t *)message, (qcx_byte_count_t)strlen(message)) != 0U;
 	}
 	#endif
 	if (sv_vm)
@@ -431,9 +431,9 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 //===========================================================================
 void PR2_GameSetNewParms(void)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchSetNewParms(PR_Global_parm1());
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchSetNewParms(PR_Global_parm1());
 		return;
 	}
 	#endif
@@ -448,9 +448,9 @@ void PR2_GameSetNewParms(void)
 //===========================================================================
 void PR2_GameSetChangeParms(void)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_DispatchSetChangeParms(sv_player, PR_Global_parm1());
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_DispatchSetChangeParms(sv_player, PR_Global_parm1());
 		return;
 	}
 	#endif
@@ -467,11 +467,11 @@ void PR2_GameSetChangeParms(void)
 //===========================================================================
 void PR2_EdictTouch(func_t f)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
 		(void)f;
-		QC_DispatchEdictTouch(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
-			QC_SlotToEdict((qc_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
+		QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
+			QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
 			*PR_Global_frametime());
 		return;
 	}
@@ -487,10 +487,10 @@ void PR2_EdictTouch(func_t f)
 //===========================================================================
 void PR2_EdictThink(func_t f)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
 		(void)f;
-		QC_DispatchEdictThink(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
+		QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
 			*PR_Global_time(), *PR_Global_frametime());
 		return;
 	}
@@ -506,11 +506,11 @@ void PR2_EdictThink(func_t f)
 //===========================================================================
 void PR2_EdictBlocked(func_t f)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
 		(void)f;
-		QC_DispatchEdictBlocked(QC_SlotToEdict((qc_entity_id_t)PR_Global_self_word()),
-			QC_SlotToEdict((qc_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
+		QCX_DispatchEdictBlocked(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
+			QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
 			*PR_Global_frametime());
 		return;
 	}
@@ -526,9 +526,9 @@ void PR2_EdictBlocked(func_t f)
 //===========================================================================
 qbool PR2_UserInfoChanged(int after)
 {
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		return QC_DispatchClientUserInfoChanged(sv_player, after != 0 ? 1U : 0U)
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		return QCX_DispatchClientUserInfoChanged(sv_player, after != 0 ? 1U : 0U)
 			!= 0U;
 	}
 	#endif
@@ -543,9 +543,9 @@ qbool PR2_UserInfoChanged(int after)
 //===========================================================================
 void PR2_GameShutDown(void)
 {
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_Shutdown();
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_Shutdown();
 		return;
 	}
 #endif
@@ -560,9 +560,9 @@ void PR2_GameShutDown(void)
 //===========================================================================
 void PR2_UnLoadProgs(void)
 {
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_UnloadProgs();
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_UnloadProgs();
 		return;
 	}
 #endif
@@ -582,9 +582,9 @@ void PR2_UnLoadProgs(void)
 //===========================================================================
 void PR2_LoadProgs(void)
 {
-#ifdef MVDSV_QC2CPP_ENABLED
-	if (sv_progtype.value == QC_PROGTYPE_NATIVE || sv_progtype.value == QC_PROGTYPE_WASM) {
-		QC_LoadProgs();
+#ifdef QCX_ENABLED
+	if (sv_progtype.value == QCX_PROGTYPE_NATIVE || sv_progtype.value == QCX_PROGTYPE_WASM) {
+		QCX_LoadProgs();
 		return;
 	}
 #endif
@@ -740,13 +740,13 @@ void PR2_InitProg(void)
 
 	Cvar_SetValue(&sv_pr2references, 0.0f);
 
-	#ifdef MVDSV_QC2CPP_ENABLED
-	if (QC_Active()) {
-		QC_InitProg();
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		QCX_InitProg();
 		return;
 	}
 	#endif
-	QC_RECORD_LEGACY_GAME_ENTRY();
+	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (!sv_vm) {
 		PR1_InitProg();
 		return;

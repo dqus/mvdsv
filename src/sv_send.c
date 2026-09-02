@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/entities.h"
+#ifdef QCX_ENABLED
+#include "qcx/entities.h"
 #endif
 
 static void SV_BotWriteDamage(client_t* c, int i);
@@ -864,11 +864,11 @@ void SV_UpdateClientStats (client_t *client)
 
 	stats[STAT_HEALTH] = ent->v->health;
 	char *weaponmodel_name = PR_GetEntityString(ent->v->weaponmodel);
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 	char weaponmodel[MAX_QPATH] = {0};
-	if (QC_Active()) {
-		if (QC_CopyEntityString(ent, "weaponmodel", weaponmodel, sizeof(weaponmodel), NULL)
-			== QC_PLUGIN_OK) weaponmodel_name = weaponmodel;
+	if (QCX_Active()) {
+		if (QCX_CopyEntityString(ent, "weaponmodel", weaponmodel, sizeof(weaponmodel), NULL)
+			== QCX_PLUGIN_OK) weaponmodel_name = weaponmodel;
 		else weaponmodel_name = "";
 	}
 #endif
@@ -1272,11 +1272,11 @@ void MVD_WriteStats(void)
 
 		stats[STAT_HEALTH] = ent->v->health;
 		char *weaponmodel_name = PR_GetEntityString(ent->v->weaponmodel);
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 		char weaponmodel[MAX_QPATH] = {0};
-		if (QC_Active()) {
-			if (QC_CopyEntityString(ent, "weaponmodel", weaponmodel, sizeof(weaponmodel), NULL)
-				== QC_PLUGIN_OK) weaponmodel_name = weaponmodel;
+		if (QCX_Active()) {
+			if (QCX_CopyEntityString(ent, "weaponmodel", weaponmodel, sizeof(weaponmodel), NULL)
+				== QCX_PLUGIN_OK) weaponmodel_name = weaponmodel;
 			else weaponmodel_name = "";
 		}
 #endif
