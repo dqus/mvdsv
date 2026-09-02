@@ -121,58 +121,58 @@ void NQP_Reset (void);
 
 #endif
 
-#ifdef MVDSV_QC2CPP_ENABLED
-#include "qc2cpp/adapter.h"
-#include "qc2cpp/entities.h"
-#include "qc2cpp/globals.h"
+#ifdef QCX_ENABLED
+#include "qcx/adapter.h"
+#include "qcx/entities.h"
+#include "qcx/globals.h"
 
 static inline qbool PR_UsesQc2cppGlobals(void) {
-	return QC_Active() && !pr_nqprogs;
+	return QCX_Active() && !pr_nqprogs;
 }
 
 static inline float *PR_Global_time(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->time : &PR_GLOBAL(time);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->time : &PR_GLOBAL(time);
 }
 static inline float *PR_Global_frametime(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->frametime : &PR_GLOBAL(frametime);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->frametime : &PR_GLOBAL(frametime);
 }
 static inline float *PR_Global_force_retouch(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->force_retouch : &PR_GLOBAL(force_retouch);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->force_retouch : &PR_GLOBAL(force_retouch);
 }
 static inline float *PR_Global_serverflags(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->serverflags : &PR_GLOBAL(serverflags);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->serverflags : &PR_GLOBAL(serverflags);
 }
 static inline float *PR_Global_parm1(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->parm1 : &PR_GLOBAL(parm1);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->parm1 : &PR_GLOBAL(parm1);
 }
 static inline float *PR_Global_total_secrets(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->total_secrets : &PR_GLOBAL(total_secrets);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->total_secrets : &PR_GLOBAL(total_secrets);
 }
 static inline float *PR_Global_total_monsters(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->total_monsters : &PR_GLOBAL(total_monsters);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->total_monsters : &PR_GLOBAL(total_monsters);
 }
 static inline float *PR_Global_found_secrets(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->found_secrets : &PR_GLOBAL(found_secrets);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->found_secrets : &PR_GLOBAL(found_secrets);
 }
 static inline float *PR_Global_killed_monsters(void) {
-	return PR_UsesQc2cppGlobals() ? &QC_Globals()->killed_monsters : &PR_GLOBAL(killed_monsters);
+	return PR_UsesQc2cppGlobals() ? &QCX_Globals()->killed_monsters : &PR_GLOBAL(killed_monsters);
 }
 static inline int PR_Global_self_word(void) {
-	return PR_UsesQc2cppGlobals() ? (int)QC_Globals()->self : PR_GLOBAL(self);
+	return PR_UsesQc2cppGlobals() ? (int)QCX_Globals()->self : PR_GLOBAL(self);
 }
 static inline int PR_Global_other_word(void) {
-	return PR_UsesQc2cppGlobals() ? (int)QC_Globals()->other : PR_GLOBAL(other);
+	return PR_UsesQc2cppGlobals() ? (int)QCX_Globals()->other : PR_GLOBAL(other);
 }
 static inline void PR_SetGlobal_self_word(int value) {
-	if (PR_UsesQc2cppGlobals()) QC_Globals()->self = (qc_shared_entity_slot_t)value;
+	if (PR_UsesQc2cppGlobals()) QCX_Globals()->self = (qcx_shared_entity_slot_t)value;
 	else PR_GLOBAL(self) = value;
 }
 static inline void PR_SetGlobal_other_word(int value) {
-	if (PR_UsesQc2cppGlobals()) QC_Globals()->other = (qc_shared_entity_slot_t)value;
+	if (PR_UsesQc2cppGlobals()) QCX_Globals()->other = (qcx_shared_entity_slot_t)value;
 	else PR_GLOBAL(other) = value;
 }
 static inline void PR_SetGlobal_trace_ent_word(int value) {
-	if (PR_UsesQc2cppGlobals()) QC_Globals()->trace_ent = (qc_shared_entity_slot_t)value;
+	if (PR_UsesQc2cppGlobals()) QCX_Globals()->trace_ent = (qcx_shared_entity_slot_t)value;
 	else PR_GLOBAL(trace_ent) = value;
 }
 static inline void PR_SetGlobal_self_slot(edict_t *entity) {
@@ -182,8 +182,8 @@ static inline void PR_SetGlobal_other_slot(edict_t *entity) {
 	PR_SetGlobal_other_word(entity == NULL ? 0 : entity->e.entnum);
 }
 static inline int PR_QcEntityReference(edict_t *entity) {
-	const qc_entity_id_t slot = QC_EdictToSlot(entity);
-	return slot == QC_INVALID_ENTITY_ID ? 0 : (int)slot;
+	const qcx_entity_id_t slot = QCX_EdictToSlot(entity);
+	return slot == QCX_INVALID_ENTITY_ID ? 0 : (int)slot;
 }
 #else
 static inline float *PR_Global_time(void) { return &PR_GLOBAL(time); }
@@ -235,7 +235,7 @@ int NUM_FOR_EDICT(edict_t *e);
 #define	EDICT_TO_PROG(e) ((byte *)(e)->v - (byte *)sv.game_edicts)
 #define PROG_TO_EDICT(e) (&sv.edicts[(e)/pr_edict_size])
 
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 #define PR_EntityReference(entity) \
 	(PR_UsesQc2cppGlobals() \
 		? PR_QcEntityReference((edict_t *)(entity)) \
@@ -248,7 +248,7 @@ int NUM_FOR_EDICT(edict_t *e);
 #define PR_SetGlobal_trace_ent(entity) \
 	PR_SetGlobal_trace_ent_word(PR_EntityReference(entity))
 
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 #define PR_SetGlobal_self(entity) do { \
 	edict_t *const pr_global_entity_ = (edict_t *)(entity); \
 	if (PR_UsesQc2cppGlobals()) PR_SetGlobal_self_slot(pr_global_entity_); \

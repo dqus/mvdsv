@@ -81,25 +81,25 @@ typedef struct
 	func_t	SetChangeParms;
 } globalvars_t;
 
-#ifdef MVDSV_QC2CPP_ENABLED
+#ifdef QCX_ENABLED
 #include "game/shared_entity_state.h"
 #include <stddef.h>
 
-typedef qc_shared_entity_state_v1_t entvars_t;
+typedef qcx_shared_entity_state_v1_t entvars_t;
 
-_Static_assert(sizeof(entvars_t) == QC_SHARED_ENTITY_STATE_V1_SIZE,
+_Static_assert(sizeof(entvars_t) == QCX_SHARED_ENTITY_STATE_V1_SIZE,
 	"qc2cpp entity size");
-_Static_assert(_Alignof(entvars_t) == QC_SHARED_ENTITY_STATE_V1_ALIGN,
+_Static_assert(_Alignof(entvars_t) == QCX_SHARED_ENTITY_STATE_V1_ALIGN,
 	"qc2cpp entity alignment");
-_Static_assert(offsetof(entvars_t, health) == QC_SHARED_ENTITY_STATE_OFFSET_HEALTH,
+_Static_assert(offsetof(entvars_t, health) == QCX_SHARED_ENTITY_STATE_OFFSET_HEALTH,
 	"qc2cpp entity health");
-_Static_assert(offsetof(entvars_t, enemy) == QC_SHARED_ENTITY_STATE_OFFSET_ENEMY,
+_Static_assert(offsetof(entvars_t, enemy) == QCX_SHARED_ENTITY_STATE_OFFSET_ENEMY,
 	"qc2cpp entity enemy");
-_Static_assert(offsetof(entvars_t, model) == QC_SHARED_ENTITY_STATE_OFFSET_MODEL,
+_Static_assert(offsetof(entvars_t, model) == QCX_SHARED_ENTITY_STATE_OFFSET_MODEL,
 	"qc2cpp entity model");
-_Static_assert(offsetof(entvars_t, netname) == QC_SHARED_ENTITY_STATE_OFFSET_NETNAME,
+_Static_assert(offsetof(entvars_t, netname) == QCX_SHARED_ENTITY_STATE_OFFSET_NETNAME,
 	"qc2cpp entity netname");
-_Static_assert(PROGHEADER_CRC == QC_SHARED_ENTITY_STATE_PROGHEADER_CRC,
+_Static_assert(PROGHEADER_CRC == QCX_SHARED_ENTITY_STATE_PROGHEADER_CRC,
 	"qc2cpp entity ABI CRC");
 #else
 typedef struct
