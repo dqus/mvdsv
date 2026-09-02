@@ -956,7 +956,7 @@ Items stat for sbar, shared by client and demo stats so they stay in sync.
 int SV_ItemsStat (edict_t *ent)
 {
 	// stuff the sigil bits into the high bits of items for sbar
-	int items = (int) ent->v->items | ((int) *PR_Global_serverflags() << 28);
+	int items = (int) ent->v->items | ((int) PR_GLOBAL(serverflags) << 28);
 
 	if (fofs_items2)	// ZQ_ITEMS2 extension
 		items |= (int)EdictFieldFloat(ent, fofs_items2) << 23;

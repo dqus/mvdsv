@@ -26,6 +26,7 @@
 #include "qwsvdef.h"
 #ifdef QCX_ENABLED
 #include "qcx/entities.h"
+#include "qcx/globals.h"
 #endif
 #include "vm_local.h"
 #ifdef QCX_ENABLED
@@ -221,9 +222,8 @@ void PR2_SetGlobalString(string_t* target, char* s)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)target;
-		if (!QCX_SetMapName(s)) {
-			SV_Error("qc2cpp failed to set global string");
-		}
+		(void)s;
+		SV_Error("QCX cannot write a legacy global string");
 		return;
 	}
 	#endif
@@ -231,6 +231,19 @@ void PR2_SetGlobalString(string_t* target, char* s)
 		PR1_SetString(target, s);
 		return;
 	}
+}
+
+void PR_SetMapName(const char *value)
+{
+	#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (value == NULL || !QCX_SetMapName(value)) {
+			SV_Error("qc2cpp game rejected mapname");
+		}
+		return;
+	}
+	#endif
+	PR2_SetGlobalString(&PR_GLOBAL(mapname), (char *)value);
 }
 
 /*
@@ -269,7 +282,7 @@ void PR2_GameStartFrame(qbool isBotFrame)
 {
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
-		QCX_StartFrame((float)sv.time, *PR_Global_frametime(), isBotFrame);
+		QCX_StartFrame((float)sv.time, PR_GLOBAL(frametime), isBotFrame);
 		return;
 	}
 	#endif
@@ -433,7 +446,7 @@ void PR2_GameSetNewParms(void)
 {
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
-		QCX_DispatchSetNewParms(PR_Global_parm1());
+		QCX_DispatchSetNewParms((&PR_GLOBAL(parm1)));
 		return;
 	}
 	#endif
@@ -450,7 +463,7 @@ void PR2_GameSetChangeParms(void)
 {
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
-		QCX_DispatchSetChangeParms(sv_player, PR_Global_parm1());
+		QCX_DispatchSetChangeParms(sv_player, (&PR_GLOBAL(parm1)));
 		return;
 	}
 	#endif
@@ -470,9 +483,9 @@ void PR2_EdictTouch(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
-			QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
-			*PR_Global_frametime());
+		QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+			QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
+			PR_GLOBAL(frametime));
 		return;
 	}
 	#endif
@@ -490,8 +503,8 @@ void PR2_EdictThink(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
-			*PR_Global_time(), *PR_Global_frametime());
+		QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+			PR_GLOBAL(time), PR_GLOBAL(frametime));
 		return;
 	}
 	#endif
@@ -509,9 +522,9 @@ void PR2_EdictBlocked(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictBlocked(QCX_SlotToEdict((qcx_entity_id_t)PR_Global_self_word()),
-			QCX_SlotToEdict((qcx_entity_id_t)PR_Global_other_word()), *PR_Global_time(),
-			*PR_Global_frametime());
+		QCX_DispatchEdictBlocked(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+			QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
+			PR_GLOBAL(frametime));
 		return;
 	}
 	#endif
@@ -625,7 +638,7 @@ void PR2_GameConsoleCommand(void)
 
 			if (NET_CompareAdr(cl->netchan.remote_address, net_from))
 			{
-				PR_SetGlobal_self(cl->edict);
+				PR_GLOBAL(self) = PR_EntityReference(cl->edict);
 				break;
 			}
 		}
@@ -650,7 +663,7 @@ void PR2_ClearEdict(edict_t* e)
 {
 	if (sv_vm && sv_vm->pr2_references && (sv_vm->type == VMI_NATIVE || sv_vm->type == VMI_BYTECODE || sv_vm->type == VMI_COMPILED)) {
 		int old_self = pr_global_struct->self;
-		PR_SetGlobal_self(e);
+		PR_GLOBAL(self) = PR_EntityReference(e);
 		VM_Call(sv_vm, 0, GAME_CLEAR_EDICT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 		pr_global_struct->self = old_self;
 	}
@@ -665,8 +678,8 @@ qbool PR2_SendEntity(edict_t* e, edict_t* to, int sendflags)
 	qbool ret_val = false;
 	int old_self = pr_global_struct->self;
 	int old_other = pr_global_struct->other;
-	PR_SetGlobal_self(e);
-	PR_SetGlobal_other(to);
+	PR_GLOBAL(self) = PR_EntityReference(e);
+	PR_GLOBAL(other) = PR_EntityReference(to);
 	if (sv_vm)
 	{
 		ret_val = VM_Call(sv_vm, 1, GAME_EDICT_CSQCSEND, (int)sendflags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);

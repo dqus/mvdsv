@@ -1,5 +1,6 @@
 #include "qcx/globals.h"
 
+#include "qwsvdef.h"
 #include "game/plugin_api.h"
 
 #include <limits.h>
@@ -14,6 +15,9 @@ static qcx_byte_count_t qcx_global_object_size;
 static float *qcx_deathmatch;
 static float *qcx_coop;
 static float *qcx_teamplay;
+static globalvars_t *qcx_previous_global_struct;
+static float *qcx_previous_globals;
+static qbool qcx_globals_bound;
 
 static qcx_engine_type_id_t QCX_EngineTypeId(const char *name)
 {
@@ -145,11 +149,25 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 		*qcx_coop = coop;
 	}
 	*qcx_teamplay = teamplay;
+	if (!qcx_globals_bound) {
+		qcx_previous_global_struct = pr_global_struct;
+		qcx_previous_globals = pr_globals;
+		pr_global_struct = (globalvars_t *)qcx_globals;
+		pr_globals = (float *)qcx_globals;
+		qcx_globals_bound = true;
+	}
 	return 1;
 }
 
 void QCX_ClearGlobals(void)
 {
+	if (qcx_globals_bound) {
+		pr_global_struct = qcx_previous_global_struct;
+		pr_globals = qcx_previous_globals;
+		qcx_previous_global_struct = NULL;
+		qcx_previous_globals = NULL;
+		qcx_globals_bound = false;
+	}
 	qcx_globals = NULL;
 	qcx_globals_available = 0;
 	qcx_global_object_base = 0U;
