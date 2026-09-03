@@ -136,6 +136,7 @@ void ED_Free (edict_t *ed);
 int EDICT_TO_PROG(const edict_t *entity);
 edict_t *PROG_TO_EDICT(int reference);
 edict_t *PR_EntityFieldToEdict(const edict_t *owner, int field_offset);
+void PR_ResetOptionalFieldOffsets(void);
 void PR1_ResolveOptionalFieldOffsets(void);
 
 char *ED_NewString (char *string);

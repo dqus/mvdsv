@@ -52,6 +52,12 @@ int main(void)
 	assert(fofs_maxspeed == 0 && fofs_gravity == 0 && fofs_movement == 0);
 	assert(fofs_vw_index == 0 && fofs_trackent == 0 && fofs_visibility == 0);
 	assert(fofs_hide_players == 0 && fofs_teleported == 0);
+	PR_ResetOptionalFieldOffsets();
+	assert(fofs_items2 == 0 && fofs_maxspeed == 0 && fofs_gravity == 0 && fofs_movement == 0);
+	assert(fofs_vw_index == 0 && fofs_hideentity == 0 && fofs_trackent == 0);
+	assert(fofs_visibility == 0 && fofs_hide_players == 0 && fofs_teleported == 0);
+	PR1_ResolveOptionalFieldOffsets();
+	assert(fofs_hideentity == (int)offsetof(entvars_t, owner));
 	static byte storage[8][sizeof(entvars_t)];
 	memset(&sv, 0, sizeof(sv));
 	pr_edict_size = (int)sizeof(entvars_t);

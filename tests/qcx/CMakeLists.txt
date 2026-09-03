@@ -346,7 +346,6 @@ add_test(NAME qcx_string_routes
 function(qcx_add_legacy_optional_fields_test target)
 	add_executable(${target}
 		legacy_optional_fields_test.c
-		${PROJECT_SOURCE_DIR}/src/pr_optional_fields.c
 		${PROJECT_SOURCE_DIR}/src/pr_edict.c)
 	set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
 	target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
