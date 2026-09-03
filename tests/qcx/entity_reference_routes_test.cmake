@@ -117,3 +117,26 @@ list(LENGTH hideentity_routes hideentity_route_count)
 if(NOT hideentity_route_count EQUAL 2)
 	message(FATAL_ERROR "sv_ents.c: both hideentity consumers must use the selected boundary")
 endif()
+
+# qcx_reentry_test deliberately exercises fatal invalid-reference paths.  Its
+# SV_Error double must never longjmp to a helper frame that has already
+# returned, and its slot double must not compare unrelated pointers by order.
+file(READ "${MVDSV_SOURCE_DIR}/tests/qcx/reentry_test.c" reentry_test)
+if(NOT reentry_test MATCHES "static qbool expecting_error;")
+	message(FATAL_ERROR "reentry fixture must track expected SV_Error calls")
+endif()
+string(FIND "${reentry_test}" "void SV_Error(char *error, ...)\n{\n\t(void)error;\n\tif (!expecting_error)\n\t\tabort();"
+	unexpected_error_guard)
+if(unexpected_error_guard EQUAL -1)
+	message(FATAL_ERROR "reentry fixture must abort on an unexpected SV_Error")
+endif()
+string(FIND "${reentry_test}" "static void expect_invalid_qcx_reference(int reference)\n{\n\texpecting_error = true;"
+	invalid_reference_armed)
+string(FIND "${reentry_test}" "static void expect_invalid_qcx_edict(const edict_t *entity)\n{\n\texpecting_error = true;"
+	invalid_edict_armed)
+if(invalid_reference_armed EQUAL -1 OR invalid_edict_armed EQUAL -1)
+	message(FATAL_ERROR "each expected invalid-reference path must arm SV_Error")
+endif()
+if(reentry_test MATCHES "entity >= entities|entity < entities|entity >= sv\\.edicts|entity < sv\\.edicts")
+	message(FATAL_ERROR "reentry fixture must not order-compare unrelated edict pointers")
+endif()
