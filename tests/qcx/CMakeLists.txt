@@ -226,6 +226,7 @@ add_executable(qcx_reentry_test
 	reentry_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entries.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_movement.c
+	${PROJECT_SOURCE_DIR}/src/pr2_exec.c
 	${PROJECT_SOURCE_DIR}/src/sv_phys.c)
 set_target_properties(qcx_reentry_test PROPERTIES
 	C_STANDARD 11
@@ -234,15 +235,23 @@ set_target_properties(qcx_reentry_test PROPERTIES
 target_include_directories(qcx_reentry_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
-target_compile_options(qcx_reentry_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_reentry_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fdata-sections)
 set_source_files_properties(${PROJECT_SOURCE_DIR}/src/sv_phys.c PROPERTIES
 	COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-parameter;-Wno-empty-body")
+set_source_files_properties(${PROJECT_SOURCE_DIR}/src/pr2_exec.c PROPERTIES
+	COMPILE_OPTIONS "-Wno-missing-field-initializers")
 target_compile_definitions(qcx_reentry_test PRIVATE
 	QCX_ENABLED=1
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
 target_link_libraries(qcx_reentry_test PRIVATE Qc2cppHost::native m)
+if(APPLE)
+	target_link_options(qcx_reentry_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_reentry_test PRIVATE -Wl,--gc-sections)
+endif()
 add_test(NAME qcx_reentry COMMAND qcx_reentry_test)
 
 add_test(NAME qcx_entry_routes

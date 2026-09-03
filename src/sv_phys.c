@@ -166,12 +166,7 @@ qbool SV_RunThink (edict_t *ent)
 		PR_GLOBAL(time) = thinktime;
 		PR_GLOBAL(self) = PR_EntityReference(ent);
 		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
-		#ifdef QCX_ENABLED
-		if (QCX_Active())
-			QCX_DispatchEdictThink(ent, thinktime, PR_GLOBAL(frametime));
-		else
-		#endif
-			PR_EdictThink(ent->v->think);
+		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
 			return false;
@@ -199,24 +194,14 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	{
 		PR_GLOBAL(self) = PR_EntityReference(e1);
 		PR_GLOBAL(other) = PR_EntityReference(e2);
-		#ifdef QCX_ENABLED
-		if (QCX_Active())
-			QCX_DispatchEdictTouch(e1, e2, PR_GLOBAL(time), PR_GLOBAL(frametime));
-		else
-		#endif
-			PR_EdictTouch(e1->v->touch);
+		PR_EdictTouch(e1->v->touch);
 	}
 
 	if (e2->v->touch && e2->v->solid != SOLID_NOT)
 	{
 		PR_GLOBAL(self) = PR_EntityReference(e2);
 		PR_GLOBAL(other) = PR_EntityReference(e1);
-		#ifdef QCX_ENABLED
-		if (QCX_Active())
-			QCX_DispatchEdictTouch(e2, e1, PR_GLOBAL(time), PR_GLOBAL(frametime));
-		else
-		#endif
-			PR_EdictTouch(e2->v->touch);
+		PR_EdictTouch(e2->v->touch);
 	}
 
 	PR_GLOBAL(self) = (old_self);
@@ -569,13 +554,7 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		{
 			PR_GLOBAL(self) = PR_EntityReference(pusher);
 			PR_GLOBAL(other) = PR_EntityReference(check);
-			#ifdef QCX_ENABLED
-			if (QCX_Active())
-				QCX_DispatchEdictBlocked(pusher, check, PR_GLOBAL(time),
-					PR_GLOBAL(frametime));
-			else
-			#endif
-				PR_EdictBlocked (pusher->v->blocked);
+			PR_EdictBlocked (pusher->v->blocked);
 		}
 
 		// move back any entities we already moved
@@ -653,12 +632,7 @@ void SV_Physics_Pusher (edict_t *ent)
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(ent);
 		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
-		#ifdef QCX_ENABLED
-		if (QCX_Active())
-			QCX_DispatchEdictThink(ent, PR_GLOBAL(time), PR_GLOBAL(frametime));
-		else
-		#endif
-			PR_EdictThink(ent->v->think);
+		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
 			return;

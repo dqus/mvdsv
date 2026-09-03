@@ -2794,16 +2794,9 @@ static void Cmd_Join_f (void)
 	SetUpClientEdict (sv_client, sv_client->edict);
 
 	// call the progs to get default spawn parms for the new client
-	#ifdef QCX_ENABLED
-	if (QCX_Active())
-		QCX_DispatchSetNewParms(sv_client->spawn_parms);
-	else
-	#endif
-	{
-		PR_GameSetNewParms();
-		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-			sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
-	}
+	PR_GameSetNewParms();
+	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
+		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	// call the spawn function
 	#ifdef QCX_ENABLED
@@ -2897,16 +2890,9 @@ static void Cmd_Observe_f (void)
 	SetUpClientEdict (sv_client, sv_client->edict);
 
 	// call the progs to get default spawn parms for the new client
-	#ifdef QCX_ENABLED
-	if (QCX_Active())
-		QCX_DispatchSetNewParms(sv_client->spawn_parms);
-	else
-	#endif
-	{
-		PR_GameSetNewParms();
-		for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-			sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
-	}
+	PR_GameSetNewParms();
+	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
+		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	SV_SpawnSpectator ();
 
@@ -3942,14 +3928,7 @@ FIXME
 		}
 
 		// Give the mod a chance to replace the command
-		#ifdef QCX_ENABLED
-		if (QCX_Active())
-			QCX_DispatchEdictBlocked(sv_player,
-				QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)),
-				PR_GLOBAL(time), PR_GLOBAL(frametime));
-		else
-		#endif
-			PR_EdictBlocked(sv_player->v->blocked);
+		PR_EdictBlocked(sv_player->v->blocked);
 
 		// Run the command again
 		SV_RunCmd (ucmd, false, true);
@@ -3992,13 +3971,7 @@ FIXME
 				continue;
 		PR_GLOBAL(self) = PR_EntityReference(ent);
 		PR_GLOBAL(other) = PR_EntityReference(sv_player);
-			#ifdef QCX_ENABLED
-			if (QCX_Active())
-				QCX_DispatchEdictTouch(ent, sv_player, PR_GLOBAL(time),
-					PR_GLOBAL(frametime));
-			else
-			#endif
-				PR_EdictTouch(ent->v->touch);
+			PR_EdictTouch(ent->v->touch);
 			playertouch[n/8] |= 1 << (n%8);
 		}
 	}
