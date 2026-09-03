@@ -344,3 +344,25 @@ native and Wasm configurations passed `qcx_optional_fields`,
 `qcx_legacy_optional_fields_pr2`, and `qc2cpp_server_map_native` or
 `qc2cpp_server_map_wasm` respectively. This records the focused follow-up
 evidence; it does not replace the full Task 10 proof matrix above.
+
+## Post-Task 10 — QCX program-type selection acceptance
+
+Commit `ffb40b2` makes the complete `sv_progtype` domain an unconditional PR2
+contract: values 4 and 5 are named QCX native and Wasm program types, while the
+adapter receives a separate typed transport kind. QCX source no longer
+interprets raw PR2 values 4/5. A build without QCX support recognizes both
+values and terminates with an explicit unavailable-QCX error before `VM_Create`
+can receive either value.
+
+The correction is accepted against qc2cpp
+`86ccf23dfdda3f7ad292e128714e1d01839e68f4` and MVDSV
+`ffb40b26ddd4299ed7af4334ff7dda6d5661a80f`. Native and Wasm builds each
+passed `qcx_program_type_routes`, `qcx_transport`, `qcx_adapter_state`,
+`qcx_globals`, `qcx_entities`, `qcx_naming`, `qcx_entry_routes`, and
+`qcx_startup_routes`. The no-QCX PR2 build also succeeded and real process
+starts with modes 4 and 5 each produced the expected explicit rejection.
+
+Native `qc2cpp_server_map_native` and `qc2cpp_spectator_native`, plus Wasm
+`qc2cpp_server_map_wasm` and `qc2cpp_spectator_wasm`, passed after the
+selection correction. This is focused evidence for program-type selection; it
+does not replace the earlier full adapter proof matrix.
