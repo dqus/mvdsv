@@ -24,10 +24,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #ifdef SERVERONLY
 #include "qwsvdef.h"
-#ifdef QCX_ENABLED
-#include "qcx/adapter.h"
-#include "qcx/save.h"
-#endif
 #else
 #include "quakedef.h"
 #include "vfs.h"
@@ -96,18 +92,20 @@ void SV_SaveGame_f(void)
 		Con_Printf ("Relative pathfnames are not allowed.\n");
 		return;
 	}
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		if (!QCX_SaveGame(Cmd_Argv(1))) {
-			Con_Printf("ERROR: couldn't save qc2cpp game.\n");
-			return;
-		}
+	#ifdef USE_PR2
+	switch (PR2_SaveGame(Cmd_Argv(1))) {
+	case PR2_SAVE_COMPLETE:
 		Con_Printf("qc2cpp game saved.\n");
 		return;
-	} else if (sv.state != ss_active) {
-#else
-	} else if (sv.state != ss_active) {
-#endif
+	case PR2_SAVE_PREPARED:
+	case PR2_SAVE_FAILED:
+		Con_Printf("ERROR: couldn't save qc2cpp game.\n");
+		return;
+	case PR2_SAVE_NOT_SELECTED:
+		break;
+	}
+	#endif
+	if (sv.state != ss_active) {
 		Con_Printf ("Not playing a local game.\n");
 		return;
 #ifndef SERVERONLY
@@ -201,16 +199,16 @@ void SV_LoadGame_f(void)
 		return;
 	}
 
-#ifdef QCX_ENABLED
+	#ifdef USE_PR2
 	{
 		char magic[4];
 		const size_t magic_size = fread(magic, 1U, sizeof(magic), f);
 		if (magic_size == sizeof(magic) && memcmp(magic, "QCMS", sizeof(magic)) == 0) {
 			fclose(f);
-			if (QCX_Active() && QCX_LoadGame(Cmd_Argv(1))) {
-				return;
-			}
-			if (!QCX_PrepareLoadGame(Cmd_Argv(1), mapname, sizeof(mapname))) {
+			const pr2_save_result_t result = PR2_LoadGame(Cmd_Argv(1), mapname,
+				sizeof(mapname));
+			if (result == PR2_SAVE_COMPLETE) return;
+			if (result != PR2_SAVE_PREPARED) {
 				Con_Printf("Error restoring qc2cpp save state\n");
 				return;
 			}

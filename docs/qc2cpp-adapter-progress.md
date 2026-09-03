@@ -194,6 +194,22 @@ QCX string writer for a selected QCX game and otherwise uses the legacy generic
 PR2 string path. The generic setter rejects an attempted legacy global-string
 write while QCX is active instead of assuming every target is mapname.
 
+## Boundary-correction Task 5 — PR2-owned gameplay dispatch
+
+Gameplay sites in `sv_phys.c`, `sv_world.c` and `sv_user.c` now set canonical
+globals and call the unchanged `PR_EdictTouch`, `PR_EdictThink` and
+`PR_EdictBlocked` seams. They neither select QCX nor construct typed dispatcher
+arguments. The existing PR2 implementations select the backend; when QCX is
+active they ignore the scalar `func_t` argument, resolve `self`/`other` from
+canonical globals and dispatch exactly once.
+
+QCMS save/load selection likewise moved behind small PR2 operations. The
+server retains its legacy save flow and owns subsequent prepared-restore
+startup, while PR2 reports whether a selected QCX save was applied in place,
+requires fresh startup, or failed. No callback registry or generic dispatch
+mechanism was introduced. Focused source contracts and native/Wasm re-entry,
+client, save and cross-transport restore acceptance tests cover this boundary.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV
