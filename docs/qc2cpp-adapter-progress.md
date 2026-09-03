@@ -328,3 +328,19 @@ delegates to `PROG_TO_EDICT`; the parallel `PR*_EntityReference` facade and
 
 The PR1 and PR2 non-QCX server builds, focused legacy/QCX unit tests, source
 route audit, and real native/Wasm server-map acceptance all pass.
+
+## Post-Task 10 — optional-field discovery acceptance
+
+Commit `21abe39` centralizes the fixed optional-field matrix in `pr_edict.c`:
+the same table resets all `fofs_*` values and preserves legacy
+`ED_FindFieldOffset` discovery. This is a post-plan cleanup, not a retroactive
+change to the executed boundary-correction plan.
+
+The focused optional-field evidence was rerun against qc2cpp
+`0063ac8cb6b3b3fae6c0068c0f3eac540eb7686f` and MVDSV
+`54be5fb42276d762218fb60710f2b5e8f1969465` (which contains `21abe39`). Both
+native and Wasm configurations passed `qcx_optional_fields`,
+`qcx_optional_field_routes`, `qcx_legacy_optional_fields_pr1`,
+`qcx_legacy_optional_fields_pr2`, and `qc2cpp_server_map_native` or
+`qc2cpp_server_map_wasm` respectively. This records the focused follow-up
+evidence; it does not replace the full Task 10 proof matrix above.
