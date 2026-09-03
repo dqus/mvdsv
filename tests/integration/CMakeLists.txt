@@ -75,7 +75,7 @@ endforeach()
 
 set(qc2cpp_acceptance_root "${CMAKE_BINARY_DIR}/qc2cpp-acceptance")
 set(qc2cpp_generated "${qc2cpp_acceptance_root}/generated")
-set(qc2cpp_fatal_manifest "${CMAKE_CURRENT_SOURCE_DIR}/../qc2cpp/fixtures/fatal/progs.src")
+set(qc2cpp_fatal_manifest "${CMAKE_CURRENT_SOURCE_DIR}/../qcx/fixtures/fatal/progs.src")
 set(qc2cpp_fatal_generated "${qc2cpp_acceptance_root}/fatal-generated")
 set(qc2cpp_fatal_native_build "${qc2cpp_acceptance_root}/fatal-native")
 set(qc2cpp_fatal_native_game "${qc2cpp_fatal_native_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
@@ -118,7 +118,7 @@ add_custom_command(
     OUTPUT "${qc2cpp_fatal_generated}/CMakeLists.txt"
     COMMAND "${qc2cpp_compiler}" "${qc2cpp_fatal_manifest}" -o "${qc2cpp_fatal_generated}"
     DEPENDS "${qc2cpp_compiler}" "${qc2cpp_fatal_manifest}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../qc2cpp/fixtures/fatal/fatal.qc"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../qcx/fixtures/fatal/fatal.qc"
         ${qc2cpp_generated_resource_inputs}
     VERBATIM)
 add_custom_command(
@@ -147,6 +147,14 @@ add_test(NAME qc2cpp_server_map_native
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
         --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
         --output "${qc2cpp_acceptance_root}/runs/native")
+add_test(NAME qc2cpp_legacy_strings_native
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+        --suite map --mode native --server $<TARGET_FILE:mvdsv>
+        --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+        --output "${CMAKE_BINARY_DIR}/tests/qcx/legacy-strings-native/run"
+        --expect-legacy-strings)
+set_tests_properties(qc2cpp_legacy_strings_native PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
 if(TARGET qc2cpp_optional_fields_native_assets)
     add_test(NAME qc2cpp_optional_fields_native
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
@@ -274,6 +282,14 @@ if(MVDSV_QC2CPP_WASM)
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/wasm")
+    add_test(NAME qc2cpp_legacy_strings_wasm
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+            --output "${CMAKE_BINARY_DIR}/tests/qcx/legacy-strings-wasm/run"
+            --expect-legacy-strings)
+    set_tests_properties(qc2cpp_legacy_strings_wasm PROPERTIES
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
     if(TARGET qc2cpp_optional_fields_wasm_assets)
         add_test(NAME qc2cpp_optional_fields_wasm
             COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"

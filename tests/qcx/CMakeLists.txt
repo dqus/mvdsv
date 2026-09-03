@@ -226,6 +226,7 @@ add_executable(qcx_reentry_test
 	reentry_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entries.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_movement.c
+	${PROJECT_SOURCE_DIR}/src/qcx/strings.c
 	${PROJECT_SOURCE_DIR}/src/pr2_exec.c
 	${PROJECT_SOURCE_DIR}/src/sv_phys.c)
 set_target_properties(qcx_reentry_test PROPERTIES
@@ -309,6 +310,30 @@ add_test(NAME qcx_optional_field_routes
 	COMMAND ${CMAKE_COMMAND}
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_field_routes_test.cmake)
+
+add_executable(qcx_legacy_strings_test
+	legacy_strings_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/strings.c)
+set_target_properties(qcx_legacy_strings_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_legacy_strings_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_legacy_strings_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qcx_legacy_strings_test PRIVATE
+	QCX_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_legacy_strings_test PRIVATE Qc2cppHost::native)
+add_test(NAME qcx_legacy_strings COMMAND qcx_legacy_strings_test)
+
+add_test(NAME qcx_string_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/string_routes_test.cmake)
 
 function(qcx_add_legacy_optional_fields_test target)
 	add_executable(${target}

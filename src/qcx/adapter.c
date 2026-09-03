@@ -7,6 +7,7 @@
 #include "qcx/globals.h"
 #include "qcx/services.h"
 #include "qcx/save.h"
+#include "qcx/strings.h"
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #endif
@@ -96,6 +97,7 @@ void QCX_UnloadProgs(void)
 	if (!QCX_AdapterStateIdle(&qcx_state)) {
 		return;
 	}
+	QCX_ClearLegacyStringBorrows();
 	QCX_ClearGlobals();
 	QCX_ClearEntities();
 	qcx_published = false;
@@ -333,6 +335,7 @@ void QCX_Unpublish(void *context)
 	if (!qcx_published) {
 		return;
 	}
+	QCX_ClearLegacyStringBorrows();
 	QCX_ClearGlobals();
 	QCX_ClearEntities();
 	qcx_published = false;
