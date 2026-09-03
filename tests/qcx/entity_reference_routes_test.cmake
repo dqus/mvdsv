@@ -2,8 +2,8 @@ if(NOT DEFINED MVDSV_SOURCE_DIR)
 	message(FATAL_ERROR "MVDSV_SOURCE_DIR is required")
 endif()
 
-# This is the complete ledger for the entity-reference audit.  The first group
-# is reachable by a QCX game and must use the selected PR conversion boundary.
+# This is the complete ledger for the entity-reference audit. The first group
+# is reachable by a QCX game and must use the selected conversion boundary.
 # The remaining uses execute only legacy PR1/PR2 VM data or define its ABI.
 set(qcx_live_sources
 	src/sv_ents.c
@@ -15,15 +15,46 @@ set(legacy_only_sources
 	src/g_public.h
 	src/pr_cmds.c
 	src/pr_edict.c
-	src/pr_entity_references.c
 	src/pr_exec.c
 	src/pr2_cmds.c
 	src/pr2_exec.c
 	src/progs.h
 	src/sv_init.c)
 
+if(EXISTS "${MVDSV_SOURCE_DIR}/src/pr_entity_references.c")
+	message(FATAL_ERROR "standalone entity-reference implementation must be removed")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/progs.h" progs_header)
+if(progs_header MATCHES "#define[ \t]+EDICT_TO_PROG"
+		OR progs_header MATCHES "#define[ \t]+PROG_TO_EDICT")
+	message(FATAL_ERROR "canonical entity conversions must be functions")
+endif()
+if(NOT progs_header MATCHES "int EDICT_TO_PROG\\(const edict_t \\*entity\\);"
+		OR NOT progs_header MATCHES "edict_t \\*PROG_TO_EDICT\\(int reference\\);"
+		OR NOT progs_header MATCHES "edict_t \\*PR_EntityFieldToEdict\\(const edict_t \\*owner, int field_offset\\);")
+	message(FATAL_ERROR "canonical entity conversion declarations are incomplete")
+endif()
+
 execute_process(
-	COMMAND sh -c "rg -n 'EDICT_TO_PROG|PROG_TO_EDICT|G_EDICT\\b|G_EDICTNUM|NUM_FOR_GAME_EDICT|sv\\.game_edicts|pr_edict_size' src | cut -d: -f1 | sort -u"
+	COMMAND rg -n -g "!entity_reference_routes_test.cmake"
+		"PR1_EntityReference|PR2_EntityReference|PR_EntityReference|PR1_EntityFromReference|PR2_EntityFromReference|PR_EntityFromReference"
+		src tests/qcx
+	WORKING_DIRECTORY "${MVDSV_SOURCE_DIR}"
+	OUTPUT_VARIABLE parallel_routes
+	RESULT_VARIABLE parallel_result)
+if(parallel_result EQUAL 0)
+	message(FATAL_ERROR "parallel entity-reference facade remains:\n${parallel_routes}")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/pr2_exec.c" pr2_exec)
+if(pr2_exec MATCHES "QCX_SlotToEdict|QCX_EdictToSlot")
+	message(FATAL_ERROR
+		"pr2_exec.c must route program entity words through the canonical functions")
+endif()
+
+execute_process(
+	COMMAND sh -c "rg -n 'G_EDICT\\b|G_EDICTNUM|NUM_FOR_GAME_EDICT|sv\\.game_edicts|pr_edict_size' src | cut -d: -f1 | sort -u"
 	WORKING_DIRECTORY "${MVDSV_SOURCE_DIR}"
 	OUTPUT_VARIABLE audit_sources
 	RESULT_VARIABLE audit_result)
@@ -45,7 +76,7 @@ endforeach()
 
 foreach(source IN LISTS qcx_live_sources)
 	file(READ "${MVDSV_SOURCE_DIR}/${source}" content)
-	if(content MATCHES "PROG_TO_EDICT|/ pr_edict_size")
+	if(content MATCHES "G_EDICT\\b|G_EDICTNUM|NUM_FOR_GAME_EDICT|sv\\.game_edicts|pr_edict_size")
 		message(FATAL_ERROR "${source}: live QCX route bypasses selected entity conversion")
 	endif()
 endforeach()
@@ -60,10 +91,23 @@ function(require_selected_route source pattern)
 	endif()
 endfunction()
 
-require_selected_route(src/sv_world.c "PR_EntityFromReference")
-require_selected_route(src/sv_move.c "PR_EntityFromReference")
-require_selected_route(src/sv_phys.c "PR_EntityFromReference")
-require_selected_route(src/sv_send.c "PR_EntityFromReference")
+
+require_selected_route(src/pr_cmds.c "EDICT_TO_PROG")
+require_selected_route(src/pr2_cmds.c "EDICT_TO_PROG")
+require_selected_route(src/pr2_exec.c "EDICT_TO_PROG")
+require_selected_route(src/sv_init.c "EDICT_TO_PROG")
+require_selected_route(src/sv_main.c "EDICT_TO_PROG")
+require_selected_route(src/sv_move.c "EDICT_TO_PROG")
+require_selected_route(src/sv_phys.c "EDICT_TO_PROG")
+require_selected_route(src/sv_user.c "EDICT_TO_PROG")
+require_selected_route(src/sv_world.c "EDICT_TO_PROG")
+
+require_selected_route(src/qcx/test_observer.c "PROG_TO_EDICT")
+
+require_selected_route(src/sv_world.c "PROG_TO_EDICT")
+require_selected_route(src/sv_move.c "PROG_TO_EDICT")
+require_selected_route(src/sv_phys.c "PROG_TO_EDICT")
+require_selected_route(src/sv_send.c "PROG_TO_EDICT")
 require_selected_route(src/sv_ents.c "PR_EntityFieldToEdict")
 
 file(READ "${MVDSV_SOURCE_DIR}/src/sv_ents.c" ents_content)

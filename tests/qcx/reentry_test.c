@@ -1,10 +1,12 @@
 #include <assert.h>
 #include <stddef.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
 #include "qwsvdef.h"
 #include "qcx/entries.h"
+#include "qcx/entities.h"
 #include "qcx/globals.h"
 #include "qcx/services.h"
 
@@ -27,13 +29,11 @@ static qbool mutate_touch_time;
 static qbool qcx_active = true;
 static int legacy_call_count;
 static func_t legacy_function;
+static jmp_buf error_jump;
 vec3_t vec3_origin;
 server_t sv;
 server_static_t svs;
 globalvars_t legacy_globals;
-globalvars_t *pr_global_struct = (globalvars_t *)&globals;
-float *pr_globals = (float *)&globals;
-int pr_edict_size;
 extern double sv_frametime;
 client_t *sv_client;
 edict_t *sv_player;
@@ -46,7 +46,7 @@ cvar_t sv_maxfps;
 void SV_Error(char *error, ...)
 {
 	(void)error;
-	abort();
+	longjmp(error_jump, 1);
 }
 
 void Con_DPrintf(char *format, ...) { (void)format; }
@@ -56,14 +56,6 @@ char *PR1_GetString(int value) { (void)value; return ""; }
 void *VM_ExplicitArgPtr(vm_t *vm, intptr_t value)
 { (void)vm; (void)value; return NULL; }
 
-int PR1_EntityReference(const edict_t *entity) { (void)entity; return 0; }
-edict_t *PR1_EntityFromReference(int reference) { (void)reference; return &sv.edicts[0]; }
-edict_t *PR1_EntityFieldToEdict(const edict_t *owner, int field_offset)
-{
-	(void)owner;
-	(void)field_offset;
-	return &sv.edicts[0];
-}
 qcx_plugin_status_t QCX_CopyEntityString(const edict_t *entity, const char *field,
 	char *out, uint32_t capacity, uint32_t *required)
 {
@@ -219,8 +211,27 @@ intptr_t QDECL VM_Call(vm_t *vm, int nargs, int callnum, ...)
 	return 0;
 }
 
+static void expect_invalid_qcx_reference(int reference)
+{
+	if (setjmp(error_jump) == 0) {
+		(void)PROG_TO_EDICT(reference);
+		assert(!"invalid QCX entity reference did not fail");
+	}
+}
+
+static void expect_invalid_qcx_edict(const edict_t *entity)
+{
+	if (setjmp(error_jump) == 0) {
+		(void)EDICT_TO_PROG(entity);
+		assert(!"invalid QCX edict did not fail");
+	}
+}
+
 int main(void)
 {
+	pr_global_struct = (globalvars_t *)&globals;
+	pr_globals = (float *)&globals;
+	pr_edict_size = (int)sizeof(entvars_t);
 	for (int index = 0; index < 8; ++index) {
 		entities[index].v = &entity_states[index];
 		entities[index].e.entnum = index;
@@ -248,13 +259,16 @@ int main(void)
 	PR2_EdictBlocked(96);
 	assert(legacy_call_count == 3 && legacy_function == 96);
 	qcx_active = true;
-	assert(PR2_EntityReference(NULL) == 0);
-	assert(PR2_EntityReference(&entities[5]) == 5);
-	assert(PR2_EntityFromReference(0) == &entities[0]);
-	assert(PR2_EntityFromReference(6) == &entities[6]);
+	assert(EDICT_TO_PROG(NULL) == 0);
+	assert(EDICT_TO_PROG(&entities[5]) == 5);
+	assert(PROG_TO_EDICT(0) == &entities[0]);
+	assert(PROG_TO_EDICT(6) == &entities[6]);
 	entity_states[3].owner = 4;
-	assert(PR2_EntityFieldToEdict(&entities[3],
+	assert(PR_EntityFieldToEdict(&entities[3],
 		(int)offsetof(entvars_t, owner)) == &entities[4]);
+	expect_invalid_qcx_reference(8);
+	edict_t rejected = {0};
+	expect_invalid_qcx_edict(&rejected);
 
 	QCX_DispatchEdictTouch(&entities[3], &entities[4], 17.0f, 0.125f);
 	assert(observed_first == 3U && observed_second == 4U);

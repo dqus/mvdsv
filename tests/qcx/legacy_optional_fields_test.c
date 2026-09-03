@@ -7,19 +7,46 @@
 int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
 int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_teleported;
 server_t sv;
-int pr_edict_size;
 
 void SV_Error(char *error, ...) { (void)error; assert(!"unexpected SV_Error"); }
 
-int ED_FindFieldOffset(char *name)
+#ifndef USE_PR2
+static dprograms_t field_program;
+static ddef_t field_definitions[] = {
+	{.ofs = 1U, .s_name = 1},
+	{.ofs = (unsigned short)(offsetof(entvars_t, owner) / sizeof(float)),
+		.s_name = 2},
+};
+static char field_names[][16] = {"", "items2", "hideentity"};
+
+char *PR1_GetString(int index)
+{
+	assert(index >= 0 && index < 3);
+	return field_names[index];
+}
+
+static void configure_field_discovery(void)
+{
+	field_program.numfielddefs =
+		(int)(sizeof(field_definitions) / sizeof(field_definitions[0]));
+	progs = &field_program;
+	pr_fielddefs = field_definitions;
+}
+#else
+int ED2_FindFieldOffset(char *name)
 {
 	if (strcmp(name, "items2") == 0) return 4;
-	if (strcmp(name, "hideentity") == 0) return (int)offsetof(entvars_t, owner);
+	if (strcmp(name, "hideentity") == 0)
+		return (int)offsetof(entvars_t, owner);
 	return 0;
 }
 
+static void configure_field_discovery(void) {}
+#endif
+
 int main(void)
 {
+	configure_field_discovery();
 	PR1_ResolveOptionalFieldOffsets();
 	assert(fofs_items2 == 4 && fofs_hideentity == (int)offsetof(entvars_t, owner));
 	assert(fofs_maxspeed == 0 && fofs_gravity == 0 && fofs_movement == 0);
@@ -34,6 +61,6 @@ int main(void)
 		sv.edicts[slot].v = (entvars_t *)storage[slot];
 	}
 	((eval_t *)((byte *)sv.edicts[3].v + fofs_hideentity))->_int = 4 * pr_edict_size;
-	assert(PR1_EntityFieldToEdict(&sv.edicts[3], fofs_hideentity) == &sv.edicts[4]);
+	assert(PR_EntityFieldToEdict(&sv.edicts[3], fofs_hideentity) == &sv.edicts[4]);
 	return 0;
 }
