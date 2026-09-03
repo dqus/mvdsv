@@ -103,14 +103,6 @@ void SV_CheckVelocity (edict_t *ent)
 	for (i=0 ; i<3 ; i++)
 	{
 		const char *classname_text = PR_GetEntityString(ent->v->classname);
-#ifdef QCX_ENABLED
-		char classname[MAX_QPATH] = {0};
-		if (QCX_Active()) {
-			if (QCX_CopyEntityString(ent, "classname", classname, sizeof(classname), NULL)
-				== QCX_PLUGIN_OK) classname_text = classname;
-			else classname_text = "";
-		}
-#endif
 		if (IS_NAN(ent->v->velocity[i]))
 		{
 			Con_DPrintf ("Got a NaN velocity on %s\n", classname_text);
