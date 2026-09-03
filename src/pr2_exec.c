@@ -27,6 +27,7 @@
 #ifdef QCX_ENABLED
 #include "qcx/entities.h"
 #include "qcx/globals.h"
+#include "qcx/save.h"
 #endif
 #include "vm_local.h"
 #ifdef QCX_ENABLED
@@ -473,6 +474,37 @@ void PR2_GameSetChangeParms(void)
 	{
 		PR1_GameSetChangeParms();
 	}
+}
+
+pr2_save_result_t PR2_SaveGame(const char *name)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		return QCX_SaveGame(name) ? PR2_SAVE_COMPLETE : PR2_SAVE_FAILED;
+	}
+#else
+	(void)name;
+#endif
+	return PR2_SAVE_NOT_SELECTED;
+}
+
+pr2_save_result_t PR2_LoadGame(const char *name, char *map_name,
+	unsigned int map_name_size)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active() && QCX_LoadGame(name)) {
+		return PR2_SAVE_COMPLETE;
+	}
+	if (QCX_PrepareLoadGame(name, map_name, map_name_size)) {
+		return PR2_SAVE_PREPARED;
+	}
+	return PR2_SAVE_FAILED;
+#else
+	(void)name;
+	(void)map_name;
+	(void)map_name_size;
+	return PR2_SAVE_NOT_SELECTED;
+#endif
 }
 
 //===========================================================================

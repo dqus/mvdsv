@@ -13,9 +13,9 @@ server_static_t svs;
 cvar_t sv_progsname;
 char fs_gamedir[MAX_OSPATH];
 globalvars_t restore_test_globals;
-globalvars_t *pr_global_struct = &restore_test_globals;
-float *pr_globals = (float *)&restore_test_globals;
 qcx_shared_global_state_v1_t restore_shared_globals;
+globalvars_t *pr_global_struct = (globalvars_t *)&restore_shared_globals;
+float *pr_globals = (float *)&restore_shared_globals;
 
 static uint32_t guest_validation_calls;
 static uint32_t guest_restore_calls;
@@ -189,6 +189,8 @@ static void reset_live_engine(void)
 	memset(&svs, 0, sizeof(svs));
 	memset(&restore_test_globals, 0, sizeof(restore_test_globals));
 	memset(&restore_shared_globals, 0, sizeof(restore_shared_globals));
+	pr_global_struct = (globalvars_t *)&restore_shared_globals;
+	pr_globals = (float *)&restore_shared_globals;
 	guest_validation_calls = 0U;
 	guest_restore_calls = 0U;
 	selection_calls = 0U;
