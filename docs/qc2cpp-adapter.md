@@ -7,7 +7,9 @@ MVDSV loads a qc2cpp-generated QuakeWorld game through either server transport:
 | `4` | `qc2cpp-native` | platform shared library (`game.dylib`, `game.so`, or `game.dll`) |
 | `5` | `qc2cpp-wasm` | `game.wasm` |
 
-The ABI and architecture are defined by the [canonical qc2cpp adapter specification](https://github.com/dqus/qc2cpp/blob/main/docs/superpowers/specs/2026-08-31-mvdsv-qc2cpp-adapter-design.md). This is the MVDSV operations guide; it does not redefine that contract.
+The ABI and architecture are defined by the [canonical qc2cpp adapter specification](https://github.com/dqus/qc2cpp/blob/main/docs/superpowers/specs/2026-08-31-mvdsv-qc2cpp-adapter-design.md)
+and its [QCX boundary correction](https://github.com/dqus/qc2cpp/blob/main/docs/superpowers/specs/2026-09-02-mvdsv-qcx-boundary-correction-design.md).
+This is the MVDSV operations guide; it does not redefine either contract.
 
 ## Prerequisites
 
@@ -131,3 +133,44 @@ new prefix, configure both MVDSV modes, and run the full qc2cpp contract/corpus
 matrix plus the command above. Record qc2cpp, MVDSV, FTE, SDK, compiler,
 generated-artifact, and asset identities in CI/release output before changing
 the known-good pin.
+
+## QCX boundary-correction acceptance record
+
+The correction was accepted with qc2cpp
+`a08f9ac8dee4e2eb75859b1e1552d0eddc3b925a` and MVDSV
+`d3c8856` using the Wasmtime 48.0.0 C API SDK. Wasmtime remains a dependency
+only of the Wasm transport; it is not part of the native transport, game ABI,
+Wasm module format, or QCMS save format.
+
+The following commands completed successfully from their respective checkouts:
+
+```sh
+# qc2cpp
+cmake --build build/adapter-sdk -j 8
+cmake --install build/adapter-sdk --prefix build/adapter-install --component HostSdk
+QC2CPP_ID1_DIR=/Users/ivan/qdata \
+  ctest --test-dir build/adapter-sdk -j 10 --output-on-failure \
+  -R '^(qc_plugin_api|qc_native_plugin|qc_host_semantics|qc_host_sdk_install|qc_mvdsv_entry_contract|qc_wasmtime_host|draft34_codegen|draft34_reentry_native|draft34_reentry_wasmtime|draft34_generated_wasmtime)$'
+
+# MVDSV native and Wasm adapter routes
+cmake -S . -B build/qc2cpp-native -G Ninja
+cmake -S . -B build/qc2cpp-wasm -G Ninja
+cmake --build build/qc2cpp-native -j 8
+cmake --build build/qc2cpp-wasm -j 8
+ctest --test-dir build/qc2cpp-native --output-on-failure -R '^qcx_'
+ctest --test-dir build/qc2cpp-wasm --output-on-failure -R '^qcx_'
+
+# MVDSV generated-game acceptance, including each QCMS direction.
+ctest --test-dir build/qc2cpp-native --output-on-failure \
+  -R '^(qc2cpp_server_map_native|qc2cpp_legacy_strings_native|qc2cpp_optional_fields_native|qc2cpp_save_native_native|qc2cpp_fatal_native|qc2cpp_restore_oom_native|qc2cpp_client_native|qc2cpp_network_native|qc2cpp_spectator_native|qc2cpp_save_connected_native)$'
+ctest --test-dir build/qc2cpp-wasm --output-on-failure \
+  -R '^(qc2cpp_server_map_wasm|qc2cpp_legacy_strings_wasm|qc2cpp_optional_fields_wasm|qc2cpp_save_wasm_wasm|qc2cpp_save_native_wasm|qc2cpp_save_wasm_native|qc2cpp_fatal_wasm|qc2cpp_restore_oom_wasm|qc2cpp_network_wasm|qc2cpp_spectator_wasm|qc2cpp_save_connected_wasm)$'
+```
+
+`qc2cpp_server_map_{native,wasm}` also contains the real generated-game
+non-zero entity-reference observation; there is deliberately no duplicate
+process target for it. `draft34_codegen` verifies the owner-local generated
+topology: no `game_declarations.hpp`, no module construction in owner headers,
+and no source unit including the aggregate `game_modules.hpp`. The aggregate
+remains only the composition boundary, so this correction did not restore a
+central declaration registry or giant generated source file.
