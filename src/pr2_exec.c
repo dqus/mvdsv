@@ -37,7 +37,8 @@
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #define QCX_RECORD_LEGACY_GAME_ENTRY() do { \
-	if (sv_progtype.value == QCX_PROGTYPE_NATIVE || sv_progtype.value == QCX_PROGTYPE_WASM) { \
+	if ((int)sv_progtype.value == PR2_PROGTYPE_QCX_NATIVE \
+		|| (int)sv_progtype.value == PR2_PROGTYPE_QCX_WASM) { \
 		QCX_TestObserverLegacyGameEntry(); \
 	} \
 } while (0)
@@ -53,7 +54,7 @@ extern field_t *fields;
 extern double sv_frametime;
 
 // 0 = pr1 (qwprogs.dat etc), 1 = native (.so/.dll), 2 = q3vm (.qvm), 3 = q3vm (.qvm) with JIT,
-// 4 = qc2cpp native, 5 = qc2cpp Wasm.
+// 4 = QCX native, 5 = QCX Wasm.
 cvar_t sv_progtype = { "sv_progtype","0" };
 
 // 0 = standard, 1 = pr2 mods set string_t fields as byte offsets to location of actual strings
@@ -83,8 +84,8 @@ void PR2_Init(void)
 	{
 		usedll = Q_atoi(COM_Argv(p + 1));
 
-		if (usedll > 5 || usedll < VMI_NONE)
-			usedll = VMI_NONE;
+		if (usedll > PR2_PROGTYPE_QCX_WASM || usedll < PR2_PROGTYPE_PR1)
+			usedll = PR2_PROGTYPE_PR1;
 		Cvar_SetValue(&sv_progtype,usedll);
 	}
 
@@ -698,13 +699,24 @@ void PR2_UnLoadProgs(void)
 //===========================================================================
 void PR2_LoadProgs(void)
 {
+	const pr2_progtype_t program_type = (pr2_progtype_t)(int)sv_progtype.value;
+	switch (program_type)
+	{
+	case PR2_PROGTYPE_QCX_NATIVE:
+	case PR2_PROGTYPE_QCX_WASM:
 #ifdef QCX_ENABLED
-	if (sv_progtype.value == QCX_PROGTYPE_NATIVE || sv_progtype.value == QCX_PROGTYPE_WASM) {
-		QCX_LoadProgs();
-		return;
-	}
+		QCX_LoadProgs(program_type == PR2_PROGTYPE_QCX_NATIVE
+			? QCX_TRANSPORT_NATIVE : QCX_TRANSPORT_WASM);
+#else
+		SV_Error("QCX program type %d selected, but this build has no QCX support",
+			(int)program_type);
 #endif
-	sv_vm = VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value );
+		return;
+	default:
+		break;
+	}
+	sv_vm = VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls,
+		(vmInterpret_t)program_type );
 
 	if ( sv_vm )
 	{

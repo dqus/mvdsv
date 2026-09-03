@@ -1,14 +1,11 @@
 #ifndef MVDSV_QC2CPP_ADAPTER_H
 #define MVDSV_QC2CPP_ADAPTER_H
 
-#include "game/plugin_api.h"
-
-#define QCX_PROGTYPE_NATIVE 4
-#define QCX_PROGTYPE_WASM 5
+#include "qcx/transport.h"
 
 qbool QCX_Active(void);
 const qcx_game_api_v1_t *QCX_Game(void);
-void QCX_LoadProgs(void);
+void QCX_LoadProgs(qcx_transport_kind_t transport_kind);
 void QCX_InitProg(void);
 void QCX_Shutdown(void);
 void QCX_UnloadProgs(void);

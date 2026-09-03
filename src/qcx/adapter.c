@@ -21,6 +21,12 @@ static qcx_adapter_state_t qcx_state;
 static qcx_host_api_v1_t qcx_host;
 static qbool qcx_published;
 
+static const char *QCX_TransportName(qcx_transport_kind_t transport_kind)
+{
+	return transport_kind == QCX_TRANSPORT_NATIVE ? "native"
+		: transport_kind == QCX_TRANSPORT_WASM ? "Wasm" : "unknown";
+}
+
 qbool QCX_Active(void)
 {
 	return QCX_AdapterStateActive(&qcx_state);
@@ -31,7 +37,7 @@ const qcx_game_api_v1_t *QCX_Game(void)
 	return qcx_transport == NULL ? NULL : QCX_TransportGame(qcx_transport);
 }
 
-void QCX_LoadProgs(void)
+void QCX_LoadProgs(qcx_transport_kind_t transport_kind)
 {
 	qcx_program_diagnostic_v1_t diagnostic = {0};
 	qcx_host = (qcx_host_api_v1_t){
@@ -45,11 +51,11 @@ void QCX_LoadProgs(void)
 	QCX_BindNetworkServices(&qcx_host);
 	QCX_BindUnavailableServices(&qcx_host);
 	qcx_published = false;
-	QCX_AdapterStateSelect(&qcx_state, (int)sv_progtype.value);
-	const qcx_plugin_status_t status = QCX_TransportOpen((int)sv_progtype.value,
+	QCX_AdapterStateSelect(&qcx_state, transport_kind);
+	const qcx_plugin_status_t status = QCX_TransportOpen(transport_kind,
 		fs_gamedir, sv_progsname.string, &qcx_host, &qcx_transport, &diagnostic);
 	if (status != QCX_PLUGIN_OK) {
-		SV_Error("qc2cpp mode %d failed to load %s: %.*s", (int)sv_progtype.value,
+		SV_Error("QCX %s transport failed to load %s: %.*s", QCX_TransportName(transport_kind),
 			sv_progsname.string, (int)diagnostic.message_size, diagnostic.message);
 	}
 }
@@ -58,7 +64,7 @@ void QCX_InitProg(void)
 {
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (game == NULL) {
-		SV_Error("qc2cpp mode %d has no active game", qcx_state.mode);
+		SV_Error("QCX %s transport has no active game", QCX_TransportName(qcx_state.transport_kind));
 	}
 #if defined(QCX_TESTS)
 	QCX_TestObserverInitBegin();
