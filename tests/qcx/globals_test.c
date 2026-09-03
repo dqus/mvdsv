@@ -43,7 +43,7 @@ static void assert_invalid_globals_fixture(const char *directory, const char *na
 {
 	qcx_transport_t *transport = NULL;
 	qcx_program_diagnostic_v1_t diagnostic = {0};
-	assert(QCX_TransportOpen(4, directory, name, NULL, &transport, &diagnostic)
+	assert(QCX_TransportOpen(QCX_TRANSPORT_NATIVE, directory, name, NULL, &transport, &diagnostic)
 		== QCX_PLUGIN_OK);
 	active_game = QCX_TransportGame(transport);
 	assert(active_game->init(active_game->context, 0, 1U) != 0U);
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 	assert(argc == 2);
 	qcx_transport_t *transport = NULL;
 	qcx_program_diagnostic_v1_t diagnostic = {0};
-	assert(QCX_TransportOpen(4, argv[1], "game", NULL, &transport, &diagnostic)
+	assert(QCX_TransportOpen(QCX_TRANSPORT_NATIVE, argv[1], "game", NULL, &transport, &diagnostic)
 		== QCX_PLUGIN_OK);
 	active_game = QCX_TransportGame(transport);
 	assert(active_game->init(active_game->context, 0, 1U) != 0U);

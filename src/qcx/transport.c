@@ -5,7 +5,7 @@
 #include <string.h>
 
 struct qcx_transport {
-	int mode;
+	qcx_transport_kind_t transport_kind;
 	void *handle;
 	qcx_game_api_v1_t game;
 };
@@ -52,7 +52,7 @@ static int QCX_TransportGameDirIsAbsolute(const char *gamedir)
 #endif
 }
 
-qcx_plugin_status_t QCX_TransportOpen(int mode, const char *gamedir,
+qcx_plugin_status_t QCX_TransportOpen(qcx_transport_kind_t transport_kind, const char *gamedir,
                                     const char *basename,
                                     const qcx_host_api_v1_t *host,
                                     qcx_transport_t **out,
@@ -65,7 +65,8 @@ qcx_plugin_status_t QCX_TransportOpen(int mode, const char *gamedir,
 	if (diagnostic != NULL) {
 		memset(diagnostic, 0, sizeof(*diagnostic));
 	}
-	if (out == NULL || (mode != 4 && mode != 5)) {
+	if (out == NULL || (transport_kind != QCX_TRANSPORT_NATIVE
+		&& transport_kind != QCX_TRANSPORT_WASM)) {
 		return QCX_PLUGIN_BAD_ARGUMENT;
 	}
 	if (!QCX_TransportGameDirIsAbsolute(gamedir) || !QCX_TransportBasenameIsValid(basename)) {
@@ -81,7 +82,7 @@ qcx_plugin_status_t QCX_TransportOpen(int mode, const char *gamedir,
 		return QCX_PLUGIN_UNAVAILABLE;
 	}
 	qcx_plugin_status_t status;
-	if (mode == 4) {
+	if (transport_kind == QCX_TRANSPORT_NATIVE) {
 		status = QCX_NativeOpen(gamedir, basename, host, &transport->handle,
 			&transport->game, diagnostic);
 	} else {
@@ -92,7 +93,7 @@ qcx_plugin_status_t QCX_TransportOpen(int mode, const char *gamedir,
 		free(transport);
 		return status;
 	}
-	transport->mode = mode;
+	transport->transport_kind = transport_kind;
 	*out = transport;
 	return QCX_PLUGIN_OK;
 }
@@ -107,9 +108,9 @@ void QCX_TransportClose(qcx_transport_t *transport)
 	if (transport == NULL) {
 		return;
 	}
-	if (transport->mode == 4) {
+	if (transport->transport_kind == QCX_TRANSPORT_NATIVE) {
 		QCX_NativeClose(transport->handle);
-	} else if (transport->mode == 5) {
+	} else if (transport->transport_kind == QCX_TRANSPORT_WASM) {
 		QCX_WasmClose(transport->handle);
 	}
 	free(transport);
