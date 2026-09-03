@@ -22,6 +22,14 @@
 #ifndef __PR2_H__
 #define __PR2_H__
 
+typedef enum pr2_progtype_e {
+	PR2_PROGTYPE_PR1 = 0,
+	PR2_PROGTYPE_NATIVE = 1,
+	PR2_PROGTYPE_BYTECODE = 2,
+	PR2_PROGTYPE_COMPILED = 3,
+	PR2_PROGTYPE_QCX_NATIVE = 4,
+	PR2_PROGTYPE_QCX_WASM = 5
+} pr2_progtype_t;
 
 intptr_t PR2_GameSystemCalls( intptr_t *args );
 extern cvar_t sv_progtype;
