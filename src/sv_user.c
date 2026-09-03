@@ -2813,11 +2813,11 @@ static void Cmd_Observe_f (void)
 	// call the progs to get default spawn parms for the new client
 	PR_GameSetNewParms();
 
-	SV_SpawnSpectator ();
-
 	// copy spawn parms out of the client_t
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
 		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+
+	SV_SpawnSpectator ();
 
 	// call the spawn function
 	PR_GLOBAL(time) = sv.time;
