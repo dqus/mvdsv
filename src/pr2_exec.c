@@ -500,20 +500,6 @@ void PR2_PrepareRestoreResources(qbool restoring_qcx)
 #endif
 }
 
-static void PR2_ResetOptionalFieldOffsets(void)
-{
-	fofs_items2 = 0;
-	fofs_maxspeed = 0;
-	fofs_gravity = 0;
-	fofs_movement = 0;
-	fofs_vw_index = 0;
-	fofs_hideentity = 0;
-	fofs_trackent = 0;
-	fofs_visibility = 0;
-	fofs_hide_players = 0;
-	fofs_teleported = 0;
-}
-
 void PR2_BindServerState(void)
 {
 #ifdef QCX_ENABLED
@@ -525,7 +511,7 @@ void PR2_BindServerState(void)
 #if defined(QCX_TESTS)
 		QCX_TestObserverServerStateBound();
 #endif
-		PR2_ResetOptionalFieldOffsets();
+		PR_ResetOptionalFieldOffsets();
 		if (!QCX_ResolveOptionalEntityFields()) {
 			SV_Error("qc2cpp game did not publish compatible optional entity fields");
 		}
