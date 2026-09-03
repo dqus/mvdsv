@@ -28,6 +28,7 @@
 #include "qcx/entities.h"
 #include "qcx/globals.h"
 #include "qcx/save.h"
+#include "qcx/strings.h"
 #endif
 #include "vm_local.h"
 #ifdef QCX_ENABLED
@@ -158,6 +159,16 @@ intptr_t PR2_GlobalStringLocation(string_t offset)
 
 char *PR2_GetEntityString(string_t num)
 {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		const char *const borrowed = QCX_BorrowLegacyString(num);
+		if (borrowed == NULL) {
+			SV_Error("qc2cpp could not resolve legacy string %d", num);
+			return "";
+		}
+		return (char *)borrowed;
+	}
+#endif
 
 	if(!sv_vm)
 		return PR1_GetString(num);

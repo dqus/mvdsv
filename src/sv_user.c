@@ -449,14 +449,6 @@ static void Cmd_New_f (void)
 		MSG_WriteString (&sv_client->netchan.message, "");
 	else {
 		const char *levelname_text = PR_GetEntityString(sv.edicts->v->message);
-#ifdef QCX_ENABLED
-		char levelname[MAX_INFO_STRING] = {0};
-		if (QCX_Active()) {
-			if (QCX_CopyEntityString(sv.edicts, "message", levelname, sizeof(levelname), NULL)
-				== QCX_PLUGIN_OK) levelname_text = levelname;
-			else levelname_text = "";
-		}
-#endif
 		MSG_WriteString (&sv_client->netchan.message, levelname_text);
 	}
 
@@ -959,14 +951,6 @@ static void SV_SpawnSpectator (void)
 	{
 		e = EDICT_NUM(i);
 		const char *classname_text = PR_GetEntityString(e->v->classname);
-#ifdef QCX_ENABLED
-		char classname[MAX_QPATH] = {0};
-		if (QCX_Active()) {
-			if (QCX_CopyEntityString(e, "classname", classname, sizeof(classname), NULL)
-				== QCX_PLUGIN_OK) classname_text = classname;
-			else classname_text = "";
-		}
-#endif
 		if (!strcmp(classname_text, "info_player_start"))
 		{
 			VectorCopy (e->v->origin, sv_player->v->origin);
