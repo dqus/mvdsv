@@ -58,6 +58,18 @@ void		PR2_GameSetNewParms(void);
 #define PR_GameSetNewParms PR2_GameSetNewParms
 void		PR2_GameSetChangeParms(void);
 #define PR_GameSetChangeParms PR2_GameSetChangeParms
+
+typedef enum {
+	PR2_SAVE_NOT_SELECTED,
+	PR2_SAVE_COMPLETE,
+	PR2_SAVE_PREPARED,
+	PR2_SAVE_FAILED
+} pr2_save_result_t;
+
+pr2_save_result_t PR2_SaveGame(const char *name);
+pr2_save_result_t PR2_LoadGame(const char *name, char *map_name,
+	unsigned int map_name_size);
+
 void		PR2_EdictTouch(func_t f);
 #define PR_EdictTouch PR2_EdictTouch
 void		PR2_EdictThink(func_t f);
