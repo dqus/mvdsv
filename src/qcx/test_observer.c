@@ -351,11 +351,11 @@ static void QCX_TestEntityReferences_f(void)
 	Con_Printf("{\"qc2cpp_test_entity_references\":{\"ready\":true,"
 		"\"owner\":%d,\"enemy\":%d,\"groundentity\":%d,"
 		"\"dmg_inflictor\":%d,\"newmis\":%d}}\n",
-		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->owner)),
-		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->enemy)),
-		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->groundentity)),
-		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->dmg_inflictor)),
-		NUM_FOR_EDICT(PR_EntityFromReference(PR_GLOBAL(newmis))));
+		NUM_FOR_EDICT(PROG_TO_EDICT(subject->v->owner)),
+		NUM_FOR_EDICT(PROG_TO_EDICT(subject->v->enemy)),
+		NUM_FOR_EDICT(PROG_TO_EDICT(subject->v->groundentity)),
+		NUM_FOR_EDICT(PROG_TO_EDICT(subject->v->dmg_inflictor)),
+		NUM_FOR_EDICT(PROG_TO_EDICT(PR_GLOBAL(newmis))));
 	PR_GLOBAL(newmis) = 0;
 }
 

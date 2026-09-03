@@ -7,7 +7,6 @@
 #include "qwsvdef.h"
 
 server_t sv;
-int pr_edict_size;
 
 static jmp_buf error_jump;
 
@@ -20,7 +19,7 @@ void SV_Error(char *error, ...)
 static void expect_invalid_reference(int reference)
 {
 	if (setjmp(error_jump) == 0) {
-		(void)PR1_EntityFromReference(reference);
+		(void)PROG_TO_EDICT(reference);
 		assert(!"invalid legacy entity reference did not fail");
 	}
 }
@@ -37,16 +36,16 @@ int main(void)
 		sv.edicts[slot].v = (entvars_t *)entity_storage[slot];
 	}
 
-	assert(PR1_EntityReference(NULL) == 0);
-	assert(PR1_EntityReference(&sv.edicts[5]) == 5 * pr_edict_size);
-	assert(PR1_EntityFromReference(0) == &sv.edicts[0]);
-	assert(PR1_EntityFromReference(6 * pr_edict_size) == &sv.edicts[6]);
+	assert(EDICT_TO_PROG(NULL) == 0);
+	assert(EDICT_TO_PROG(&sv.edicts[5]) == 5 * pr_edict_size);
+	assert(PROG_TO_EDICT(0) == &sv.edicts[0]);
+	assert(PROG_TO_EDICT(6 * pr_edict_size) == &sv.edicts[6]);
 	/* hideentity is an optional field.  Any discovered legacy field offset
 	 * has this byte-offset representation; owner provides the fixture slot. */
 	const int hideentity_field_offset = (int)offsetof(entvars_t, owner);
 	((eval_t *)((byte *)sv.edicts[3].v + hideentity_field_offset))->_int =
 		4 * pr_edict_size;
-	assert(PR1_EntityFieldToEdict(&sv.edicts[3], hideentity_field_offset)
+	assert(PR_EntityFieldToEdict(&sv.edicts[3], hideentity_field_offset)
 		== &sv.edicts[4]);
 
 	expect_invalid_reference(pr_edict_size - 1);

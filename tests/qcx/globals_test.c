@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "qwsvdef.h"
+#include "qcx/entities.h"
 #include "qcx/globals.h"
 #include "qcx/transport.h"
 
@@ -33,7 +34,7 @@ qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
 	return QCX_INVALID_ENTITY_ID;
 }
 
-int PR2_EntityReference(const edict_t *entity)
+int EDICT_TO_PROG(const edict_t *entity)
 {
 	return entity == NULL ? 0 : (int)((const byte *)entity->v - legacy_game_memory.bytes);
 }
@@ -112,8 +113,8 @@ int main(int argc, char **argv)
 	legacy_entity.v = (entvars_t *)(legacy_game_memory.bytes + 128U);
 	legacy_globals.self = 0;
 	legacy_globals.other = 102;
-	PR_GLOBAL(self) = PR_EntityReference(&legacy_entity);
-	PR_GLOBAL(other) = PR_EntityReference(NULL);
+	PR_GLOBAL(self) = EDICT_TO_PROG(&legacy_entity);
+	PR_GLOBAL(other) = EDICT_TO_PROG(NULL);
 	assert(legacy_globals.self == 128);
 	assert(legacy_globals.other == 0);
 	active_game->shutdown(active_game->context);
