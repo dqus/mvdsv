@@ -284,3 +284,36 @@ the outer QC callback cannot resume.
 The maintained operator guide is [qc2cpp-adapter.md](qc2cpp-adapter.md). It
 links the canonical qc2cpp spec and covers modes 4/5, dependencies, deployment,
 QCMS compatibility, terminal behavior, acceptance, and Wasmtime updates.
+
+## Boundary-correction Task 10 — focused cross-repository acceptance
+
+The correction is accepted against qc2cpp
+`a08f9ac8dee4e2eb75859b1e1552d0eddc3b925a` and MVDSV `d3c8856`, with the
+Wasmtime 48.0.0 C API SDK. The focused qc2cpp matrix is green, including the
+installed-SDK C consumer, native and real-Wasm host contracts, generated ID1
+Wasm execution, and Draft34 code-generation topology. Both MVDSV configurations
+rebuild from that installed SDK; all 24 private `qcx_*` tests pass in each.
+
+The generated-game matrix passes native map/string/optional-field/fatal/restore,
+FTE client/network/spectator and connected-save coverage, together with native
+to native, Wasm to Wasm, native to Wasm and Wasm to native QCMS saves. The map
+tests are also the real generated-game proof for non-zero entity references;
+there is no redundant standalone process target.
+
+During the final source audit, obsolete `QCX_Active()` guards in `sv_user.c`
+were found after canonical globals had already been bound. They suppressed the
+required `self`, `time`, `frametime` and parameter writes immediately before
+PR2 entries. Corrective commit `d3c8856` removes those guards and the now-unused
+private headers from ordinary server files. A focused source contract and
+native/Wasm route, re-entry, map, network and spectator tests prove selection
+remains exclusively in PR2. The only remaining `sv_*` private include is the
+`QCX_TESTS`-guarded observer registration in `sv_main.c`; it is test-only,
+contains no backend selection, and is not compiled into production binaries.
+
+The final audits leave only self-auditing obsolete-name literals in
+`tests/qcx/naming_test.cmake`; no old public ABI spelling, `PR_Global_*` facade,
+or QCX dispatch/selection remains in ordinary server code. The checked
+entity-reference ledger continues to classify every legacy conversion hit as a
+legacy-only VM path or selected PR boundary. Draft34 remains owner-local: the
+correction did not recreate `game_declarations.hpp`, a central declaration
+aggregate, or giant generated source files.
