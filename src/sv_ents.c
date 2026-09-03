@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #ifdef QCX_ENABLED
+#include "qcx/adapter.h"
 #include "qcx/entities.h"
 #endif
 
@@ -556,7 +557,7 @@ static void SV_WritePlayersToClient (client_t *client, client_frame_t *frame, by
 	qbool hide_players = fofs_hide_players && ((eval_t *)((byte *)(client->edict)->v + fofs_hide_players))->_int;
 
 	if (fofs_hideentity)
-		hideent = ((eval_t *)((byte *)(client->edict)->v + fofs_hideentity))->_int / pr_edict_size;
+		hideent = PR_EntityFieldToEdict(client->edict, fofs_hideentity)->e.entnum;
 
 	if (fofs_trackent)
 	{
@@ -904,7 +905,7 @@ void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder)
 		int trackent = 0;
 
 		if (fofs_hideentity)
-			hideent = ((eval_t *)((byte *)(client->edict)->v + fofs_hideentity))->_int / pr_edict_size;
+			hideent = PR_EntityFieldToEdict(client->edict, fofs_hideentity)->e.entnum;
 		else
 			hideent = 0;
 
