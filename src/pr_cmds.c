@@ -1246,7 +1246,7 @@ static void PF_findradius (void)
 		if (DotProduct(eorg, eorg) > rad_2)
 			continue;
 
-	ent->v->chain = EDICT_TO_PROG(chain);
+		ent->v->chain = EDICT_TO_PROG(chain);
 		chain = ent;
 	}
 
@@ -1522,7 +1522,7 @@ float SV_QC_DropToFloor(edict_t *ent)
 		VectorCopy (trace.endpos, ent->v->origin);
 		SV_LinkEdict (ent, false);
 		ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-	ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
+		ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
 		return 1.0f;
 	}
 }

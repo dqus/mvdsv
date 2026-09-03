@@ -996,7 +996,7 @@ int PF2_droptofloor(edict_t *ent)
 		VectorCopy(trace.endpos, ent->v->origin);
 		SV_LinkEdict(ent, false);
 		ent->v->flags = (int) ent->v->flags | FL_ONGROUND;
-	ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
+		ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
 		return 1;
 	}
 }
