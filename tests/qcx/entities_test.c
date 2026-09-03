@@ -45,8 +45,12 @@ int main(int argc, char **argv)
 	assert(QCX_ConfigureEntities(publication));
 	qcx_active = true;
 	sv.max_edicts = 11;
+	sv.edicts[7].e.entnum = 77;
+	sv.edicts[7].e.area.ed = &sv.edicts[2];
 	assert(QCX_BindEntities());
 	assert((void *)sv.edicts[7].v == (void *)QCX_Entity(7U));
+	assert(sv.edicts[7].e.entnum == 77);
+	assert(sv.edicts[7].e.area.ed == &sv.edicts[2]);
 	assert(QCX_EdictToSlot(&sv.edicts[0]) == 0U);
 	assert(QCX_EdictToSlot(&sv.edicts[7]) == 7U);
 	assert(QCX_SlotToEdict(7U) == &sv.edicts[7]);

@@ -57,7 +57,6 @@ int QCX_BindEntities(void)
 			return 0;
 		}
 		sv.edicts[slot].v = (entvars_t *)entity;
-		sv.edicts[slot].e.entnum = slot;
 	}
 	return 1;
 }

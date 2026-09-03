@@ -58,6 +58,14 @@ void		PR2_GameSetNewParms(void);
 #define PR_GameSetNewParms PR2_GameSetNewParms
 void		PR2_GameSetChangeParms(void);
 #define PR_GameSetChangeParms PR2_GameSetChangeParms
+void		PR2_PrepareRestoreResources(qbool restoring_qcx);
+#define PR_PrepareRestoreResources PR2_PrepareRestoreResources
+void		PR2_BindServerState(void);
+#define PR_BindServerState PR2_BindServerState
+void		PR2_ValidatePreparedRestore(qbool restoring_qcx);
+#define PR_ValidatePreparedRestore PR2_ValidatePreparedRestore
+void		PR2_CommitPreparedRestore(qbool restoring_qcx);
+#define PR_CommitPreparedRestore PR2_CommitPreparedRestore
 
 typedef enum {
 	PR2_SAVE_NOT_SELECTED,

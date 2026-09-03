@@ -211,6 +211,10 @@ def run_map_suite(server, artifacts, assets, output, mode):
             raise ProcessFailure(f"legacy game entry escaped qc2cpp dispatch: {events}")
         if events.get("gameplay_during_init") != 0:
             raise ProcessFailure(f"gameplay ran during qc2cpp init: {events}")
+        if events.get("server_state_bound_count") != 2:
+            raise ProcessFailure(f"each spawned map must bind QCX server state: {events}")
+        if events.get("gameplay_before_server_state") != 0:
+            raise ProcessFailure(f"gameplay ran before QCX server state binding: {events}")
     finally:
         process.close()
 
