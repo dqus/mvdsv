@@ -121,10 +121,6 @@ void NQP_Reset (void);
 
 #endif
 
-#ifdef QCX_ENABLED
-#include "qcx/entities.h"
-#endif
-
 //============================================================================
 
 void PR_Init (void);
@@ -137,9 +133,9 @@ void PR_Profile_f (void);
 void ED_ClearEdict (edict_t *e);
 edict_t *ED_Alloc (void);
 void ED_Free (edict_t *ed);
-int PR1_EntityReference(const edict_t *entity);
-edict_t *PR1_EntityFromReference(int reference);
-edict_t *PR1_EntityFieldToEdict(const edict_t *owner, int field_offset);
+int EDICT_TO_PROG(const edict_t *entity);
+edict_t *PROG_TO_EDICT(int reference);
+edict_t *PR_EntityFieldToEdict(const edict_t *owner, int field_offset);
 void PR1_ResolveOptionalFieldOffsets(void);
 
 char *ED_NewString (char *string);
@@ -158,9 +154,6 @@ edict_t *EDICT_NUM(int n);
 int NUM_FOR_EDICT(edict_t *e);
 
 #define	NEXT_EDICT(e) ((edict_t *)((byte *)(e) + sizeof(edict_t)))
-
-#define	EDICT_TO_PROG(e) ((byte *)(e)->v - (byte *)sv.game_edicts)
-#define PROG_TO_EDICT(e) (&sv.edicts[(e)/pr_edict_size])
 
 //============================================================================
 
@@ -268,9 +261,6 @@ qbool PR1_ClientCmd(void);
 #ifndef USE_PR2
 	#define PR_LoadProgs PR1_LoadProgs
 	#define PR_InitProg PR1_InitProg
-	#define PR_EntityReference PR1_EntityReference
-	#define PR_EntityFromReference PR1_EntityFromReference
-	#define PR_EntityFieldToEdict PR1_EntityFieldToEdict
 	#define PR_PrepareRestoreResources PR1_PrepareRestoreResources
 	#define PR_BindServerState PR1_BindServerState
 	#define PR_ValidatePreparedRestore PR1_ValidatePreparedRestore
