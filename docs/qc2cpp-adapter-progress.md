@@ -253,6 +253,19 @@ bits and exposes only the existing offsets, not descriptor lookup to callers.
 Legacy PR1 and PR2 retain the existing `ED_FindFieldOffset` table in a small
 legacy-only helper. `SV_SpawnServer` still does no optional-field discovery.
 
+## Boundary-correction Task 9 — legacy string borrowing
+
+`PR2_GetEntityString` is now the sole string-read boundary for QCX and uses a
+private, read-through borrow table. A non-zero legacy token selects one of the
+eleven string-field slots for its published entity; each borrow reads current
+bytes from the game rather than caching a value. Token zero remains the empty
+string, while an unreadable non-zero token is a server error.
+
+Ordinary server call sites, including demo, visibility, player and antilag
+paths, use `PR_GetEntityString` directly. The former string-specific
+`QCX_CopyEntityString` branches were removed; PR1, legacy PR2 and the
+NetQuake-only path retain their legacy resolvers.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV

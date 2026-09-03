@@ -827,13 +827,6 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 	// ignore ents without visible models
 	if (!ent->v->modelindex)
 		return false;
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		char model[MAX_QPATH];
-		if (QCX_CopyEntityString(ent, "model", model, sizeof(model), NULL) != QCX_PLUGIN_OK
-			|| model[0] == '\0') return false;
-	} else
-#endif
 	if (!*PR_GetEntityString(ent->v->model))
 		return false;
 
