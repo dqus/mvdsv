@@ -96,7 +96,13 @@ set_target_properties(qcx_adapter_state_test PROPERTIES
 	C_EXTENSIONS OFF)
 target_include_directories(qcx_adapter_state_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qcx_adapter_state_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(qcx_adapter_state_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_adapter_state COMMAND qcx_adapter_state_test)
+
+add_test(NAME qcx_program_type_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/program_type_routes_test.cmake)
 
 add_executable(qcx_terminal_test terminal_test.c)
 set_target_properties(qcx_terminal_test PROPERTIES

@@ -2,7 +2,7 @@
 
 int QCX_AdapterStateActive(const qcx_adapter_state_t *state)
 {
-	return state->mode != 0;
+	return state->transport_kind != QCX_TRANSPORT_NONE;
 }
 
 int QCX_AdapterStateIdle(const qcx_adapter_state_t *state)
@@ -10,9 +10,9 @@ int QCX_AdapterStateIdle(const qcx_adapter_state_t *state)
 	return state->call_depth == 0U;
 }
 
-void QCX_AdapterStateSelect(qcx_adapter_state_t *state, int mode)
+void QCX_AdapterStateSelect(qcx_adapter_state_t *state, qcx_transport_kind_t transport_kind)
 {
-	state->mode = mode;
+	state->transport_kind = transport_kind;
 }
 
 void QCX_AdapterStateEnter(qcx_adapter_state_t *state)
@@ -29,6 +29,6 @@ void QCX_AdapterStateLeave(qcx_adapter_state_t *state)
 
 void QCX_AdapterStateReset(qcx_adapter_state_t *state)
 {
-	state->mode = 0;
+	state->transport_kind = QCX_TRANSPORT_NONE;
 	state->call_depth = 0U;
 }
