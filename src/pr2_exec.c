@@ -215,7 +215,7 @@ char *PR2_GetEntityString(string_t num)
 //===========================================================================
 void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		const char *const field = QCX_EntityStringFieldName(ed, target);
 		if (field == NULL || !QCX_SetEntityString(ed, field, s)) {
@@ -223,7 +223,7 @@ void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 		}
 		return;
 	}
-	#endif
+#endif
 	if (!sv_vm) {
 		PR1_SetString(target, s);
 		return;
@@ -231,14 +231,14 @@ void PR2_SetEntityString(edict_t* ed, string_t* target, char* s)
 }
 void PR2_SetGlobalString(string_t* target, char* s)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)target;
 		(void)s;
 		SV_Error("QCX cannot write a legacy global string");
 		return;
 	}
-	#endif
+#endif
 	if (!sv_vm) {
 		PR1_SetString(target, s);
 		return;
@@ -247,14 +247,14 @@ void PR2_SetGlobalString(string_t* target, char* s)
 
 void PR_SetMapName(const char *value)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		if (value == NULL || !QCX_SetMapName(value)) {
 			SV_Error("qc2cpp game rejected mapname");
 		}
 		return;
 	}
-	#endif
+#endif
 	PR2_SetGlobalString(&PR_GLOBAL(mapname), (char *)value);
 }
 
@@ -267,12 +267,12 @@ extern const char *pr2_ent_data_ptr;
 
 void PR2_LoadEnts(char *data)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_LoadEntities(data);
 		return;
 	}
-	#endif
+#endif
 	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (sv_vm)
 	{
@@ -292,12 +292,12 @@ void PR2_LoadEnts(char *data)
 //===========================================================================
 void PR2_GameStartFrame(qbool isBotFrame)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_StartFrame((float)sv.time, PR_GLOBAL(frametime), isBotFrame);
 		return;
 	}
-	#endif
+#endif
 	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (isBotFrame && (!sv_vm || sv_vm->type == VMI_NONE || gamedata.APIversion < 15)) {
 		return;
@@ -314,12 +314,12 @@ void PR2_GameStartFrame(qbool isBotFrame)
 //===========================================================================
 void PR2_GameClientConnect(int spec)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchClientConnect(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_CONNECT, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -331,12 +331,12 @@ void PR2_GameClientConnect(int spec)
 //===========================================================================
 void PR2_GamePutClientInServer(int spec)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchPutClientInServer(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_PUT_CLIENT_IN_SERVER, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -348,12 +348,12 @@ void PR2_GamePutClientInServer(int spec)
 //===========================================================================
 void PR2_GameClientDisconnect(int spec)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchClientDisconnect(sv_player, spec != 0 ? 1U : 0U);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_DISCONNECT, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -365,13 +365,13 @@ void PR2_GameClientDisconnect(int spec)
 //===========================================================================
 void PR2_GameClientPreThink(int spec)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchClientPreThink(sv_player, (float)sv.time, (float)sv_frametime,
 			spec != 0 ? 1U : 0U);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_PRETHINK, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -383,13 +383,13 @@ void PR2_GameClientPreThink(int spec)
 //===========================================================================
 void PR2_GameClientPostThink(int spec)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchClientPostThink(sv_player, (float)sv.time,
 			spec != 0 ? 1U : 0U);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_CLIENT_POSTTHINK, spec, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -401,11 +401,11 @@ void PR2_GameClientPostThink(int spec)
 //===========================================================================
 qbool PR2_ClientCmd(void)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		return QCX_DispatchClientCommand(sv_player) != 0U;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 0, GAME_CLIENT_COMMAND, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -417,12 +417,12 @@ qbool PR2_ClientCmd(void)
 //===========================================================================
 void PR2_ClientKill(void)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchClientKill(sv_player);
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		PR2_ClientCmd(); // PR2 have some universal way for command execution unlike QC based mods.
 	else
@@ -439,12 +439,12 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 	// PR2 mods get it from Cmd_Args() and such.
 	//
 
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		return QCX_DispatchClientSay(sv_player, isTeamSay != 0 ? 1U : 0U,
 			(const uint8_t *)message, (qcx_byte_count_t)strlen(message)) != 0U;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 1, GAME_CLIENT_SAY, isTeamSay, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -456,12 +456,12 @@ qbool PR2_ClientSay(int isTeamSay, char *message)
 //===========================================================================
 void PR2_GameSetNewParms(void)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchSetNewParms((&PR_GLOBAL(parm1)));
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_SETNEWPARMS, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -473,12 +473,12 @@ void PR2_GameSetNewParms(void)
 //===========================================================================
 void PR2_GameSetChangeParms(void)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_DispatchSetChangeParms(sv_player, (&PR_GLOBAL(parm1)));
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_SETCHANGEPARMS, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -583,7 +583,7 @@ pr2_save_result_t PR2_LoadGame(const char *name, char *map_name,
 //===========================================================================
 void PR2_EdictTouch(func_t f)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
 		QCX_DispatchEdictTouch(PROG_TO_EDICT(PR_GLOBAL(self)),
@@ -591,7 +591,7 @@ void PR2_EdictTouch(func_t f)
 			PR_GLOBAL(frametime));
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_TOUCH, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -603,14 +603,14 @@ void PR2_EdictTouch(func_t f)
 //===========================================================================
 void PR2_EdictThink(func_t f)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
 		QCX_DispatchEdictThink(PROG_TO_EDICT(PR_GLOBAL(self)),
 			PR_GLOBAL(time), PR_GLOBAL(frametime));
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_THINK, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -622,7 +622,7 @@ void PR2_EdictThink(func_t f)
 //===========================================================================
 void PR2_EdictBlocked(func_t f)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
 		QCX_DispatchEdictBlocked(PROG_TO_EDICT(PR_GLOBAL(self)),
@@ -630,7 +630,7 @@ void PR2_EdictBlocked(func_t f)
 			PR_GLOBAL(frametime));
 		return;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 0, GAME_EDICT_BLOCKED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -642,12 +642,12 @@ void PR2_EdictBlocked(func_t f)
 //===========================================================================
 qbool PR2_UserInfoChanged(int after)
 {
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		return QCX_DispatchClientUserInfoChanged(sv_player, after != 0 ? 1U : 0U)
 			!= 0U;
 	}
-	#endif
+#endif
 	if (sv_vm)
 		return VM_Call(sv_vm, 1, GAME_CLIENT_USERINFO_CHANGED, after, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -856,12 +856,12 @@ void PR2_InitProg(void)
 
 	Cvar_SetValue(&sv_pr2references, 0.0f);
 
-	#ifdef QCX_ENABLED
+#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		QCX_InitProg();
 		return;
 	}
-	#endif
+#endif
 	QCX_RECORD_LEGACY_GAME_ENTRY();
 	if (!sv_vm) {
 		PR1_InitProg();
