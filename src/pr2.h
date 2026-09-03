@@ -66,6 +66,12 @@ void		PR2_ValidatePreparedRestore(qbool restoring_qcx);
 #define PR_ValidatePreparedRestore PR2_ValidatePreparedRestore
 void		PR2_CommitPreparedRestore(qbool restoring_qcx);
 #define PR_CommitPreparedRestore PR2_CommitPreparedRestore
+int		PR2_EntityReference(const edict_t *entity);
+#define PR_EntityReference PR2_EntityReference
+edict_t		*PR2_EntityFromReference(int reference);
+#define PR_EntityFromReference PR2_EntityFromReference
+edict_t		*PR2_EntityFieldToEdict(const edict_t *owner, int field_offset);
+#define PR_EntityFieldToEdict PR2_EntityFieldToEdict
 
 typedef enum {
 	PR2_SAVE_NOT_SELECTED,

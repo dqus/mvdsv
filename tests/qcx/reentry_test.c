@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
@@ -51,7 +52,18 @@ void SV_Error(char *error, ...)
 void Con_DPrintf(char *format, ...) { (void)format; }
 void Cvar_SetROM(cvar_t *var, char *value) { (void)var; (void)value; }
 int Q_atoi(const char *text) { return atoi(text); }
-char *PR2_GetEntityString(string_t value) { (void)value; return ""; }
+char *PR1_GetString(int value) { (void)value; return ""; }
+void *VM_ExplicitArgPtr(vm_t *vm, intptr_t value)
+{ (void)vm; (void)value; return NULL; }
+
+int PR1_EntityReference(const edict_t *entity) { (void)entity; return 0; }
+edict_t *PR1_EntityFromReference(int reference) { (void)reference; return &sv.edicts[0]; }
+edict_t *PR1_EntityFieldToEdict(const edict_t *owner, int field_offset)
+{
+	(void)owner;
+	(void)field_offset;
+	return &sv.edicts[0];
+}
 qcx_plugin_status_t QCX_CopyEntityString(const edict_t *entity, const char *field,
 	char *out, uint32_t capacity, uint32_t *required)
 {
@@ -80,8 +92,13 @@ qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
 	if (entity >= entities && entity < entities + 8) {
 		return (qcx_entity_id_t)(entity - entities);
 	}
+	if (entity >= sv.edicts && entity < sv.edicts + 8) {
+		return (qcx_entity_id_t)(entity - sv.edicts);
+	}
 	return QCX_INVALID_ENTITY_ID;
 }
+
+uint32_t QCX_EntityCapacity(void) { return 8U; }
 
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
@@ -230,6 +247,13 @@ int main(void)
 	PR2_EdictBlocked(96);
 	assert(legacy_call_count == 3 && legacy_function == 96);
 	qcx_active = true;
+	assert(PR2_EntityReference(NULL) == 0);
+	assert(PR2_EntityReference(&entities[5]) == 5);
+	assert(PR2_EntityFromReference(0) == &entities[0]);
+	assert(PR2_EntityFromReference(6) == &entities[6]);
+	entity_states[3].owner = 4;
+	assert(PR2_EntityFieldToEdict(&entities[3],
+		(int)offsetof(entvars_t, owner)) == &entities[4]);
 
 	QCX_DispatchEdictTouch(&entities[3], &entities[4], 17.0f, 0.125f);
 	assert(observed_first == 3U && observed_second == 4U);
@@ -299,6 +323,14 @@ int main(void)
 	assert(observed_first == 4U && observed_second == 3U);
 	assert(observed_time == 17.0f && observed_frametime == 0.125f);
 	assert(globals.self == 1U && globals.other == 2U && globals.time == 17.0f);
+
+	/* SV_RunNewmis is a real server caller: QCX newmis is a slot, not a
+	 * legacy byte offset. */
+	globals.newmis = 7U;
+	entities[7].e.lastruntime = 0.0;
+	entities[7].v->movetype = MOVETYPE_NONE;
+	SV_RunNewmis();
+	assert(globals.newmis == 0U && entities[7].e.lastruntime == sv.time);
 
 	entities[5].v->nextthink = 1.0f;
 	entities[5].v->think = 1;

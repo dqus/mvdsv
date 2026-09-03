@@ -200,6 +200,14 @@ def run_map_suite(server, artifacts, assets, output, mode):
         time.sleep(0.5)
         first = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
         assert_map_snapshot(first, "e1m1")
+        references = process.observe("qc2cpp_test_entity_references",
+            "qc2cpp_test_entity_references", timeout=8)
+        expected_references = {"owner": 4, "enemy": 5, "groundentity": 6,
+            "dmg_inflictor": 7, "newmis": 7}
+        if references.get("ready") is not True or any(
+                references.get(key) != value for key, value in expected_references.items()):
+            raise ProcessFailure(
+                f"QCX entity slots did not select their host edicts: {references}")
         process.send("map e1m2")
         time.sleep(0.5)
         second = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)

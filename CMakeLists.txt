@@ -92,6 +92,7 @@ set(SRC_COMMON
 	"${DIR_SRC}/vm_x86.c"
 	"${DIR_SRC}/pr_cmds.c"
 	"${DIR_SRC}/pr_edict.c"
+	"${DIR_SRC}/pr_entity_references.c"
 	"${DIR_SRC}/pr_exec.c"
 	"${DIR_SRC}/sha1.c"
 	"${DIR_SRC}/sha3.c"

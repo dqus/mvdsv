@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #ifdef QCX_ENABLED
+#include "qcx/adapter.h"
 #include "qcx/entities.h"
 #include "qcx/entries.h"
 #include "qcx/globals.h"
@@ -487,7 +488,7 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 
 		// if the entity is standing on the pusher, it will definately be moved
 		if ( ! ( ((int)check->v->flags & FL_ONGROUND)
-		&& PROG_TO_EDICT(check->v->groundentity) == pusher) )
+		&& PR_EntityFromReference(check->v->groundentity) == pusher) )
 		{
 			if ( check->v->absmin[0] >= maxs[0]
 			|| check->v->absmin[1] >= maxs[1]
@@ -942,27 +943,11 @@ void SV_RunNewmis (void)
 	if (pr_nqprogs)
 		return;
 
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		qcx_shared_global_state_v1_t *const globals = QCX_Globals();
-		if (globals == NULL || globals->newmis == 0U) {
-			return;
-		}
-		ent = QCX_SlotToEdict(globals->newmis);
-		globals->newmis = 0U;
-		if (ent == NULL) {
-			return;
-		}
-	}
-	else
-#endif
-	{
-		if (!pr_global_struct->newmis)
-			return;
+	if (!PR_GLOBAL(newmis))
+		return;
 
-		ent = PROG_TO_EDICT(pr_global_struct->newmis);
-		pr_global_struct->newmis = 0;
-	}
+	ent = PR_EntityFromReference(PR_GLOBAL(newmis));
+	PR_GLOBAL(newmis) = 0;
 
 	save_frametime = sv_frametime;
 	sv_frametime = 0.05;
