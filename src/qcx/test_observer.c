@@ -15,6 +15,8 @@ typedef struct qcx_test_observer_s {
 	uint32_t normal_unpublish_count;
 	uint32_t legacy_game_entries;
 	uint32_t gameplay_during_init;
+	uint32_t server_state_bound_count;
+	uint32_t gameplay_before_server_state;
 	uint32_t initializing;
 	uint32_t client_connect_count;
 	int32_t last_client_userid;
@@ -57,6 +59,7 @@ static void QCX_TestEvents_f(void)
 {
 	Con_Printf("{\"qc2cpp_test_events\":{\"normal_unpublish_count\":%u,"
 		"\"legacy_game_entries\":%u,\"gameplay_during_init\":%u,\"init_count\":%u,"
+		"\"server_state_bound_count\":%u,\"gameplay_before_server_state\":%u,"
 		"\"client_connect_count\":%u,\"put_client_in_server_count\":%u,"
 		"\"last_client_userid\":%d,"
 		"\"spectator_put_client_in_server_count\":%u,"
@@ -71,7 +74,9 @@ static void QCX_TestEvents_f(void)
 		"\"restore_replication_begin_count\":%u,"
 		"\"restore_replication_complete_count\":%u}}\n",
 		observer.normal_unpublish_count, observer.legacy_game_entries,
-		observer.gameplay_during_init, observer.init_count, observer.client_connect_count,
+		observer.gameplay_during_init, observer.init_count,
+		observer.server_state_bound_count, observer.gameplay_before_server_state,
+		observer.client_connect_count,
 		observer.put_client_in_server_count, observer.last_client_userid,
 		observer.spectator_put_client_in_server_count,
 		observer.client_disconnect_count,
@@ -111,11 +116,26 @@ void QCX_TestObserverInitEnd(void)
 	}
 }
 
+void QCX_TestObserverGameplayImport(void)
+{
+	if (observer.initializing != 0U) {
+		++observer.gameplay_during_init;
+	}
+}
+
+void QCX_TestObserverServerStateBound(void)
+{
+	++observer.server_state_bound_count;
+}
+
 void QCX_TestObserverStartFrame(void)
 {
 	++observer.frame_count;
 	if (observer.initializing != 0U) {
 		++observer.gameplay_during_init;
+	}
+	if (observer.server_state_bound_count < observer.init_count) {
+		++observer.gameplay_before_server_state;
 	}
 }
 

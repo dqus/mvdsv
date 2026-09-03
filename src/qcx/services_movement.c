@@ -17,7 +17,7 @@ static void QCX_TraceLine(void *context, const float start[3], const float end[3
 	float nomonsters, qcx_entity_id_t passent, qcx_trace_result_v1_t *out_result,
 	qcx_byte_count_t out_result_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (start == NULL || end == NULL || out_result == NULL
 		|| out_result_size < sizeof(*out_result)) {
 		SV_Error("qc2cpp traceline requires complete vectors and result");
@@ -46,7 +46,7 @@ static void QCX_TraceLine(void *context, const float start[3], const float end[3
 
 static qcx_entity_id_t QCX_CheckClient(void *context, qcx_entity_id_t self)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	edict_t *const result = SV_QC_CheckClient(QCX_RequireMovementEdict(self));
 	const qcx_entity_id_t slot = QCX_EdictToSlot(result);
 	if (slot == QCX_INVALID_ENTITY_ID) {
@@ -58,7 +58,7 @@ static qcx_entity_id_t QCX_CheckClient(void *context, qcx_entity_id_t self)
 static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 	float distance)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	(void)self;
 	qcx_shared_global_state_v1_t *const globals = QCX_Globals();
 	if (globals == NULL) {
@@ -73,19 +73,19 @@ static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 
 static float QCX_DropToFloor(void *context, qcx_entity_id_t self)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	return SV_QC_DropToFloor(QCX_RequireMovementEdict(self));
 }
 
 static float QCX_CheckBottom(void *context, qcx_entity_id_t entity)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	return SV_CheckBottom(QCX_RequireMovementEdict(entity)) ? 1.0f : 0.0f;
 }
 
 static float QCX_PointContents(void *context, const float point[3])
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (point == NULL) {
 		SV_Error("qc2cpp pointcontents requires a point");
 	}
@@ -95,7 +95,7 @@ static float QCX_PointContents(void *context, const float point[3])
 static void QCX_Aim(void *context, qcx_entity_id_t entity, float speed,
 	const float forward[3], float out_value[3], qcx_byte_count_t out_value_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	(void)entity;
 	(void)speed;
 	if (forward == NULL || out_value == NULL || out_value_size < sizeof(float) * 3U) {
@@ -107,7 +107,7 @@ static void QCX_Aim(void *context, qcx_entity_id_t entity, float speed,
 static uint32_t QCX_StepDirection(void *context, qcx_entity_id_t self, float yaw,
 	float distance)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	return SV_StepDirection(QCX_RequireMovementEdict(self), yaw, distance) ? 1U : 0U;
 }
 
