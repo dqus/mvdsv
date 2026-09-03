@@ -22,11 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
-#ifdef QCX_ENABLED
-#include "qcx/adapter.h"
-#include "qcx/entries.h"
-#include "qcx/entities.h"
-#endif
 
 static void SV_ClientDownloadComplete(client_t* cl);
 
@@ -1002,28 +997,15 @@ static void Cmd_Begin_f (void)
 		if (sv_client->spectator)
 			SV_SpawnSpectator ();
 
-		#ifndef QCX_ENABLED
 		// copy spawn parms out of the client_t
 		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
 			(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-		#else
-		if (!QCX_Active()) {
-			for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
-				(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
-			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = PR_EntityReference(sv_player);
-			G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-		}
-		#endif
 		PR_GameClientConnect(sv_client->spectator);
 
 		// actually spawn the player
-		#ifdef QCX_ENABLED
-		if (!QCX_Active())
-		#endif
 		{
 			PR_GLOBAL(time) = sv.time;
 			PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -1860,9 +1842,6 @@ static void SV_Say (qbool team)
 	// try handle say in the mod.
 	SV_EndRedirect ();
 
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2046,9 +2025,6 @@ static void Cmd_Kill_f (void)
 		return;
 	}
 
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2422,9 +2398,6 @@ static void Cmd_SetInfo_f (void)
 
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
 
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2759,10 +2732,7 @@ static void Cmd_Join_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
-		PR_GLOBAL(self) = PR_EntityReference(sv_player);
+	PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	PR_GameClientDisconnect(1);
 
 	// this is like SVC_DirectConnect.
@@ -2783,9 +2753,6 @@ static void Cmd_Join_f (void)
 		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	// call the spawn function
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2794,9 +2761,6 @@ static void Cmd_Join_f (void)
 	PR_GameClientConnect(0);
 
 	// actually spawn the player
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2855,10 +2819,7 @@ static void Cmd_Observe_f (void)
 
 	// call the prog function for removing a client
 	// this will set the body to a dead frame, among other things
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
-		PR_GLOBAL(self) = PR_EntityReference(sv_player);
+	PR_GLOBAL(self) = PR_EntityReference(sv_player);
 	PR_GameClientDisconnect(0);
 
 	// this is like SVC_DirectConnect.
@@ -2881,9 +2842,6 @@ static void Cmd_Observe_f (void)
 	SV_SpawnSpectator ();
 
 	// call the spawn function
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -2891,9 +2849,6 @@ static void Cmd_Observe_f (void)
 	}
 	PR_GameClientConnect(1);
 
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -3468,9 +3423,6 @@ static ucmd_t ucmds[] =
 
 static qbool SV_ExecutePRCommand (void)
 {
-	#ifdef QCX_ENABLED
-	if (!QCX_Active())
-	#endif
 	{
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -3826,9 +3778,6 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		VectorCopy (sv_player->v->velocity, oldvelocity);
 		old_teleport_time = sv_player->v->teleport_time;
 
-		#ifdef QCX_ENABLED
-		if (!QCX_Active())
-		#endif
 		{
 			PR_GLOBAL(frametime) = sv_frametime;
 			PR_GLOBAL(time) = sv.time;
@@ -4262,9 +4211,6 @@ void SV_PostRunCmd(void)
 #endif
 
 		onground = (int) sv_player->v->flags & FL_ONGROUND;
-		#ifdef QCX_ENABLED
-		if (!QCX_Active())
-		#endif
 		{
 			PR_GLOBAL(time) = sv.time;
 			PR_GLOBAL(self) = PR_EntityReference(sv_player);
@@ -4293,9 +4239,6 @@ void SV_PostRunCmd(void)
 	}
 	else
 	{
-		#ifdef QCX_ENABLED
-		if (!QCX_Active())
-		#endif
 		{
 			PR_GLOBAL(time) = sv.time;
 			PR_GLOBAL(self) = PR_EntityReference(sv_player);
