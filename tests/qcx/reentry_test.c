@@ -30,6 +30,7 @@ static qbool qcx_active = true;
 static int legacy_call_count;
 static func_t legacy_function;
 static jmp_buf error_jump;
+static qbool expecting_error;
 vec3_t vec3_origin;
 server_t sv;
 server_static_t svs;
@@ -46,6 +47,8 @@ cvar_t sv_maxfps;
 void SV_Error(char *error, ...)
 {
 	(void)error;
+	if (!expecting_error)
+		abort();
 	longjmp(error_jump, 1);
 }
 
@@ -81,11 +84,10 @@ void CrossProduct(vec3_t a, vec3_t b, vec3_t out)
 
 qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
 {
-	if (entity >= entities && entity < entities + 8) {
-		return (qcx_entity_id_t)(entity - entities);
-	}
-	if (entity >= sv.edicts && entity < sv.edicts + 8) {
-		return (qcx_entity_id_t)(entity - sv.edicts);
+	for (qcx_entity_id_t slot = 0U; slot < 8U; ++slot) {
+		if (entity == &entities[slot] || entity == &sv.edicts[slot]) {
+			return slot;
+		}
 	}
 	return QCX_INVALID_ENTITY_ID;
 }
@@ -213,18 +215,22 @@ intptr_t QDECL VM_Call(vm_t *vm, int nargs, int callnum, ...)
 
 static void expect_invalid_qcx_reference(int reference)
 {
+	expecting_error = true;
 	if (setjmp(error_jump) == 0) {
 		(void)PROG_TO_EDICT(reference);
 		assert(!"invalid QCX entity reference did not fail");
 	}
+	expecting_error = false;
 }
 
 static void expect_invalid_qcx_edict(const edict_t *entity)
 {
+	expecting_error = true;
 	if (setjmp(error_jump) == 0) {
 		(void)EDICT_TO_PROG(entity);
 		assert(!"invalid QCX edict did not fail");
 	}
+	expecting_error = false;
 }
 
 int main(void)
@@ -260,15 +266,21 @@ int main(void)
 	assert(legacy_call_count == 3 && legacy_function == 96);
 	qcx_active = true;
 	assert(EDICT_TO_PROG(NULL) == 0);
+	assert(EDICT_TO_PROG(&entities[0]) == 0);
 	assert(EDICT_TO_PROG(&entities[5]) == 5);
+	assert(EDICT_TO_PROG(&entities[7]) == 7);
+	assert(EDICT_TO_PROG(&sv.edicts[0]) == 0);
+	assert(EDICT_TO_PROG(&sv.edicts[7]) == 7);
 	assert(PROG_TO_EDICT(0) == &entities[0]);
 	assert(PROG_TO_EDICT(6) == &entities[6]);
 	entity_states[3].owner = 4;
 	assert(PR_EntityFieldToEdict(&entities[3],
 		(int)offsetof(entvars_t, owner)) == &entities[4]);
 	expect_invalid_qcx_reference(8);
+	expect_invalid_qcx_edict(&sv.edicts[8]);
 	edict_t rejected = {0};
 	expect_invalid_qcx_edict(&rejected);
+	assert(!expecting_error);
 
 	QCX_DispatchEdictTouch(&entities[3], &entities[4], 17.0f, 0.125f);
 	assert(observed_first == 3U && observed_second == 4U);
