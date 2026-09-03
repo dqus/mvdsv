@@ -634,7 +634,11 @@ void SV_AntilagClipSetUp ( areanode_t *node, moveclip_t *clip )
 
 	clip->type &= ~MOVE_LAGGED;
 
-	if (entnum && entnum <= MAX_CLIENTS && !svs.clients[entnum - 1].isBot)
+	if (entnum && entnum <= MAX_CLIENTS
+#ifdef USE_PR2
+		&& !svs.clients[entnum - 1].isBot
+#endif
+	)
 	{
 		clip->type |= MOVE_LAGGED;
 		w.lagents = svs.clients[entnum - 1].laggedents;
@@ -645,7 +649,11 @@ void SV_AntilagClipSetUp ( areanode_t *node, moveclip_t *clip )
 	{
 		int owner = PROG_TO_EDICT(passedict->v->owner)->e.entnum;
 
-		if (owner && owner <= MAX_CLIENTS && !svs.clients[owner - 1].isBot)
+		if (owner && owner <= MAX_CLIENTS
+#ifdef USE_PR2
+			&& !svs.clients[owner - 1].isBot
+#endif
+		)
 		{
 			clip->type |= MOVE_LAGGED;
 			w.lagents = svs.clients[owner - 1].laggedents;

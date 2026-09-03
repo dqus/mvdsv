@@ -679,7 +679,11 @@ static void SVC_Status (void)
 				}
 
 				if (opt & STATUS_SHOWCLIENTTYPE) {
+#ifdef USE_PR2
 					Con_Printf(" \"%c\"", cl->isBot ? 'b' : 'h');
+#else
+					Con_Printf(" \"h\"");
+#endif
 				}
 
 				Con_Printf("\n");
