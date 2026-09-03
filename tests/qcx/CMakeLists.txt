@@ -286,6 +286,44 @@ target_compile_definitions(qcx_legacy_entity_references_test PRIVATE
 	__LITTLE_ENDIAN__Q__)
 add_test(NAME qcx_legacy_entity_references COMMAND qcx_legacy_entity_references_test)
 
+add_executable(qcx_optional_fields_test
+	optional_fields_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/entities.c)
+set_target_properties(qcx_optional_fields_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_optional_fields_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_optional_fields_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qcx_optional_fields_test PRIVATE
+	QCX_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_optional_fields_test PRIVATE Qc2cppHost::native)
+add_test(NAME qcx_optional_fields COMMAND qcx_optional_fields_test)
+
+add_test(NAME qcx_optional_field_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_field_routes_test.cmake)
+
+function(qcx_add_legacy_optional_fields_test target)
+	add_executable(${target}
+		legacy_optional_fields_test.c
+		${PROJECT_SOURCE_DIR}/src/pr_optional_fields.c
+		${PROJECT_SOURCE_DIR}/src/pr_entity_references.c)
+	set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+	target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+	target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+	target_compile_definitions(${target} PRIVATE SERVERONLY __LITTLE_ENDIAN__Q__ ${ARGN})
+	add_test(NAME ${target} COMMAND ${target})
+endfunction()
+qcx_add_legacy_optional_fields_test(qcx_legacy_optional_fields_pr1)
+qcx_add_legacy_optional_fields_test(qcx_legacy_optional_fields_pr2 USE_PR2=1)
+
 add_executable(qcx_save_format_test
 	save_format_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
@@ -319,6 +357,36 @@ target_link_libraries(qcx_restore_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_restore COMMAND qcx_restore_test)
 
 if(QC2CPP_COMPILER)
+	add_custom_target(qc2cpp_optional_fields_native_assets
+		COMMAND ${CMAKE_COMMAND}
+			-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
+			-DFIXTURE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/optional_fields
+			-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/optional-fields-native
+			-DNATIVE_PLUGIN=ON
+			-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_fields_fixture_test.cmake)
+	add_test(NAME qc2cpp_optional_fields_native_build
+		COMMAND ${CMAKE_COMMAND}
+			-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
+			-DFIXTURE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/optional_fields
+			-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/optional-fields-native
+			-DNATIVE_PLUGIN=ON
+			-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_fields_fixture_test.cmake)
+	if(MVDSV_QC2CPP_WASM)
+		add_custom_target(qc2cpp_optional_fields_wasm_assets
+			COMMAND ${CMAKE_COMMAND}
+				-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
+				-DFIXTURE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/optional_fields
+				-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/optional-fields-wasm
+				-DWASI_SDK_ROOT=${QC2CPP_WASI_SDK_ROOT}
+				-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_fields_fixture_test.cmake)
+		add_test(NAME qc2cpp_optional_fields_wasm_build
+			COMMAND ${CMAKE_COMMAND}
+				-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
+				-DFIXTURE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/fixtures/optional_fields
+				-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/optional-fields-wasm
+				-DWASI_SDK_ROOT=${QC2CPP_WASI_SDK_ROOT}
+				-P ${CMAKE_CURRENT_SOURCE_DIR}/optional_fields_fixture_test.cmake)
+	endif()
 	add_test(NAME qcx_reentry_fixture
 		COMMAND ${CMAKE_COMMAND}
 			-DQC2CPP_COMPILER=${QC2CPP_COMPILER}
