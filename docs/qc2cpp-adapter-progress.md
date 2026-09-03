@@ -317,3 +317,14 @@ entity-reference ledger continues to classify every legacy conversion hit as a
 legacy-only VM path or selected PR boundary. Draft34 remains owner-local: the
 correction did not recreate `game_declarations.hpp`, a central declaration
 aggregate, or giant generated source files.
+
+## Canonical entity conversions
+
+`EDICT_TO_PROG` and `PROG_TO_EDICT` are now real functions in `pr_edict.c`.
+They preserve legacy byte offsets when QCX is inactive and select validated
+QCX slots when it is active. `PR_EntityFieldToEdict` lives beside them and
+delegates to `PROG_TO_EDICT`; the parallel `PR*_EntityReference` facade and
+`pr_entity_references.c` were removed.
+
+The PR1 and PR2 non-QCX server builds, focused legacy/QCX unit tests, source
+route audit, and real native/Wasm server-map acceptance all pass.
