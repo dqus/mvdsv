@@ -23,16 +23,20 @@ static qbool step_result;
 static int touch_call_count;
 static int think_call_count;
 static qbool mutate_touch_time;
+static qbool qcx_active = true;
+static int legacy_call_count;
+static func_t legacy_function;
 vec3_t vec3_origin;
 server_t sv;
 server_static_t svs;
 globalvars_t legacy_globals;
-globalvars_t *pr_global_struct = &legacy_globals;
-float *pr_globals = (float *)&legacy_globals;
+globalvars_t *pr_global_struct = (globalvars_t *)&globals;
+float *pr_globals = (float *)&globals;
 int pr_edict_size;
 extern double sv_frametime;
 client_t *sv_client;
 edict_t *sv_player;
+vm_t *sv_vm;
 movevars_t movevars;
 cvar_t sv_mintic;
 cvar_t sv_maxtic;
@@ -85,7 +89,7 @@ edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 }
 
 qcx_shared_global_state_v1_t *QCX_Globals(void) { return &globals; }
-qbool QCX_Active(void) { return true; }
+qbool QCX_Active(void) { return qcx_active; }
 
 void QCX_EdictTouch(qcx_entity_id_t first, qcx_entity_id_t second, float time,
 	float frametime)
@@ -183,22 +187,19 @@ qbool SV_StepDirection(edict_t *entity, float yaw, float distance)
 	return step_result;
 }
 
-void PR2_EdictTouch(func_t function)
+void PR_ExecuteProgram(func_t function)
 {
-	(void)function;
-	QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
-		QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
-		PR_GLOBAL(frametime));
+	++legacy_call_count;
+	legacy_function = function;
 }
 
-void PR2_EdictThink(func_t function)
+intptr_t QDECL VM_Call(vm_t *vm, int nargs, int callnum, ...)
 {
-	(void)function;
-	QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
-		PR_GLOBAL(time), PR_GLOBAL(frametime));
+	(void)vm;
+	(void)nargs;
+	(void)callnum;
+	return 0;
 }
-
-void PR2_EdictBlocked(func_t function) { (void)function; }
 
 int main(void)
 {
@@ -207,6 +208,29 @@ int main(void)
 		entities[index].e.entnum = index;
 	}
 	sv.max_edicts = 8;
+	globals.self = 3U;
+	globals.other = 4U;
+	globals.time = 17.0f;
+	globals.frametime = 0.125f;
+	legacy_call_count = 0;
+	PR2_EdictTouch(91);
+	assert(observed_first == 3U && observed_second == 4U);
+	assert(observed_time == 17.0f && observed_frametime == 0.125f);
+	PR2_EdictThink(92);
+	assert(observed_first == 3U && observed_second == QCX_INVALID_ENTITY_ID);
+	PR2_EdictBlocked(93);
+	assert(observed_first == 3U && observed_second == 4U);
+	assert(legacy_call_count == 0);
+
+	qcx_active = false;
+	PR2_EdictTouch(94);
+	assert(legacy_call_count == 1 && legacy_function == 94);
+	PR2_EdictThink(95);
+	assert(legacy_call_count == 2 && legacy_function == 95);
+	PR2_EdictBlocked(96);
+	assert(legacy_call_count == 3 && legacy_function == 96);
+	qcx_active = true;
+
 	QCX_DispatchEdictTouch(&entities[3], &entities[4], 17.0f, 0.125f);
 	assert(observed_first == 3U && observed_second == 4U);
 	assert(observed_time == 17.0f && observed_frametime == 0.125f);
