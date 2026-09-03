@@ -259,6 +259,11 @@ add_test(NAME qcx_entry_routes
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/entry_routes_test.cmake)
 
+add_test(NAME qcx_startup_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/startup_routes_test.cmake)
+
 add_executable(qcx_save_format_test
 	save_format_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)

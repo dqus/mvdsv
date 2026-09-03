@@ -210,6 +210,23 @@ requires fresh startup, or failed. No callback registry or generic dispatch
 mechanism was introduced. Focused source contracts and native/Wasm re-entry,
 client, save and cross-transport restore acceptance tests cover this boundary.
 
+## Boundary-correction Task 6 — backend-neutral server startup
+
+`SV_SpawnServer` now owns only the common host-edict headers: it initializes
+`e.entnum` and `e.area.ed` once for every selected program. The selected PR
+boundary then binds the program-owned `edict.v`, globals and optional-field
+view. QCX publishes its entity record during game initialization, but does not
+bind host edicts or globals until that common host-header loop has completed.
+It neither clears QCX entities at startup nor rewrites those headers.
+
+The public server route uses `PR_*` aliases so a `USE_PR2=OFF` legacy build
+keeps its original PR1 storage binding and rejects an impossible QCX restore.
+PR2 owns the corresponding QCX/PR2 selection, including prepared-restore
+resource preparation, validation and commit. The test-only real-server
+observer requires every spawned QCX map to bind entity/global state before its
+first gameplay entry and records every gameplay-capable host import made while
+the game initializes; focused native and Wasm map tests run those checks.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV

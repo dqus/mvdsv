@@ -105,7 +105,7 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 	const uint8_t *sample, qcx_byte_count_t sample_size, float volume,
 	float attenuation)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	if (QCX_CopyText(sample, sample_size, local, sizeof(local), "sound")) {
 		SV_StartSound(QCX_RequireNetworkEdict(entity), (int)channel, local,
@@ -116,7 +116,7 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *text,
 	qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_STUFFTEXT];
 	client_t *const client = QCX_RequireClient(entity);
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "stuffcmd")) {
@@ -159,7 +159,7 @@ static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *t
 static void QCX_BPrint(void *context, float level, const uint8_t *text,
 	qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	if (QCX_CopyText(text, text_size, local, sizeof(local), "bprint")) {
 		SV_BroadcastPrintf((int)level, "%s", local);
@@ -169,7 +169,7 @@ static void QCX_BPrint(void *context, float level, const uint8_t *text,
 static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 	const uint8_t *text, qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	if (QCX_CopyText(text, text_size, local, sizeof(local), "sprint")) {
 		client_t *const client = QCX_RequireClient(entity);
@@ -192,7 +192,7 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 static void QCX_Write##name(void *context, float destination, float value, \
 	qcx_entity_id_t msg_entity) \
 { \
-	(void)context; \
+	QCX_ObserveGameplayImport(context); \
 	if (QCX_IsMessageOne(destination)) { \
 		client_t *const client = QCX_RequireClient(msg_entity); \
 		ClientReliableCheckBlock(client, bytes); \
@@ -215,7 +215,7 @@ QCX_DEFINE_WRITE(Angle, MSG_WriteAngle, ClientReliableWrite_Angle, MVD_MSG_Write
 static void QCX_WriteString(void *context, float destination, const uint8_t *value,
 	qcx_byte_count_t value_size, qcx_entity_id_t msg_entity)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	if (!QCX_CopyText(value, value_size, local, sizeof(local), "message")) {
 		return;
@@ -236,7 +236,7 @@ static void QCX_WriteString(void *context, float destination, const uint8_t *val
 static void QCX_WriteEntity(void *context, float destination, qcx_entity_id_t value,
 	qcx_entity_id_t msg_entity)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(value));
 	if (QCX_IsMessageOne(destination)) {
 		client_t *const client = QCX_RequireClient(msg_entity);
@@ -253,7 +253,7 @@ static void QCX_WriteEntity(void *context, float destination, qcx_entity_id_t va
 static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,
 	const uint8_t *text, qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "centerprint")) {
 		return;
@@ -285,7 +285,7 @@ static void QCX_AmbientSound(void *context, const float origin[3],
 	const uint8_t *sample, qcx_byte_count_t sample_size, float volume,
 	float attenuation)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	if (origin == NULL || !QCX_CopyText(sample, sample_size, local, sizeof(local),
 		"ambient sound")) {
@@ -310,7 +310,7 @@ static void QCX_AmbientSound(void *context, const float origin[3],
 static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
 	float out_parms[16], qcx_byte_count_t out_parms_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (out_parms == NULL || out_parms_size < sizeof(float) * 16U) {
 		SV_Error("qc2cpp setspawnparms requires sixteen floats");
 	}
@@ -319,7 +319,7 @@ static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
 
 static void QCX_LogFrag(void *context, qcx_entity_id_t killer, qcx_entity_id_t victim)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	SV_QC_LogFrag(QCX_RequireNetworkEdict(killer), QCX_RequireNetworkEdict(victim));
 }
 
@@ -327,7 +327,7 @@ static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
 	const uint8_t *key, qcx_byte_count_t key_size, uint8_t *out,
 	qcx_byte_count_t out_capacity)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_KEY_STRING];
 	if (!QCX_CopyText(key, key_size, local, sizeof(local), "infokey")) {
 		return 0U;
@@ -403,7 +403,7 @@ static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
 
 static void QCX_Multicast(void *context, const float origin[3], float destination)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (origin == NULL) {
 		SV_Error("qc2cpp multicast requires an origin");
 	}
