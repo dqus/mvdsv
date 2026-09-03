@@ -4,6 +4,7 @@
 
 #include "qwsvdef.h"
 #include "game/plugin_api.h"
+#include "qcx/entities.h"
 #include "qcx/services.h"
 
 server_t sv;

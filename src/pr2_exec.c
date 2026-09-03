@@ -561,54 +561,6 @@ void PR2_CommitPreparedRestore(qbool restoring_qcx)
 #endif
 }
 
-int PR2_EntityReference(const edict_t *entity)
-{
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		if (entity == NULL) {
-			return 0;
-		}
-		const qcx_entity_id_t slot = QCX_EdictToSlot(entity);
-		if (slot == QCX_INVALID_ENTITY_ID) {
-			SV_Error("qc2cpp cannot encode an invalid host edict");
-			return 0;
-		}
-		return (int)slot;
-	}
-#endif
-	return PR1_EntityReference(entity);
-}
-
-edict_t *PR2_EntityFromReference(int reference)
-{
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		if (reference < 0 || (uint32_t)reference >= QCX_EntityCapacity()) {
-			SV_Error("qc2cpp entity slot %d is outside published capacity %u", reference,
-				QCX_EntityCapacity());
-			return &sv.edicts[0];
-		}
-		edict_t *const entity = QCX_SlotToEdict((qcx_entity_id_t)reference);
-		if (entity == NULL) {
-			SV_Error("qc2cpp entity slot %d has no host edict", reference);
-			return &sv.edicts[0];
-		}
-		return entity;
-	}
-#endif
-	return PR1_EntityFromReference(reference);
-}
-
-edict_t *PR2_EntityFieldToEdict(const edict_t *owner, int field_offset)
-{
-	if (owner == NULL || owner->v == NULL || field_offset < 0) {
-		SV_Error("invalid entity field reference");
-		return &sv.edicts[0];
-	}
-	const int reference = ((const eval_t *)((const byte *)owner->v + field_offset))->_int;
-	return PR2_EntityFromReference(reference);
-}
-
 pr2_save_result_t PR2_SaveGame(const char *name)
 {
 #ifdef QCX_ENABLED
@@ -648,8 +600,8 @@ void PR2_EdictTouch(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictTouch(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
-			QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
+		QCX_DispatchEdictTouch(PROG_TO_EDICT(PR_GLOBAL(self)),
+			PROG_TO_EDICT(PR_GLOBAL(other)), PR_GLOBAL(time),
 			PR_GLOBAL(frametime));
 		return;
 	}
@@ -668,7 +620,7 @@ void PR2_EdictThink(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictThink(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
+		QCX_DispatchEdictThink(PROG_TO_EDICT(PR_GLOBAL(self)),
 			PR_GLOBAL(time), PR_GLOBAL(frametime));
 		return;
 	}
@@ -687,8 +639,8 @@ void PR2_EdictBlocked(func_t f)
 	#ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		(void)f;
-		QCX_DispatchEdictBlocked(QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(self)),
-			QCX_SlotToEdict((qcx_entity_id_t)PR_GLOBAL(other)), PR_GLOBAL(time),
+		QCX_DispatchEdictBlocked(PROG_TO_EDICT(PR_GLOBAL(self)),
+			PROG_TO_EDICT(PR_GLOBAL(other)), PR_GLOBAL(time),
 			PR_GLOBAL(frametime));
 		return;
 	}
@@ -803,7 +755,7 @@ void PR2_GameConsoleCommand(void)
 
 			if (NET_CompareAdr(cl->netchan.remote_address, net_from))
 			{
-				PR_GLOBAL(self) = PR_EntityReference(cl->edict);
+				PR_GLOBAL(self) = EDICT_TO_PROG(cl->edict);
 				break;
 			}
 		}
@@ -828,7 +780,7 @@ void PR2_ClearEdict(edict_t* e)
 {
 	if (sv_vm && sv_vm->pr2_references && (sv_vm->type == VMI_NATIVE || sv_vm->type == VMI_BYTECODE || sv_vm->type == VMI_COMPILED)) {
 		int old_self = pr_global_struct->self;
-		PR_GLOBAL(self) = PR_EntityReference(e);
+		PR_GLOBAL(self) = EDICT_TO_PROG(e);
 		VM_Call(sv_vm, 0, GAME_CLEAR_EDICT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 		pr_global_struct->self = old_self;
 	}
@@ -843,8 +795,8 @@ qbool PR2_SendEntity(edict_t* e, edict_t* to, int sendflags)
 	qbool ret_val = false;
 	int old_self = pr_global_struct->self;
 	int old_other = pr_global_struct->other;
-	PR_GLOBAL(self) = PR_EntityReference(e);
-	PR_GLOBAL(other) = PR_EntityReference(to);
+	PR_GLOBAL(self) = EDICT_TO_PROG(e);
+	PR_GLOBAL(other) = EDICT_TO_PROG(to);
 	if (sv_vm)
 	{
 		ret_val = VM_Call(sv_vm, 1, GAME_EDICT_CSQCSEND, (int)sendflags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);

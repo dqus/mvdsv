@@ -151,8 +151,8 @@ qbool SV_RunThink (edict_t *ent)
 		// by a trigger with a local time.
 		ent->v->nextthink = 0;
 		PR_GLOBAL(time) = thinktime;
-		PR_GLOBAL(self) = PR_EntityReference(ent);
-		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
+		PR_GLOBAL(self) = EDICT_TO_PROG(ent);
+		PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
 		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
@@ -179,15 +179,15 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 	PR_GLOBAL(time) = sv.time;
 	if (e1->v->touch && e1->v->solid != SOLID_NOT)
 	{
-		PR_GLOBAL(self) = PR_EntityReference(e1);
-		PR_GLOBAL(other) = PR_EntityReference(e2);
+		PR_GLOBAL(self) = EDICT_TO_PROG(e1);
+		PR_GLOBAL(other) = EDICT_TO_PROG(e2);
 		PR_EdictTouch(e1->v->touch);
 	}
 
 	if (e2->v->touch && e2->v->solid != SOLID_NOT)
 	{
-		PR_GLOBAL(self) = PR_EntityReference(e2);
-		PR_GLOBAL(other) = PR_EntityReference(e1);
+		PR_GLOBAL(self) = EDICT_TO_PROG(e2);
+		PR_GLOBAL(other) = EDICT_TO_PROG(e1);
 		PR_EdictTouch(e2->v->touch);
 	}
 
@@ -292,7 +292,7 @@ int SV_FlyMove (edict_t *ent, float time1, trace_t *steptrace, int type)
 			if (trace.e.ent->v->solid == SOLID_BSP)
 			{
 				ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-				ent->v->groundentity = PR_EntityReference(trace.e.ent);
+				ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
 			}
 		}
 		if (!trace.plane.normal[2])
@@ -474,7 +474,7 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 
 		// if the entity is standing on the pusher, it will definately be moved
 		if ( ! ( ((int)check->v->flags & FL_ONGROUND)
-		&& PR_EntityFromReference(check->v->groundentity) == pusher) )
+		&& PROG_TO_EDICT(check->v->groundentity) == pusher) )
 		{
 			if ( check->v->absmin[0] >= maxs[0]
 			|| check->v->absmin[1] >= maxs[1]
@@ -539,8 +539,8 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		// otherwise, just stay in place until the obstacle is gone
 		if (pusher->v->blocked)
 		{
-			PR_GLOBAL(self) = PR_EntityReference(pusher);
-			PR_GLOBAL(other) = PR_EntityReference(check);
+			PR_GLOBAL(self) = EDICT_TO_PROG(pusher);
+			PR_GLOBAL(other) = EDICT_TO_PROG(check);
 			PR_EdictBlocked (pusher->v->blocked);
 		}
 
@@ -617,8 +617,8 @@ void SV_Physics_Pusher (edict_t *ent)
 		VectorCopy (ent->v->origin, oldorg);
 		ent->v->nextthink = 0;
 		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = PR_EntityReference(ent);
-		PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
+		PR_GLOBAL(self) = EDICT_TO_PROG(ent);
+		PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
 		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
@@ -768,7 +768,7 @@ void SV_Physics_Toss (edict_t *ent)
 		if (ent->v->velocity[2] < 60 || ent->v->movetype != MOVETYPE_BOUNCE )
 		{
 			ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
-			ent->v->groundentity = PR_EntityReference(trace.e.ent);
+			ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
 			VectorClear (ent->v->velocity);
 			VectorClear (ent->v->avelocity);
 		}
@@ -839,8 +839,8 @@ void SV_Physics_Step (edict_t *ent)
 void SV_ProgStartFrame (qbool isBotFrame)
 {
 	// let the progs know that a new frame has started
-	PR_GLOBAL(self) = PR_EntityReference(sv.edicts);
-	PR_GLOBAL(other) = PR_EntityReference(sv.edicts);
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv.edicts);
+	PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
 	PR_GLOBAL(time) = sv.time;
 	PR_GameStartFrame(isBotFrame);
 }
@@ -893,7 +893,7 @@ void SV_RunNQNewmis (void)
 	double save_frametime;
 	int i, pl;
 
-	pl = PR_EntityReference(sv_player);
+	pl = EDICT_TO_PROG(sv_player);
 	ent = NEXT_EDICT(sv.edicts);
 	for (i=1 ; i<sv.num_edicts ; i++, ent = NEXT_EDICT(ent))
 	{
@@ -932,7 +932,7 @@ void SV_RunNewmis (void)
 	if (!PR_GLOBAL(newmis))
 		return;
 
-	ent = PR_EntityFromReference(PR_GLOBAL(newmis));
+	ent = PROG_TO_EDICT(PR_GLOBAL(newmis));
 	PR_GLOBAL(newmis) = 0;
 
 	save_frametime = sv_frametime;
@@ -1016,7 +1016,7 @@ void SV_Physics (void)
 		sv_player = cl->edict;
 
 		if (sv_client->spectator && sv_client->spec_track > 0)
-			sv_player->v->goalentity = PR_EntityReference(svs.clients[sv_client->spec_track-1].edict);
+			sv_player->v->goalentity = EDICT_TO_PROG(svs.clients[sv_client->spec_track-1].edict);
 	}
 
 	sv_player = savesvpl;
