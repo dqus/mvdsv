@@ -33,6 +33,11 @@ qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
 	return QCX_INVALID_ENTITY_ID;
 }
 
+int PR2_EntityReference(const edict_t *entity)
+{
+	return entity == NULL ? 0 : (int)((const byte *)entity->v - legacy_game_memory.bytes);
+}
+
 static void assert_invalid_globals_fixture(const char *directory, const char *name)
 {
 	qcx_transport_t *transport = NULL;

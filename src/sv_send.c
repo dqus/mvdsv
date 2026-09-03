@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #ifdef QCX_ENABLED
+#include "qcx/adapter.h"
 #include "qcx/entities.h"
 #endif
 
@@ -736,7 +737,7 @@ void SV_WriteClientdataToMessage (client_t *client, sizebuf_t *msg)
 	// send a damage message if the player got hit this frame
 	if (ent->v->dmg_take || ent->v->dmg_save)
 	{
-		other = PROG_TO_EDICT(ent->v->dmg_inflictor);
+		other = PR_EntityFromReference(ent->v->dmg_inflictor);
 		MSG_WriteByte (msg, svc_damage);
 		MSG_WriteByte (msg, ent->v->dmg_save);
 		MSG_WriteByte (msg, ent->v->dmg_take);
@@ -1215,7 +1216,7 @@ static void SV_BotWriteDamage(client_t* c, int i)
 			int length = 3 + 3 * msg_coordsize;
 
 			if (MVDWrite_Begin(dem_single, i, length)) {
-				edict_t* other = PROG_TO_EDICT(ent->v->dmg_inflictor);
+				edict_t* other = PR_EntityFromReference(ent->v->dmg_inflictor);
 
 				MVD_MSG_WriteByte(svc_damage);
 				MVD_MSG_WriteByte(ent->v->dmg_save);

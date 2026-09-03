@@ -547,6 +547,54 @@ void PR2_CommitPreparedRestore(qbool restoring_qcx)
 #endif
 }
 
+int PR2_EntityReference(const edict_t *entity)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (entity == NULL) {
+			return 0;
+		}
+		const qcx_entity_id_t slot = QCX_EdictToSlot(entity);
+		if (slot == QCX_INVALID_ENTITY_ID) {
+			SV_Error("qc2cpp cannot encode an invalid host edict");
+			return 0;
+		}
+		return (int)slot;
+	}
+#endif
+	return PR1_EntityReference(entity);
+}
+
+edict_t *PR2_EntityFromReference(int reference)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (reference < 0 || (uint32_t)reference >= QCX_EntityCapacity()) {
+			SV_Error("qc2cpp entity slot %d is outside published capacity %u", reference,
+				QCX_EntityCapacity());
+			return &sv.edicts[0];
+		}
+		edict_t *const entity = QCX_SlotToEdict((qcx_entity_id_t)reference);
+		if (entity == NULL) {
+			SV_Error("qc2cpp entity slot %d has no host edict", reference);
+			return &sv.edicts[0];
+		}
+		return entity;
+	}
+#endif
+	return PR1_EntityFromReference(reference);
+}
+
+edict_t *PR2_EntityFieldToEdict(const edict_t *owner, int field_offset)
+{
+	if (owner == NULL || owner->v == NULL || field_offset < 0) {
+		SV_Error("invalid entity field reference");
+		return &sv.edicts[0];
+	}
+	const int reference = ((const eval_t *)((const byte *)owner->v + field_offset))->_int;
+	return PR2_EntityFromReference(reference);
+}
+
 pr2_save_result_t PR2_SaveGame(const char *name)
 {
 #ifdef QCX_ENABLED

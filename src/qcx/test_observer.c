@@ -1,5 +1,6 @@
 #include "qwsvdef.h"
 
+#include "qcx/adapter.h"
 #include "qcx/test_observer.h"
 #include "qcx/entities.h"
 #include "qcx/globals.h"
@@ -47,6 +48,7 @@ static void QCX_TestSaveState_f(void);
 static void QCX_TestReleaseConnectedClient_f(void);
 static void QCX_TestFatal_f(void);
 static void QCX_TestRestoreOom_f(void);
+static void QCX_TestEntityReferences_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
 
 static void QCX_TestSnapshot_f(void)
@@ -101,6 +103,7 @@ void QCX_TestObserverRegisterCommands(void)
 		QCX_TestReleaseConnectedClient_f);
 	Cmd_AddCommand("qc2cpp_test_fatal", QCX_TestFatal_f);
 	Cmd_AddCommand("qc2cpp_test_restore_oom", QCX_TestRestoreOom_f);
+	Cmd_AddCommand("qc2cpp_test_entity_references", QCX_TestEntityReferences_f);
 }
 
 void QCX_TestObserverInitBegin(void)
@@ -327,6 +330,29 @@ static void QCX_TestRestoreOom_f(void)
 	}
 	free(value);
 	Con_Printf("{\"qc2cpp_test_restore_oom\":{\"prepared\":true}}\n");
+}
+
+static void QCX_TestEntityReferences_f(void)
+{
+	if (!QCX_Active() || sv.max_edicts < 8) {
+		Con_Printf("{\"qc2cpp_test_entity_references\":{\"ready\":false}}\n");
+		return;
+	}
+	edict_t *const subject = &sv.edicts[3];
+	subject->v->owner = 4;
+	subject->v->enemy = 5;
+	subject->v->groundentity = 6;
+	subject->v->dmg_inflictor = 7;
+	PR_GLOBAL(newmis) = 7;
+	Con_Printf("{\"qc2cpp_test_entity_references\":{\"ready\":true,"
+		"\"owner\":%d,\"enemy\":%d,\"groundentity\":%d,"
+		"\"dmg_inflictor\":%d,\"newmis\":%d}}\n",
+		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->owner)),
+		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->enemy)),
+		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->groundentity)),
+		NUM_FOR_EDICT(PR_EntityFromReference(subject->v->dmg_inflictor)),
+		NUM_FOR_EDICT(PR_EntityFromReference(PR_GLOBAL(newmis))));
+	PR_GLOBAL(newmis) = 0;
 }
 
 void QCX_TestObserverClientConnect(uint32_t self)

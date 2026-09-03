@@ -122,13 +122,7 @@ void NQP_Reset (void);
 #endif
 
 #ifdef QCX_ENABLED
-#include "qcx/adapter.h"
 #include "qcx/entities.h"
-
-static inline int PR_QCXEntityReference(edict_t *entity) {
-	const qcx_entity_id_t slot = QCX_EdictToSlot(entity);
-	return slot == QCX_INVALID_ENTITY_ID ? 0 : (int)slot;
-}
 #endif
 
 //============================================================================
@@ -143,6 +137,9 @@ void PR_Profile_f (void);
 void ED_ClearEdict (edict_t *e);
 edict_t *ED_Alloc (void);
 void ED_Free (edict_t *ed);
+int PR1_EntityReference(const edict_t *entity);
+edict_t *PR1_EntityFromReference(int reference);
+edict_t *PR1_EntityFieldToEdict(const edict_t *owner, int field_offset);
 
 char *ED_NewString (char *string);
 // returns a copy of the string allocated from the server's string heap
@@ -163,16 +160,6 @@ int NUM_FOR_EDICT(edict_t *e);
 
 #define	EDICT_TO_PROG(e) ((byte *)(e)->v - (byte *)sv.game_edicts)
 #define PROG_TO_EDICT(e) (&sv.edicts[(e)/pr_edict_size])
-
-#ifdef QCX_ENABLED
-#define PR_EntityReference(entity) \
-	(QCX_Active() \
-		? PR_QCXEntityReference((edict_t *)(entity)) \
-		: ((entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity))))
-#else
-#define PR_EntityReference(entity) \
-	((entity) == NULL ? 0 : EDICT_TO_PROG((edict_t *)(entity)))
-#endif
 
 //============================================================================
 
@@ -280,6 +267,9 @@ qbool PR1_ClientCmd(void);
 #ifndef USE_PR2
 	#define PR_LoadProgs PR1_LoadProgs
 	#define PR_InitProg PR1_InitProg
+	#define PR_EntityReference PR1_EntityReference
+	#define PR_EntityFromReference PR1_EntityFromReference
+	#define PR_EntityFieldToEdict PR1_EntityFieldToEdict
 	#define PR_PrepareRestoreResources PR1_PrepareRestoreResources
 	#define PR_BindServerState PR1_BindServerState
 	#define PR_ValidatePreparedRestore PR1_ValidatePreparedRestore

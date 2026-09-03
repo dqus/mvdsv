@@ -561,9 +561,9 @@ void SV_ClipToLinks ( areanode_t *node, moveclip_t *clip )
 
 		if (clip->passedict)
 		{
-			if (PROG_TO_EDICT(touch->v->owner) == clip->passedict)
+			if (PR_EntityFromReference(touch->v->owner) == clip->passedict)
 				continue;	// don't clip against own missiles
-			if (PROG_TO_EDICT(clip->passedict->v->owner) == touch)
+			if (PR_EntityFromReference(clip->passedict->v->owner) == touch)
 				continue;	// don't clip against owner
 		}
 
@@ -646,7 +646,7 @@ void SV_AntilagClipSetUp ( areanode_t *node, moveclip_t *clip )
 	}
 	else if (passedict->v->owner)
 	{
-		int owner = PROG_TO_EDICT(passedict->v->owner)->e.entnum;
+		int owner = PR_EntityFromReference(passedict->v->owner)->e.entnum;
 
 		if (owner && owner <= MAX_CLIENTS && !svs.clients[owner - 1].isBot)
 		{
@@ -699,9 +699,9 @@ void SV_AntilagClipCheck ( areanode_t *node, moveclip_t *clip )
 
 		if (clip->passedict)
 		{
-			if (PROG_TO_EDICT(touch->v->owner) == clip->passedict)
+			if (PR_EntityFromReference(touch->v->owner) == clip->passedict)
 				continue;	// don't clip against own missiles
-			if (PROG_TO_EDICT(clip->passedict->v->owner) == touch)
+			if (PR_EntityFromReference(clip->passedict->v->owner) == touch)
 				continue;	// don't clip against owner
 		}
 

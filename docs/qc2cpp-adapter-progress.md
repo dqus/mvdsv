@@ -227,6 +227,21 @@ observer requires every spawned QCX map to bind entity/global state before its
 first gameplay entry and records every gameplay-capable host import made while
 the game initializes; focused native and Wasm map tests run those checks.
 
+## Boundary-correction Task 7 — slot-aware entity conversions
+
+The selected PR boundary now has explicit encode, decode and entity-field
+operations. A QCX entity reference is always a validated owner slot; legacy
+PR1/PR2 VM execution retains its byte-offset representation. Live engine uses
+of `owner`, `enemy`, `groundentity`, `dmg_inflictor`, `newmis`, and the two
+`hideentity` consumers use that boundary rather than performing legacy stride
+arithmetic. The checked source ledger confines the remaining conversion macros
+to legacy VM execution or ABI definitions.
+
+The real native and Wasm QW map tests write non-zero slots into shared entity
+fields and confirm that the selected reverse operation yields the matching host
+edict number. This exercises actual generated game memory without introducing
+a second hand-written game ABI fixture.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV
