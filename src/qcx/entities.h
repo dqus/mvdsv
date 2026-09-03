@@ -15,6 +15,7 @@ int QCX_BindEntities(void);
 void QCX_ClearEntities(void);
 qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot);
 uint32_t QCX_EntityCapacity(void);
+int QCX_ResolveOptionalEntityFields(void);
 qcx_entity_id_t QCX_EdictToSlot(const struct edict_s *edict);
 struct edict_s *QCX_SlotToEdict(qcx_entity_id_t slot);
 void QCX_ClearEdict(struct edict_s *edict);
