@@ -242,6 +242,17 @@ fields and confirm that the selected reverse operation yields the matching host
 edict number. This exercises actual generated game memory without introducing
 a second hand-written game ABI fixture.
 
+## Boundary-correction Task 8 — fixed optional entity fields
+
+Optional `fofs_*` values now have one fixed, validated QCX matrix at the PR2
+startup boundary. Each row checks its exact name, type, physical layout,
+non-zero in-stride offset and required host-access bits; an absent, duplicate or
+invalid row remains unavailable (`0`). The resolver accepts extra known access
+bits and exposes only the existing offsets, not descriptor lookup to callers.
+
+Legacy PR1 and PR2 retain the existing `ED_FindFieldOffset` table in a small
+legacy-only helper. `SV_SpawnServer` still does no optional-field discovery.
+
 ## Tasks 18–20 — restore, terminal failure, and operations
 
 `save`, `load`, and `saveload` now use the validated QCMS image in real MVDSV

@@ -1279,16 +1279,7 @@ void PR1_BindServerState(void)
 		sv.edicts[slot].v = (entvars_t *)((byte *)sv.game_edicts + slot * pr_edict_size);
 		PR_ClearEdict(&sv.edicts[slot]);
 	}
-	fofs_items2 = ED_FindFieldOffset("items2");
-	fofs_maxspeed = ED_FindFieldOffset("maxspeed");
-	fofs_gravity = ED_FindFieldOffset("gravity");
-	fofs_movement = ED_FindFieldOffset("movement");
-	fofs_vw_index = ED_FindFieldOffset("vw_index");
-	fofs_hideentity = ED_FindFieldOffset("hideentity");
-	fofs_trackent = ED_FindFieldOffset("trackent");
-	fofs_visibility = ED_FindFieldOffset("visclients");
-	fofs_hide_players = ED_FindFieldOffset("hideplayers");
-	fofs_teleported = ED_FindFieldOffset("teleported");
+	PR1_ResolveOptionalFieldOffsets();
 }
 
 void PR1_ValidatePreparedRestore(qbool restoring_qcx)

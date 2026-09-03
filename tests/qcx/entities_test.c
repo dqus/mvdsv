@@ -8,6 +8,8 @@
 static const qcx_game_api_v1_t *active_game;
 static qbool qcx_active;
 server_t sv;
+int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
+int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_teleported;
 
 const qcx_game_api_v1_t *QCX_Game(void)
 {

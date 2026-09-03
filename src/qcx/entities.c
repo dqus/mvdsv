@@ -11,6 +11,25 @@ static qcx_guest_address_t qcx_entity_base;
 static uint32_t qcx_entity_stride;
 static uint32_t qcx_entity_capacity;
 
+typedef struct qcx_optional_field_spec_s {
+	const char *name;
+	const char *type_name;
+	uint32_t size;
+	uint32_t alignment;
+	uint32_t required_access;
+	int *offset;
+} qcx_optional_field_spec_t;
+
+static qcx_engine_type_id_t QCX_EngineTypeId(const char *name)
+{
+	qcx_engine_type_id_t result = UINT64_C(14695981039346656037);
+	while (*name != '\0') {
+		result ^= (uint8_t)*name++;
+		result *= UINT64_C(1099511628211);
+	}
+	return result;
+}
+
 int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 {
 	QCX_ClearEntities();
@@ -93,6 +112,104 @@ qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot)
 uint32_t QCX_EntityCapacity(void)
 {
 	return qcx_entity_capacity;
+}
+
+static int QCX_OptionalFieldNameEquals(const qcx_game_api_v1_t *game,
+	const qcx_engine_field_descriptor_v1_t *descriptor, const char *name)
+{
+	if (descriptor->name.data == 0U || descriptor->name.size == 0U
+		|| descriptor->name.reserved0 != 0U || strlen(name) != descriptor->name.size) {
+		return 0;
+	}
+	void *view = NULL;
+	return game->memory_view(game->context, descriptor->name.data, descriptor->name.size,
+		1U, &view) == QCX_PLUGIN_OK && view != NULL
+		&& memcmp(view, name, descriptor->name.size) == 0;
+}
+
+int QCX_ResolveOptionalEntityFields(void)
+{
+	const qcx_game_api_v1_t *const game = QCX_Game();
+	if (qcx_entity_memory == NULL || game == NULL || game->engine_fields == NULL) {
+		return 0;
+	}
+	const qcx_guest_address_t exports_address = game->engine_fields(game->context);
+	qcx_engine_field_exports_v1_t *exports = NULL;
+	if (exports_address == 0U || game->memory_view(game->context, exports_address,
+		sizeof(*exports), _Alignof(qcx_engine_field_exports_v1_t), (void **)&exports)
+		!= QCX_PLUGIN_OK || exports == NULL
+		|| exports->abi_version != QCX_ENGINE_FIELD_EXPORTS_ABI_VERSION_V1
+		|| exports->struct_size < sizeof(*exports)
+		|| exports->reserved0 != 0U) {
+		return 0;
+	}
+	const qcx_engine_field_table_v1_t *const table = &exports->entity_fields;
+	if (table->count == 0U) {
+		return table->descriptors == 0U && table->descriptor_stride == 0U;
+	}
+	if (table->descriptors == 0U
+		|| table->descriptor_stride < sizeof(qcx_engine_field_descriptor_v1_t)
+		|| table->descriptor_stride % _Alignof(qcx_engine_field_descriptor_v1_t) != 0U) {
+		return 0;
+	}
+	const uint64_t last = (uint64_t)(table->count - 1U) * table->descriptor_stride;
+	const uint64_t envelope = last + sizeof(qcx_engine_field_descriptor_v1_t);
+	if (last > UINT32_MAX || envelope > UINT32_MAX) {
+		return 0;
+	}
+	void *table_view = NULL;
+	if (game->memory_view(game->context, table->descriptors, (qcx_byte_count_t)envelope,
+		_Alignof(qcx_engine_field_descriptor_v1_t), &table_view) != QCX_PLUGIN_OK
+		|| table_view == NULL) {
+		return 0;
+	}
+	qcx_optional_field_spec_t specs[] = {
+		{"items2", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ, &fofs_items2},
+		{"maxspeed", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE, &fofs_maxspeed},
+		{"gravity", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE, &fofs_gravity},
+		{"movement", "qc.vec3f", 3U * sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE, &fofs_movement},
+		{"vw_index", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ, &fofs_vw_index},
+		{"hideentity", "qc.entity", sizeof(uint32_t), _Alignof(uint32_t), QCX_ENGINE_FIELD_HOST_READ, &fofs_hideentity},
+		{"trackent", "qc.entity", sizeof(uint32_t), _Alignof(uint32_t), QCX_ENGINE_FIELD_HOST_READ, &fofs_trackent},
+		{"visclients", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE, &fofs_visibility},
+		{"hideplayers", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ, &fofs_hide_players},
+		{"teleported", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE, &fofs_teleported},
+	};
+	for (size_t spec_index = 0U; spec_index < sizeof(specs) / sizeof(specs[0]); ++spec_index) {
+		qcx_optional_field_spec_t *const spec = &specs[spec_index];
+		const qcx_engine_field_descriptor_v1_t *matched = NULL;
+		int duplicate = 0;
+		for (uint32_t index = 0U; index < table->count; ++index) {
+			const qcx_engine_field_descriptor_v1_t *const descriptor =
+				(const qcx_engine_field_descriptor_v1_t *)((const uint8_t *)table_view
+					+ (size_t)index * table->descriptor_stride);
+			if (!QCX_OptionalFieldNameEquals(game, descriptor, spec->name)) continue;
+			if (matched != NULL) {
+				duplicate = 1;
+				break;
+			}
+			matched = descriptor;
+		}
+		if (matched == NULL || duplicate) continue;
+		if (matched->type_id != QCX_EngineTypeId(spec->type_name)
+			|| matched->size != spec->size || matched->alignment != spec->alignment
+			|| matched->offset == 0U || matched->offset % matched->alignment != 0U
+			|| (matched->access_flags & ~(QCX_ENGINE_FIELD_HOST_READ
+				| QCX_ENGINE_FIELD_HOST_WRITE)) != 0U
+			|| (matched->access_flags & spec->required_access) != spec->required_access
+			|| qcx_entity_stride < matched->size
+			|| matched->offset > qcx_entity_stride - matched->size
+			|| qcx_entity_base > UINT64_MAX - matched->offset) {
+			continue;
+		}
+		void *field_view = NULL;
+		if (game->memory_view(game->context, qcx_entity_base + matched->offset,
+			matched->size, matched->alignment, &field_view) != QCX_PLUGIN_OK || field_view == NULL) {
+			continue;
+		}
+		*spec->offset = (int)matched->offset;
+	}
+	return 1;
 }
 
 qcx_entity_id_t QCX_EdictToSlot(const edict_t *edict)
