@@ -279,6 +279,45 @@ int ED1_FindFieldOffset (char *field)
 	return d->ofs*4;
 }
 
+typedef struct
+{
+	char *name;
+	int *offset;
+}
+pr_optional_field_t;
+
+/* PR1 discovers these by name; PR2/QCX clears the same storage before
+ * resolving its published descriptor matrix. */
+static const pr_optional_field_t pr_optional_fields[] = {
+	{"items2", &fofs_items2},
+	{"maxspeed", &fofs_maxspeed},
+	{"gravity", &fofs_gravity},
+	{"movement", &fofs_movement},
+	{"vw_index", &fofs_vw_index},
+	{"hideentity", &fofs_hideentity},
+	{"trackent", &fofs_trackent},
+	{"visclients", &fofs_visibility},
+	{"hideplayers", &fofs_hide_players},
+	{"teleported", &fofs_teleported},
+};
+
+void PR_ResetOptionalFieldOffsets(void)
+{
+	size_t index;
+
+	for (index = 0; index < sizeof(pr_optional_fields) / sizeof(pr_optional_fields[0]); ++index)
+		*pr_optional_fields[index].offset = 0;
+}
+
+void PR1_ResolveOptionalFieldOffsets(void)
+{
+	size_t index;
+
+	PR_ResetOptionalFieldOffsets();
+	for (index = 0; index < sizeof(pr_optional_fields) / sizeof(pr_optional_fields[0]); ++index)
+		*pr_optional_fields[index].offset = ED_FindFieldOffset(pr_optional_fields[index].name);
+}
+
 /*
 ============
 ED_FindFunction
