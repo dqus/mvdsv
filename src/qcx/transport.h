@@ -5,7 +5,13 @@
 
 typedef struct qcx_transport qcx_transport_t;
 
-qcx_plugin_status_t QCX_TransportOpen(int mode, const char *gamedir,
+typedef enum qcx_transport_kind_e {
+	QCX_TRANSPORT_NONE = 0,
+	QCX_TRANSPORT_NATIVE,
+	QCX_TRANSPORT_WASM
+} qcx_transport_kind_t;
+
+qcx_plugin_status_t QCX_TransportOpen(qcx_transport_kind_t transport_kind, const char *gamedir,
                                     const char *basename,
                                     const qcx_host_api_v1_t *host,
                                     qcx_transport_t **out,
