@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // sv_edict.c -- entity dictionary
 
 #ifndef CLIENTONLY
+#include <limits.h>
+#include <stdint.h>
+
 #include "qwsvdef.h"
 #ifdef QCX_ENABLED
 #include "qcx/adapter.h"
@@ -1333,6 +1336,91 @@ int NUM_FOR_EDICT(edict_t *e)
 		SV_Error ("NUM_FOR_EDICT: bad pointer");
 
 	return b;
+}
+
+int EDICT_TO_PROG(const edict_t *entity)
+{
+	if (entity == NULL) {
+		return 0;
+	}
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		const qcx_entity_id_t slot = QCX_EdictToSlot(entity);
+		if (slot == QCX_INVALID_ENTITY_ID || (uint64_t)slot > INT_MAX) {
+			SV_Error("qc2cpp cannot encode an invalid host edict");
+			return 0;
+		}
+		return (int)slot;
+	}
+#endif
+	if (entity->v == NULL || sv.game_edicts == NULL || pr_edict_size <= 0) {
+		SV_Error("cannot encode an unbound legacy edict");
+		return 0;
+	}
+	const uintptr_t state_address = (uintptr_t)(const void *)entity->v;
+	const uintptr_t base_address = (uintptr_t)(const void *)sv.game_edicts;
+	if (state_address < base_address) {
+		SV_Error("legacy edict precedes game storage");
+		return 0;
+	}
+	const uintptr_t reference = state_address - base_address;
+	if (reference > INT_MAX || reference % (uintptr_t)pr_edict_size != 0
+		|| reference / (uintptr_t)pr_edict_size >= (uintptr_t)sv.max_edicts) {
+		SV_Error("legacy edict is outside game storage");
+		return 0;
+	}
+	return (int)reference;
+}
+
+edict_t *PROG_TO_EDICT(int reference)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (reference < 0 || (uint32_t)reference >= QCX_EntityCapacity()) {
+			SV_Error("qc2cpp entity slot %d is outside published capacity %u",
+				reference, QCX_EntityCapacity());
+			return &sv.edicts[0];
+		}
+		edict_t *const entity = QCX_SlotToEdict((qcx_entity_id_t)reference);
+		if (entity == NULL) {
+			SV_Error("qc2cpp entity slot %d has no host edict", reference);
+			return &sv.edicts[0];
+		}
+		return entity;
+	}
+#endif
+	if (reference == 0) {
+		return &sv.edicts[0];
+	}
+	if (pr_edict_size <= 0 || reference < 0
+		|| reference % pr_edict_size != 0) {
+		SV_Error("invalid legacy entity reference %d", reference);
+		return &sv.edicts[0];
+	}
+	const int slot = reference / pr_edict_size;
+	if (slot < 0 || slot >= sv.max_edicts) {
+		SV_Error("legacy entity reference %d is outside %d edicts",
+			reference, sv.max_edicts);
+		return &sv.edicts[0];
+	}
+	return &sv.edicts[slot];
+}
+
+/*
+ * Legacy KTX stores EDICT_TO_PROG(entity) in its integer hideentity field,
+ * although an edict slot like trackent would have been simpler. QCX stores
+ * the qc.entity value as a slot. This helper exists so the two shared MVDSV
+ * consumers resolve either representation through PROG_TO_EDICT.
+ */
+edict_t *PR_EntityFieldToEdict(const edict_t *owner, int field_offset)
+{
+	if (owner == NULL || owner->v == NULL || field_offset < 0) {
+		SV_Error("invalid entity field reference");
+		return &sv.edicts[0];
+	}
+	const int reference =
+		((const eval_t *)((const byte *)owner->v + field_offset))->_int;
+	return PROG_TO_EDICT(reference);
 }
 
 #endif // !CLIENTONLY

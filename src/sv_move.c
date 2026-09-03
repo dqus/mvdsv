@@ -121,10 +121,10 @@ qbool SV_movestep (edict_t *ent, vec3_t move, qbool relink)
 		for (i=0 ; i<2 ; i++)
 		{
 			VectorAdd (ent->v->origin, move, neworg);
-			enemy = PR_EntityFromReference(ent->v->enemy);
+			enemy = PROG_TO_EDICT(ent->v->enemy);
 			if (i == 0 && enemy != sv.edicts)
 			{
-				dz = ent->v->origin[2] - PR_EntityFromReference(ent->v->enemy)->v->origin[2];
+				dz = ent->v->origin[2] - PROG_TO_EDICT(ent->v->enemy)->v->origin[2];
 				if (dz > 40)
 					neworg[2] -= 8;
 				if (dz < 30)
@@ -204,7 +204,7 @@ qbool SV_movestep (edict_t *ent, vec3_t move, qbool relink)
 		//		Con_Printf ("back on ground\n");
 		ent->v->flags = (int)ent->v->flags & ~FL_PARTIALGROUND;
 	}
-	ent->v->groundentity = PR_EntityReference(trace.e.ent);
+	ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
 
 	// the move is ok
 	if (relink)
@@ -392,8 +392,8 @@ void SV_MoveToGoal (void)
 	edict_t		*ent, *goal;
 	float		dist;
 
-	ent = PR_EntityFromReference(pr_global_struct->self);
-	goal = PR_EntityFromReference(ent->v->goalentity);
+	ent = PROG_TO_EDICT(pr_global_struct->self);
+	goal = PROG_TO_EDICT(ent->v->goalentity);
 	dist = G_FLOAT(OFS_PARM0);
 
 	if ( !( (int)ent->v->flags & (FL_ONGROUND|FL_FLY|FL_SWIM) ) )
@@ -403,7 +403,7 @@ void SV_MoveToGoal (void)
 	}
 
 	// if the next step hits the enemy, return immediately
-	if ( PR_EntityFromReference(ent->v->enemy) != sv.edicts && SV_CloseEnough (ent, goal, dist) )
+	if ( PROG_TO_EDICT(ent->v->enemy) != sv.edicts && SV_CloseEnough (ent, goal, dist) )
 		return;
 
 	// bump around...

@@ -404,7 +404,7 @@ void SV_DropClient(client_t* drop)
 	{
 		// call the prog function for removing a client
 		// this will set the body to a dead frame, among other things
-		PR_GLOBAL(self) = PR_EntityReference(drop->edict);
+		PR_GLOBAL(self) = EDICT_TO_PROG(drop->edict);
 		PR_GameClientDisconnect(drop->spectator);
 	}
 
@@ -3121,7 +3121,7 @@ static void SV_CheckTimeouts (void)
 		// nobody left, unpause the server
 		if (GE_ShouldPause) {
 			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = PR_EntityReference(sv.edicts);
+			PR_GLOBAL(self) = EDICT_TO_PROG(sv.edicts);
 			G_FLOAT(OFS_PARM0) = 0 /* newstate = false */;
 			PR_ExecuteProgram (GE_ShouldPause);
 			if (!G_FLOAT(OFS_RETURN))
