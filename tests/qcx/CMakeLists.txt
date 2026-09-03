@@ -264,6 +264,28 @@ add_test(NAME qcx_startup_routes
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/startup_routes_test.cmake)
 
+add_test(NAME qcx_entity_reference_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/entity_reference_routes_test.cmake)
+
+add_executable(qcx_legacy_entity_references_test
+	legacy_entity_references_test.c
+	${PROJECT_SOURCE_DIR}/src/pr_entity_references.c)
+set_target_properties(qcx_legacy_entity_references_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_legacy_entity_references_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_legacy_entity_references_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror)
+target_compile_definitions(qcx_legacy_entity_references_test PRIVATE
+	SERVERONLY
+	__LITTLE_ENDIAN__Q__)
+add_test(NAME qcx_legacy_entity_references COMMAND qcx_legacy_entity_references_test)
+
 add_executable(qcx_save_format_test
 	save_format_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
