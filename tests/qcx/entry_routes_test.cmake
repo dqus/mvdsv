@@ -11,13 +11,15 @@ function(require_count relative_path needle expected)
 	endif()
 endfunction()
 
-# Gameplay sites set canonical globals and enter the existing PR2 seam.  They
-# must not select QCX or marshal callback arguments themselves: string and
-# startup ownership are intentionally covered by later tasks.
+# Gameplay sites set canonical globals and enter the existing PR2 seam. They
+# must not select QCX or marshal callback arguments themselves.
 foreach(server_source IN ITEMS src/sv_phys.c src/sv_world.c src/sv_user.c)
 	file(READ "${MVDSV_SOURCE_DIR}/${server_source}" source)
 	if(source MATCHES "QCX_Dispatch")
 		message(FATAL_ERROR "${server_source}: gameplay dispatch leaked past PR2")
+	endif()
+	if(source MATCHES "QCX_Active")
+		message(FATAL_ERROR "${server_source}: QCX backend selection leaked past PR2")
 	endif()
 endforeach()
 
