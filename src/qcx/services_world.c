@@ -47,7 +47,7 @@ static char *QCX_CopyPersistentText(const uint8_t *bytes, qcx_byte_count_t size,
 
 static void QCX_SetOrigin(void *context, qcx_entity_id_t slot, const float origin[3])
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (origin == NULL) {
 		SV_Error("qc2cpp setorigin requires origin");
 	}
@@ -60,7 +60,7 @@ static void QCX_SetOrigin(void *context, qcx_entity_id_t slot, const float origi
 static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *name,
 	qcx_byte_count_t name_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	edict_t *const entity = QCX_RequireEdict(slot);
 	if (!QCX_CopyText(name, name_size, local, sizeof(local), "model")
@@ -73,7 +73,7 @@ static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *nam
 static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3],
 	const float maxs[3])
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (mins == NULL || maxs == NULL) {
 		SV_Error("qc2cpp setsize requires bounds");
 	}
@@ -86,7 +86,7 @@ static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3]
 
 static qcx_entity_id_t QCX_Spawn(void *context)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	const qcx_entity_id_t slot = QCX_EdictToSlot(ED_Alloc());
 	if (slot == QCX_INVALID_ENTITY_ID) {
 		SV_Error("qc2cpp spawn returned invalid entity");
@@ -96,7 +96,7 @@ static qcx_entity_id_t QCX_Spawn(void *context)
 
 static void QCX_Remove(void *context, qcx_entity_id_t slot)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	ED_Free(QCX_RequireEdict(slot));
 }
 
@@ -104,7 +104,7 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 	const uint8_t *key, qcx_byte_count_t key_size, const uint8_t *value,
 	qcx_byte_count_t value_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	(void)QCX_RequireEdict(slot);
 	if ((key == NULL && key_size != 0U) || (value == NULL && value_size != 0U)
 		|| (key_size != 0U && memchr(key, '\0', key_size) != NULL)
@@ -136,7 +136,7 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 
 static uint32_t QCX_MapAdmit(void *context, qcx_entity_id_t slot, float spawnflags)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	(void)QCX_RequireEdict(slot);
 	const int flags = (int)spawnflags;
 	if ((int)deathmatch.value != 0) {
@@ -152,13 +152,13 @@ static uint32_t QCX_MapAdmit(void *context, qcx_entity_id_t slot, float spawnfla
 
 static float QCX_MapTime(void *context)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	return (float)sv.time;
 }
 
 static void QCX_MapPostSpawn(void *context, qcx_entity_id_t slot)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	(void)QCX_RequireEdict(slot);
 	SV_FlushSignon();
 }
@@ -167,7 +167,7 @@ static qcx_byte_count_t QCX_Precache(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity,
 	int (*operation)(const char *), const char *what)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char *const persistent = QCX_CopyPersistentText(name, name_size, what);
 	if (persistent == NULL || !operation(persistent)) {
 		SV_Error("qc2cpp %s precache failed", what);
@@ -195,7 +195,7 @@ static qcx_byte_count_t QCX_PrecacheSound(void *context, const uint8_t *name,
 static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 	qcx_byte_count_t value_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	if (style < 0.0f || style >= (float)MAX_LIGHTSTYLES) {
 		SV_Error("qc2cpp lightstyle index out of range");
 	}
@@ -208,7 +208,7 @@ static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 
 static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	if (!QCX_CopyText(name, name_size, local, sizeof(local), "cvar")) {
 		return 0.0f;
@@ -219,7 +219,7 @@ static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_
 static void QCX_CvarSet(void *context, const uint8_t *name, qcx_byte_count_t name_size,
 	const uint8_t *value, qcx_byte_count_t value_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local_name[MAX_QPATH];
 	char local_value[MAX_INFO_STRING];
 	if (!QCX_CopyText(name, name_size, local_name, sizeof(local_name), "cvar")
@@ -234,7 +234,7 @@ static void QCX_CvarSet(void *context, const uint8_t *name, qcx_byte_count_t nam
 
 static void QCX_LocalCmd(void *context, const uint8_t *text, qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAXCMDBUF];
 	if (QCX_CopyText(text, text_size, local, sizeof(local), "localcmd")) {
 		Cbuf_AddText(local);
@@ -243,7 +243,7 @@ static void QCX_LocalCmd(void *context, const uint8_t *text, qcx_byte_count_t te
 
 static void QCX_DPrint(void *context, const uint8_t *text, qcx_byte_count_t text_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	if (QCX_CopyText(text, text_size, local, sizeof(local), "dprint")) {
 		Con_Printf("%s", local);
@@ -252,7 +252,7 @@ static void QCX_DPrint(void *context, const uint8_t *text, qcx_byte_count_t text
 
 static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	edict_t *const entity = QCX_RequireEdict(slot);
 	char model[MAX_QPATH];
 	uint32_t required = 0U;
@@ -265,7 +265,7 @@ static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
 
 static void QCX_ChangeLevel(void *context, const uint8_t *map, qcx_byte_count_t map_size)
 {
-	(void)context;
+	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	if (QCX_CopyText(map, map_size, local, sizeof(local), "map")) {
 		SV_QC_ChangeLevel(local);
