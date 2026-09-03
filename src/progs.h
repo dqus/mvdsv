@@ -140,6 +140,7 @@ void ED_Free (edict_t *ed);
 int PR1_EntityReference(const edict_t *entity);
 edict_t *PR1_EntityFromReference(int reference);
 edict_t *PR1_EntityFieldToEdict(const edict_t *owner, int field_offset);
+void PR1_ResolveOptionalFieldOffsets(void);
 
 char *ED_NewString (char *string);
 // returns a copy of the string allocated from the server's string heap
