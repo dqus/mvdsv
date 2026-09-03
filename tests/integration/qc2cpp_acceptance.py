@@ -190,7 +190,7 @@ def require_log_marker(path, marker, timeout):
     raise ProcessFailure(f"client did not observe {marker!r}: {contents}")
 
 
-def run_map_suite(server, artifacts, assets, output, mode):
+def run_map_suite(server, artifacts, assets, output, mode, expect_optional_fields=False):
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-{mode}-", dir=output))
     basedir = prepare_game_directory(run_root, assets, artifacts, mode)
@@ -208,6 +208,11 @@ def run_map_suite(server, artifacts, assets, output, mode):
                 references.get(key) != value for key, value in expected_references.items()):
             raise ProcessFailure(
                 f"QCX entity slots did not select their host edicts: {references}")
+        if expect_optional_fields:
+            optional_fields = process.observe("qc2cpp_test_optional_fields",
+                "qc2cpp_test_optional_fields", timeout=8)
+            if optional_fields.get("ready") is not True or optional_fields.get("hideentity") != 4:
+                raise ProcessFailure(f"QCX optional entity fields failed: {optional_fields}")
         process.send("map e1m2")
         time.sleep(0.5)
         second = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
@@ -649,11 +654,13 @@ def main():
     parser.add_argument("--assets", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
     parser.add_argument("--client", type=pathlib.Path)
+    parser.add_argument("--expect-optional-fields", action="store_true")
     args = parser.parse_args()
     try:
         require_file(args.server)
         if args.suite == "map":
-            run_map_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
+            run_map_suite(args.server, args.artifacts, args.assets, args.output, args.mode,
+                args.expect_optional_fields)
         elif args.suite == "fatal":
             run_fatal_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
         elif args.suite == "restore-oom":
