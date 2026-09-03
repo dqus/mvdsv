@@ -96,15 +96,14 @@ void SV_CheckVelocity (edict_t *ent)
 	//
 	for (i=0 ; i<3 ; i++)
 	{
-		const char *classname_text = PR_GetEntityString(ent->v->classname);
 		if (IS_NAN(ent->v->velocity[i]))
 		{
-			Con_DPrintf ("Got a NaN velocity on %s\n", classname_text);
+			Con_DPrintf ("Got a NaN velocity on %s\n", PR_GetEntityString(ent->v->classname));
 			ent->v->velocity[i] = 0;
 		}
 		if (IS_NAN(ent->v->origin[i]))
 		{
-			Con_DPrintf ("Got a NaN origin on %s\n", classname_text);
+			Con_DPrintf ("Got a NaN origin on %s\n", PR_GetEntityString(ent->v->classname));
 			ent->v->origin[i] = 0;
 		}
 /*		if (ent->v->velocity[i] > sv_maxvelocity.value)
@@ -191,8 +190,8 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 		PR_EdictTouch(e2->v->touch);
 	}
 
-	PR_GLOBAL(self) = (old_self);
-	PR_GLOBAL(other) = (old_other);
+	PR_GLOBAL(self) = old_self;
+	PR_GLOBAL(other) = old_other;
 }
 
 
@@ -1001,7 +1000,7 @@ void SV_Physics (void)
 	}
 
 	if (PR_GLOBAL(force_retouch))
-		(PR_GLOBAL(force_retouch))--;
+		PR_GLOBAL(force_retouch)--;
 
 	savesvpl = sv_player;
 	savehc = sv_client;

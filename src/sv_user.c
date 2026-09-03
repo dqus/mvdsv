@@ -442,10 +442,8 @@ static void Cmd_New_f (void)
 	// send full levelname
 	if (sv_client->rip_vip)
 		MSG_WriteString (&sv_client->netchan.message, "");
-	else {
-		const char *levelname_text = PR_GetEntityString(sv.edicts->v->message);
-		MSG_WriteString (&sv_client->netchan.message, levelname_text);
-	}
+	else
+		MSG_WriteString (&sv_client->netchan.message, PR_GetEntityString(sv.edicts->v->message));
 
 	// send the movevars
 	MSG_WriteFloat(&sv_client->netchan.message, movevars.gravity);
@@ -945,8 +943,7 @@ static void SV_SpawnSpectator (void)
 	for (i=MAX_CLIENTS-1 ; i<sv.num_edicts ; i++)
 	{
 		e = EDICT_NUM(i);
-		const char *classname_text = PR_GetEntityString(e->v->classname);
-		if (!strcmp(classname_text, "info_player_start"))
+		if (!strcmp(PR_GetEntityString(e->v->classname), "info_player_start"))
 		{
 			VectorCopy (e->v->origin, sv_player->v->origin);
 			VectorCopy (e->v->angles, sv_player->v->angles);
@@ -987,16 +984,16 @@ static void Cmd_Begin_f (void)
 		// copy spawn parms out of the client_t
 		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
 			(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
+
+		// call the spawn function
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 		PR_GameClientConnect(sv_client->spectator);
 
 		// actually spawn the player
-		{
-			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		}
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 		PR_GamePutClientInServer(sv_client->spectator);
 	}
 
@@ -1829,10 +1826,8 @@ static void SV_Say (qbool team)
 	// try handle say in the mod.
 	SV_EndRedirect ();
 
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 
 	j = PR_ClientSay(team, p);
 
@@ -2012,10 +2007,8 @@ static void Cmd_Kill_f (void)
 		return;
 	}
 
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 	PR_ClientKill();
 }
 
@@ -2385,10 +2378,8 @@ static void Cmd_SetInfo_f (void)
 
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
 
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 	if (PR_UserInfoChanged(0))
 		return; // does not allowed to be changed by mod.
 
@@ -2736,23 +2727,21 @@ static void Cmd_Join_f (void)
 
 	// call the progs to get default spawn parms for the new client
 	PR_GameSetNewParms();
+
+	// copy spawn parms out of the client_t
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
 		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	// call the spawn function
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
+	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GameClientConnect(0);
 
 	// actually spawn the player
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
+	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GamePutClientInServer(0);
 
 	// look in SVC_DirectConnect() for for extended comment whats this for
@@ -2823,23 +2812,21 @@ static void Cmd_Observe_f (void)
 
 	// call the progs to get default spawn parms for the new client
 	PR_GameSetNewParms();
-	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
 
 	SV_SpawnSpectator ();
 
+	// copy spawn parms out of the client_t
+	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
+		sv_client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+
 	// call the spawn function
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
+	G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
 	PR_GameClientConnect(1);
 
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 	PR_GamePutClientInServer(1); // let mod know we put spec not player
 
 	// look in SVC_DirectConnect() for for extended comment whats this for
@@ -3410,10 +3397,8 @@ static ucmd_t ucmds[] =
 
 static qbool SV_ExecutePRCommand (void)
 {
-	{
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-	}
+	PR_GLOBAL(time) = sv.time;
+	PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 	return PR_ClientCmd();
 }
 
@@ -3765,11 +3750,9 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		VectorCopy (sv_player->v->velocity, oldvelocity);
 		old_teleport_time = sv_player->v->teleport_time;
 
-		{
-			PR_GLOBAL(frametime) = sv_frametime;
-			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		}
+		PR_GLOBAL(frametime) = sv_frametime;
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 		PR_GameClientPreThink(0);
 
 		if (pr_nqprogs)
@@ -3848,7 +3831,7 @@ FIXME
 		}
 
 		// Give the mod a chance to replace the command
-		PR_EdictBlocked(sv_player->v->blocked);
+		PR_EdictBlocked (sv_player->v->blocked);
 
 		// Run the command again
 		SV_RunCmd (ucmd, false, true);
@@ -3889,9 +3872,9 @@ FIXME
 			ent = EDICT_NUM(n);
 			if (!ent->v->touch || (playertouch[n/8]&(1<<(n%8))))
 				continue;
-		PR_GLOBAL(self) = EDICT_TO_PROG(ent);
-		PR_GLOBAL(other) = EDICT_TO_PROG(sv_player);
-			PR_EdictTouch(ent->v->touch);
+			PR_GLOBAL(self) = EDICT_TO_PROG(ent);
+			PR_GLOBAL(other) = EDICT_TO_PROG(sv_player);
+			PR_EdictTouch (ent->v->touch);
 			playertouch[n/8] |= 1 << (n%8);
 		}
 	}
@@ -4198,10 +4181,8 @@ void SV_PostRunCmd(void)
 #endif
 
 		onground = (int) sv_player->v->flags & FL_ONGROUND;
-		{
-			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		}
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 		VectorCopy (sv_player->v->velocity, originalvel);
 		PR_GameClientPostThink(0);
 
@@ -4226,10 +4207,8 @@ void SV_PostRunCmd(void)
 	}
 	else
 	{
-		{
-			PR_GLOBAL(time) = sv.time;
-			PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
-		}
+		PR_GLOBAL(time) = sv.time;
+		PR_GLOBAL(self) = EDICT_TO_PROG(sv_player);
 		PR_GameClientPostThink(1);
 	}
 }

@@ -92,7 +92,7 @@ void SV_SaveGame_f(void)
 		Con_Printf ("Relative pathfnames are not allowed.\n");
 		return;
 	}
-	#ifdef USE_PR2
+#ifdef USE_PR2
 	switch (PR2_SaveGame(Cmd_Argv(1))) {
 	case PR2_SAVE_COMPLETE:
 		Con_Printf("qc2cpp game saved.\n");
@@ -104,7 +104,7 @@ void SV_SaveGame_f(void)
 	case PR2_SAVE_NOT_SELECTED:
 		break;
 	}
-	#endif
+#endif
 	if (sv.state != ss_active) {
 		Con_Printf ("Not playing a local game.\n");
 		return;
@@ -199,7 +199,7 @@ void SV_LoadGame_f(void)
 		return;
 	}
 
-	#ifdef USE_PR2
+#ifdef USE_PR2
 	{
 		char magic[4];
 		const size_t magic_size = fread(magic, 1U, sizeof(magic), f);

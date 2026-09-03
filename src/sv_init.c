@@ -381,17 +381,18 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	SV_LoadCSQC();
 #endif
 
-	// Load progs to establish the selected game capacity before host headers
-	// and selected game views are bound below.
+	// load progs to establish the selected game capacity before host headers
+	// and selected game views are bound below
 	PR_PrepareRestoreResources(restoring_qc2cpp);
 	PR_LoadProgs ();
 #ifdef WITH_NQPROGS
 	PR_InitPatchTables();
 #endif
 	PR_InitProg();
-	for (i = 0; i < sv.max_edicts; ++i) {
+	for (i = 0; i < sv.max_edicts; i++)
+	{
 		sv.edicts[i].e.entnum = i;
-		sv.edicts[i].e.area.ed = &sv.edicts[i];
+		sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
 	}
 	PR_BindServerState();
 
@@ -622,9 +623,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		entitystring = CM_EntityString();
 	}
 
-	if (!restoring_qc2cpp) {
+	if (!restoring_qc2cpp)
 		PR_LoadEnts(entitystring);
-	}
 	// ********* End of External Entity support code *********
 
 	// look up some model indexes for specialized message compression
@@ -634,8 +634,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// or prog writes to the signon message are errors
 	sv.state = ss_active;
 
-	// run two frames to allow ordinary map startup to settle
-	if (!restoring_qc2cpp) {
+	// run two frames to allow everything to settle
+	if (!restoring_qc2cpp)
+	{
 		SV_Physics ();
 		sv.time += 0.1;
 		SV_Physics ();
@@ -646,7 +647,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// save movement vars
 	SV_SetMoveVars();
 
-	// Create a baseline for more efficient communications.
+	// create a baseline for more efficient communications
 	PR_CommitPreparedRestore(restoring_qc2cpp);
 	SV_CreateBaseline ();
 	sv.signon_buffer_size[sv.num_signon_buffers-1] = sv.signon.cursize;
@@ -654,7 +655,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	Info_SetValueForKey (svs.info, "map", sv.mapname, MAX_SERVERINFO_STRING);
 
 	// calltimeofday.
-	if (!restoring_qc2cpp) {
+	if (!restoring_qc2cpp)
+	{
 		extern void PF_calltimeofday (void);
 		PR_GLOBAL(time) = sv.time;
 		PR_GLOBAL(self) = EDICT_TO_PROG(NULL);

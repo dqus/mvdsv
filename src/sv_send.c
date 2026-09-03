@@ -860,8 +860,7 @@ void SV_UpdateClientStats (client_t *client)
 	}
 
 	stats[STAT_HEALTH] = ent->v->health;
-	char *weaponmodel_name = PR_GetEntityString(ent->v->weaponmodel);
-	stats[STAT_WEAPON] = SV_ModelIndex(weaponmodel_name);
+	stats[STAT_WEAPON] = SV_ModelIndex(PR_GetEntityString(ent->v->weaponmodel));
 	stats[STAT_AMMO] = ent->v->currentammo;
 	stats[STAT_ARMOR] = ent->v->armorvalue;
 	stats[STAT_SHELLS] = ent->v->ammo_shells;
@@ -1260,8 +1259,7 @@ void MVD_WriteStats(void)
 		memset (stats, 0, sizeof(stats));
 
 		stats[STAT_HEALTH] = ent->v->health;
-		char *weaponmodel_name = PR_GetEntityString(ent->v->weaponmodel);
-		stats[STAT_WEAPON] = SV_ModelIndex(weaponmodel_name);
+		stats[STAT_WEAPON] = SV_ModelIndex(PR_GetEntityString(ent->v->weaponmodel));
 		stats[STAT_AMMO] = ent->v->currentammo;
 		stats[STAT_ARMOR] = ent->v->armorvalue;
 		stats[STAT_SHELLS] = ent->v->ammo_shells;

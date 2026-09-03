@@ -821,9 +821,7 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 	}
 
 	// ignore ents without visible models
-	if (!ent->v->modelindex)
-		return false;
-	if (!*PR_GetEntityString(ent->v->model))
+	if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model))
 		return false;
 
 	if ( pvs && ent->e.num_leafs >= 0 )
