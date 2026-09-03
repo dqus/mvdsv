@@ -147,6 +147,17 @@ add_test(NAME qc2cpp_server_map_native
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
         --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
         --output "${qc2cpp_acceptance_root}/runs/native")
+if(TARGET qc2cpp_optional_fields_native_assets)
+    add_test(NAME qc2cpp_optional_fields_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite map --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${CMAKE_BINARY_DIR}/tests/qcx/optional-fields-native/build"
+            --assets "${qc2cpp_assets}"
+            --output "${CMAKE_BINARY_DIR}/tests/qcx/optional-fields-native/run"
+            --expect-optional-fields)
+    set_tests_properties(qc2cpp_optional_fields_native PROPERTIES
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+endif()
 add_test(NAME qc2cpp_save_native_native
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
         --suite save --mode native --server $<TARGET_FILE:mvdsv>
@@ -263,6 +274,17 @@ if(MVDSV_QC2CPP_WASM)
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/wasm")
+    if(TARGET qc2cpp_optional_fields_wasm_assets)
+        add_test(NAME qc2cpp_optional_fields_wasm
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+                --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
+                --artifacts "${CMAKE_BINARY_DIR}/tests/qcx/optional-fields-wasm/build"
+                --assets "${qc2cpp_assets}"
+                --output "${CMAKE_BINARY_DIR}/tests/qcx/optional-fields-wasm/run"
+                --expect-optional-fields)
+        set_tests_properties(qc2cpp_optional_fields_wasm PROPERTIES
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    endif()
     add_test(NAME qc2cpp_save_wasm_wasm
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
             --suite save --mode wasm --server $<TARGET_FILE:mvdsv>
