@@ -6,6 +6,8 @@
 void QCX_TestObserverRegisterCommands(void);
 void QCX_TestObserverInitBegin(void);
 void QCX_TestObserverInitEnd(void);
+void QCX_TestObserverGameplayImport(void);
+void QCX_TestObserverServerStateBound(void);
 void QCX_TestObserverStartFrame(void);
 void QCX_TestObserverNormalUnpublish(void);
 void QCX_TestObserverTerminalUnpublish(void);

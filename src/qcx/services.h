@@ -29,4 +29,14 @@ void QCX_BindNetworkServices(qcx_host_api_v1_t *host);
 /* Mandatory services owned by later tasks terminate instead of succeeding. */
 void QCX_BindUnavailableServices(qcx_host_api_v1_t *host);
 
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#define QCX_ObserveGameplayImport(context) do { \
+	(void)(context); \
+	QCX_TestObserverGameplayImport(); \
+} while (0)
+#else
+#define QCX_ObserveGameplayImport(context) do { (void)(context); } while (0)
+#endif
+
 #endif

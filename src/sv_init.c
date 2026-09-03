@@ -22,10 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
-#ifdef QCX_ENABLED
-#include "qcx/save.h"
-#endif
-
 #ifndef SERVERONLY
 void CL_ClearState(void);
 void CL_ClearQueuedPackets(void);
@@ -385,57 +381,19 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	SV_LoadCSQC();
 #endif
 
-	// load progs to get entity field count
-	// which determines how big each edict is
-	// and allocate edicts
-	#ifdef QCX_ENABLED
-	if (restoring_qc2cpp && !QCX_PrepareLoadResources()) {
-		SV_Error("qc2cpp restore could not prepare saved resource ordering");
-	}
-	#endif
+	// Load progs to establish the selected game capacity before host headers
+	// and selected game views are bound below.
+	PR_PrepareRestoreResources(restoring_qc2cpp);
 	PR_LoadProgs ();
 #ifdef WITH_NQPROGS
 	PR_InitPatchTables();
 #endif
 	PR_InitProg();
-
-#ifdef QCX_ENABLED
-	if (QCX_Active()) {
-		for (i = 0; i < sv.max_edicts; i++) {
-			sv.edicts[i].e.area.ed = &sv.edicts[i];
-		}
-		fofs_items2 = 0;
-		fofs_maxspeed = 0;
-		fofs_gravity = 0;
-		fofs_movement = 0;
-		fofs_vw_index = 0;
-		fofs_hideentity = 0;
-		fofs_trackent = 0;
-		fofs_visibility = 0;
-		fofs_hide_players = 0;
-		fofs_teleported = 0;
-	} else
-#endif
-	{
-		for (i = 0; i < sv.max_edicts; i++)
-		{
-			sv.edicts[i].v = (entvars_t *)((byte *)sv.game_edicts + i * pr_edict_size);
-			sv.edicts[i].e.entnum = i;
-			sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
-			PR_ClearEdict(&sv.edicts[i]);
-		}
-
-		fofs_items2 = ED_FindFieldOffset ("items2"); // ZQ_ITEMS2 extension
-		fofs_maxspeed = ED_FindFieldOffset ("maxspeed");
-		fofs_gravity = ED_FindFieldOffset ("gravity");
-		fofs_movement = ED_FindFieldOffset ("movement");
-		fofs_vw_index = ED_FindFieldOffset ("vw_index");
-		fofs_hideentity = ED_FindFieldOffset ("hideentity");
-		fofs_trackent = ED_FindFieldOffset ("trackent");
-		fofs_visibility = ED_FindFieldOffset ("visclients");
-		fofs_hide_players = ED_FindFieldOffset ("hideplayers");
-		fofs_teleported = ED_FindFieldOffset ("teleported");
+	for (i = 0; i < sv.max_edicts; ++i) {
+		sv.edicts[i].e.entnum = i;
+		sv.edicts[i].e.area.ed = &sv.edicts[i];
 	}
+	PR_BindServerState();
 
 #ifdef MVD_PEXT1_HIGHLAGTELEPORT
 	if (fofs_teleported) {
@@ -624,17 +582,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 			Cvar_Create((char *)/*stupid const warning*/ *var, "0", 0);
 	}
 
-	// A QCMS restore initializes the selected backend and map resources, but its
-	// saved guest image replaces ordinary QC map startup below.
-#ifdef QCX_ENABLED
-	if (restoring_qc2cpp && (!QCX_Active() || !QCX_HasPreparedLoadGame())) {
-		SV_Error("qc2cpp restore lost its prepared image");
-	}
-#else
-	if (restoring_qc2cpp) {
-		SV_Error("qc2cpp restore support is unavailable");
-	}
-#endif
+	// A prepared restore replaces ordinary QC map startup below.
+	PR_ValidatePreparedRestore(restoring_qc2cpp);
 
 	// run the frame start qc function to let progs check cvars
 	if (!restoring_qc2cpp && !pr_nqprogs)
@@ -697,12 +646,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// save movement vars
 	SV_SetMoveVars();
 
-	// create a baseline for more efficient communications
-	#ifdef QCX_ENABLED
-	if (restoring_qc2cpp && !QCX_CommitPreparedLoadGame()) {
-		SV_Error("qc2cpp restore validation failed after map setup");
-	}
-	#endif
+	// Create a baseline for more efficient communications.
+	PR_CommitPreparedRestore(restoring_qc2cpp);
 	SV_CreateBaseline ();
 	sv.signon_buffer_size[sv.num_signon_buffers-1] = sv.signon.cursize;
 

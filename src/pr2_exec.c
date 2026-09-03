@@ -476,6 +476,77 @@ void PR2_GameSetChangeParms(void)
 	}
 }
 
+void PR2_PrepareRestoreResources(qbool restoring_qcx)
+{
+#ifdef QCX_ENABLED
+	if (restoring_qcx && !QCX_PrepareLoadResources()) {
+		SV_Error("qc2cpp restore could not prepare saved resource ordering");
+	}
+#else
+	if (restoring_qcx) {
+		SV_Error("qc2cpp restore support is unavailable");
+	}
+#endif
+}
+
+static void PR2_ResetOptionalFieldOffsets(void)
+{
+	fofs_items2 = 0;
+	fofs_maxspeed = 0;
+	fofs_gravity = 0;
+	fofs_movement = 0;
+	fofs_vw_index = 0;
+	fofs_hideentity = 0;
+	fofs_trackent = 0;
+	fofs_visibility = 0;
+	fofs_hide_players = 0;
+	fofs_teleported = 0;
+}
+
+void PR2_BindServerState(void)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		if (!QCX_BindEntities()
+			|| !QCX_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
+			SV_Error("qc2cpp game did not publish compatible server state");
+		}
+#if defined(QCX_TESTS)
+		QCX_TestObserverServerStateBound();
+#endif
+		PR2_ResetOptionalFieldOffsets();
+		return;
+	}
+#endif
+	PR1_BindServerState();
+}
+
+void PR2_ValidatePreparedRestore(qbool restoring_qcx)
+{
+#ifdef QCX_ENABLED
+	if (restoring_qcx && (!QCX_Active() || !QCX_HasPreparedLoadGame())) {
+		SV_Error("qc2cpp restore lost its prepared image");
+	}
+#else
+	if (restoring_qcx) {
+		SV_Error("qc2cpp restore support is unavailable");
+	}
+#endif
+}
+
+void PR2_CommitPreparedRestore(qbool restoring_qcx)
+{
+#ifdef QCX_ENABLED
+	if (restoring_qcx && !QCX_CommitPreparedLoadGame()) {
+		SV_Error("qc2cpp restore validation failed after map setup");
+	}
+#else
+	if (restoring_qcx) {
+		SV_Error("qc2cpp restore support is unavailable");
+	}
+#endif
+}
+
 pr2_save_result_t PR2_SaveGame(const char *name)
 {
 #ifdef QCX_ENABLED

@@ -69,11 +69,8 @@ void QCX_InitProg(void)
 #if defined(QCX_TESTS)
 	QCX_TestObserverInitEnd();
 #endif
-	if (!QCX_ConfigureEntities(entity_publication) || !QCX_BindEntities()) {
+	if (!QCX_ConfigureEntities(entity_publication)) {
 		SV_Error("qc2cpp game did not publish compatible entity storage");
-	}
-	if (!QCX_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
-		SV_Error("qc2cpp game did not publish valid shared globals");
 	}
 	qcx_published = true;
 }
