@@ -128,6 +128,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qcx/adapter.c"
 		"${DIR_SRC}/qcx/adapter_state.c"
 		"${DIR_SRC}/qcx/entities.c"
+		"${DIR_SRC}/qcx/strings.c"
 		"${DIR_SRC}/qcx/globals.c"
 		"${DIR_SRC}/qcx/entries.c"
 		"${DIR_SRC}/qcx/services_movement.c"

@@ -107,6 +107,7 @@ edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 
 qcx_shared_global_state_v1_t *QCX_Globals(void) { return &globals; }
 qbool QCX_Active(void) { return qcx_active; }
+const qcx_game_api_v1_t *QCX_Game(void) { return NULL; }
 
 void QCX_EdictTouch(qcx_entity_id_t first, qcx_entity_id_t second, float time,
 	float frametime)
