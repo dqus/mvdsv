@@ -172,7 +172,7 @@ static void SV_SaveSpawnparms (void)
 		sv_client->state = cs_connected;
 
 		// call the progs to get default spawn parms for the new client
-		PR_GLOBAL(self) = EDICT_TO_PROG(sv_client->edict);
+		pr_global_struct->self = EDICT_TO_PROG(sv_client->edict);
 		PR_GameSetChangeParms();
 		for (j=0 ; j<NUM_SPAWN_PARMS ; j++)
 			sv_client->spawn_parms[j] = (&PR_GLOBAL(parm1))[j];
@@ -658,8 +658,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	if (!restoring_qc2cpp)
 	{
 		extern void PF_calltimeofday (void);
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(NULL);
+		pr_global_struct->time = sv.time;
+		pr_global_struct->self = EDICT_TO_PROG(NULL);
 
 		PF_calltimeofday();
 	}

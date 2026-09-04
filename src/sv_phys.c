@@ -149,9 +149,9 @@ qbool SV_RunThink (edict_t *ent)
 		// it is possible to start that way
 		// by a trigger with a local time.
 		ent->v->nextthink = 0;
-		PR_GLOBAL(time) = thinktime;
-		PR_GLOBAL(self) = EDICT_TO_PROG(ent);
-		PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
+		pr_global_struct->time = thinktime;
+		pr_global_struct->self = EDICT_TO_PROG(ent);
+		pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
 		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
@@ -172,26 +172,26 @@ void SV_Impact (edict_t *e1, edict_t *e2)
 {
 	int old_self, old_other;
 
-	old_self = PR_GLOBAL(self);
-	old_other = PR_GLOBAL(other);
+	old_self = pr_global_struct->self;
+	old_other = pr_global_struct->other;
 
-	PR_GLOBAL(time) = sv.time;
+	pr_global_struct->time = sv.time;
 	if (e1->v->touch && e1->v->solid != SOLID_NOT)
 	{
-		PR_GLOBAL(self) = EDICT_TO_PROG(e1);
-		PR_GLOBAL(other) = EDICT_TO_PROG(e2);
+		pr_global_struct->self = EDICT_TO_PROG(e1);
+		pr_global_struct->other = EDICT_TO_PROG(e2);
 		PR_EdictTouch(e1->v->touch);
 	}
 
 	if (e2->v->touch && e2->v->solid != SOLID_NOT)
 	{
-		PR_GLOBAL(self) = EDICT_TO_PROG(e2);
-		PR_GLOBAL(other) = EDICT_TO_PROG(e1);
+		pr_global_struct->self = EDICT_TO_PROG(e2);
+		pr_global_struct->other = EDICT_TO_PROG(e1);
 		PR_EdictTouch(e2->v->touch);
 	}
 
-	PR_GLOBAL(self) = old_self;
-	PR_GLOBAL(other) = old_other;
+	pr_global_struct->self = old_self;
+	pr_global_struct->other = old_other;
 }
 
 
@@ -538,8 +538,8 @@ qbool SV_Push (edict_t *pusher, vec3_t move)
 		// otherwise, just stay in place until the obstacle is gone
 		if (pusher->v->blocked)
 		{
-			PR_GLOBAL(self) = EDICT_TO_PROG(pusher);
-			PR_GLOBAL(other) = EDICT_TO_PROG(check);
+			pr_global_struct->self = EDICT_TO_PROG(pusher);
+			pr_global_struct->other = EDICT_TO_PROG(check);
 			PR_EdictBlocked (pusher->v->blocked);
 		}
 
@@ -615,9 +615,9 @@ void SV_Physics_Pusher (edict_t *ent)
 	{
 		VectorCopy (ent->v->origin, oldorg);
 		ent->v->nextthink = 0;
-		PR_GLOBAL(time) = sv.time;
-		PR_GLOBAL(self) = EDICT_TO_PROG(ent);
-		PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
+		pr_global_struct->time = sv.time;
+		pr_global_struct->self = EDICT_TO_PROG(ent);
+		pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
 		PR_EdictThink(ent->v->think);
 
 		if (ent->e.free)
@@ -838,9 +838,9 @@ void SV_Physics_Step (edict_t *ent)
 void SV_ProgStartFrame (qbool isBotFrame)
 {
 	// let the progs know that a new frame has started
-	PR_GLOBAL(self) = EDICT_TO_PROG(sv.edicts);
-	PR_GLOBAL(other) = EDICT_TO_PROG(sv.edicts);
-	PR_GLOBAL(time) = sv.time;
+	pr_global_struct->self = EDICT_TO_PROG(sv.edicts);
+	pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
+	pr_global_struct->time = sv.time;
 	PR_GameStartFrame(isBotFrame);
 }
 
@@ -928,11 +928,11 @@ void SV_RunNewmis (void)
 	if (pr_nqprogs)
 		return;
 
-	if (!PR_GLOBAL(newmis))
+	if (!pr_global_struct->newmis)
 		return;
 
-	ent = PROG_TO_EDICT(PR_GLOBAL(newmis));
-	PR_GLOBAL(newmis) = 0;
+	ent = PROG_TO_EDICT(pr_global_struct->newmis);
+	pr_global_struct->newmis = 0;
 
 	save_frametime = sv_frametime;
 	sv_frametime = 0.05;
