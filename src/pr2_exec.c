@@ -755,7 +755,7 @@ void PR2_GameConsoleCommand(void)
 
 			if (NET_CompareAdr(cl->netchan.remote_address, net_from))
 			{
-				PR_GLOBAL(self) = EDICT_TO_PROG(cl->edict);
+				pr_global_struct->self = EDICT_TO_PROG(cl->edict);
 				break;
 			}
 		}
@@ -780,7 +780,7 @@ void PR2_ClearEdict(edict_t* e)
 {
 	if (sv_vm && sv_vm->pr2_references && (sv_vm->type == VMI_NATIVE || sv_vm->type == VMI_BYTECODE || sv_vm->type == VMI_COMPILED)) {
 		int old_self = pr_global_struct->self;
-		PR_GLOBAL(self) = EDICT_TO_PROG(e);
+		pr_global_struct->self = EDICT_TO_PROG(e);
 		VM_Call(sv_vm, 0, GAME_CLEAR_EDICT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 		pr_global_struct->self = old_self;
 	}
@@ -795,8 +795,8 @@ qbool PR2_SendEntity(edict_t* e, edict_t* to, int sendflags)
 	qbool ret_val = false;
 	int old_self = pr_global_struct->self;
 	int old_other = pr_global_struct->other;
-	PR_GLOBAL(self) = EDICT_TO_PROG(e);
-	PR_GLOBAL(other) = EDICT_TO_PROG(to);
+	pr_global_struct->self = EDICT_TO_PROG(e);
+	pr_global_struct->other = EDICT_TO_PROG(to);
 	if (sv_vm)
 	{
 		ret_val = VM_Call(sv_vm, 1, GAME_EDICT_CSQCSEND, (int)sendflags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
