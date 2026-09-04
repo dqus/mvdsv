@@ -121,11 +121,37 @@ elseif(UNIX)
 endif()
 target_compile_definitions(qcx_terminal_test PRIVATE
 	QCX_ENABLED=1
+	QCX_TESTS=1
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
 target_link_libraries(qcx_terminal_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_terminal COMMAND qcx_terminal_test)
+
+add_executable(qcx_startup_failure_test
+	startup_failure_test.c
+	${PROJECT_SOURCE_DIR}/src/pr2_exec.c)
+set_target_properties(qcx_startup_failure_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_startup_failure_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_startup_failure_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_startup_failure_test PRIVATE
+	QCX_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_startup_failure_test PRIVATE Qc2cppHost::native)
+if(APPLE)
+	target_link_options(qcx_startup_failure_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_startup_failure_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_startup_failure COMMAND qcx_startup_failure_test)
 
 add_executable(qcx_globals_test
 	globals_test.c
