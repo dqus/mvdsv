@@ -313,17 +313,17 @@ static void SV_TouchLinks ( edict_t *ent, areanode_t *node )
 		if (!touch->v->touch || touch->v->solid != SOLID_TRIGGER)
 			continue;
 
-		old_self = PR_GLOBAL(self);
-		old_other = PR_GLOBAL(other);
+		old_self = pr_global_struct->self;
+		old_other = pr_global_struct->other;
 		old_time = PR_GLOBAL(time);
 
-		PR_GLOBAL(self) = EDICT_TO_PROG(touch);
-		PR_GLOBAL(other) = EDICT_TO_PROG(ent);
-		PR_GLOBAL(time) = sv.time;
+		pr_global_struct->self = EDICT_TO_PROG(touch);
+		pr_global_struct->other = EDICT_TO_PROG(ent);
+		pr_global_struct->time = sv.time;
 		PR_EdictTouch (touch->v->touch);
 
-		PR_GLOBAL(self) = old_self;
-		PR_GLOBAL(other) = old_other;
+		pr_global_struct->self = old_self;
+		pr_global_struct->other = old_other;
 		PR_GLOBAL(time) = old_time;
 	}
 }
