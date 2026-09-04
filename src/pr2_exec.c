@@ -507,6 +507,7 @@ void PR2_BindServerState(void)
 	if (QCX_Active()) {
 		if (!QCX_BindEntities()
 			|| !QCX_ConfigureGlobals(deathmatch.value, coop.value, teamplay.value)) {
+			QCX_Unpublish(NULL);
 			SV_Error("qc2cpp game did not publish compatible server state");
 		}
 #if defined(QCX_TESTS)
@@ -514,6 +515,7 @@ void PR2_BindServerState(void)
 #endif
 		PR_ResetOptionalFieldOffsets();
 		if (!QCX_ResolveOptionalEntityFields()) {
+			QCX_Unpublish(NULL);
 			SV_Error("qc2cpp game did not publish compatible optional entity fields");
 		}
 		return;
