@@ -19,6 +19,9 @@
 static qcx_transport_t *qcx_transport;
 static qcx_adapter_state_t qcx_state;
 static qcx_host_api_v1_t qcx_host;
+/* True once the host accepts the first coherent QCX publication. Host
+ * entity/global views may still be unbound or partially bound; terminal
+ * startup cleanup must therefore remain safe throughout PR2 binding. */
 static qbool qcx_published;
 
 static const char *QCX_TransportName(qcx_transport_kind_t transport_kind)
