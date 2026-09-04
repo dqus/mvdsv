@@ -290,6 +290,30 @@ elseif(UNIX)
 endif()
 add_test(NAME qcx_reentry COMMAND qcx_reentry_test)
 
+add_executable(qcx_touch_links_test
+	touch_links_test.c
+	${PROJECT_SOURCE_DIR}/src/sv_world.c)
+set_target_properties(qcx_touch_links_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_touch_links_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_touch_links_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter
+	-Wno-sign-compare -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_touch_links_test PRIVATE
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+if(APPLE)
+	target_link_options(qcx_touch_links_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_touch_links_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_touch_links COMMAND qcx_touch_links_test)
+
 add_test(NAME qcx_entry_routes
 	COMMAND ${CMAKE_COMMAND}
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
