@@ -366,3 +366,27 @@ Native `qc2cpp_server_map_native` and `qc2cpp_spectator_native`, plus Wasm
 `qc2cpp_server_map_wasm` and `qc2cpp_spectator_wasm`, passed after the
 selection correction. This is focused evidence for program-type selection; it
 does not replace the earlier full adapter proof matrix.
+
+## Post-Task 10 — QCX host-binding failure cleanup acceptance
+
+Commit `eb788a7` closes the two active-QCX fatal checks in
+`PR2_BindServerState()`: failure to bind entities/configure globals or resolve
+the fixed optional-field matrix now calls `QCX_Unpublish(NULL)` before
+`SV_Error`. `qcx_published` continues to mean that the host accepted the first
+coherent entity publication, not that subsequent host binding has completed.
+Failures before that accepted publication still produce no unpublish; each of
+these two post-publication host-binding failures unpublishes exactly once.
+
+The correction is accepted against qc2cpp
+`f63ecd0668bac92e639bdc7b1f42146aba6d6b6a` and MVDSV
+`eb788a7400250730b275875bcdc5dc9f2e231c8f`. Native and Wasm configurations
+each passed `qcx_startup_failure`, `qcx_terminal`, and `qcx_startup_routes`.
+The real-process evidence is also green in both modes: native
+`qc2cpp_server_map_native`, `qc2cpp_fatal_native`, and
+`qc2cpp_restore_oom_native`; Wasm `qc2cpp_server_map_wasm`,
+`qc2cpp_fatal_wasm`, and `qc2cpp_restore_oom_wasm`.
+
+This is intentionally a bounded correction for the two
+`PR2_BindServerState()` failure paths. It does not establish a generic
+interception policy for other post-publication engine or gameplay `SV_Error`
+paths.
