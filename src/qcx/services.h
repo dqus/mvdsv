@@ -21,13 +21,10 @@ struct edict_s *SV_QC_CheckClient(struct edict_s *self);
 float SV_QC_WalkMove(struct edict_s *entity, float yaw, float distance);
 float SV_QC_DropToFloor(struct edict_s *entity);
 
-/* Task-owned portions of the mandatory V1 host table. */
+/* Mandatory V1 host table service groups. */
 void QCX_BindWorldServices(qcx_host_api_v1_t *host);
 void QCX_BindMovementServices(qcx_host_api_v1_t *host);
 void QCX_BindNetworkServices(qcx_host_api_v1_t *host);
-
-/* Mandatory services owned by later tasks terminate instead of succeeding. */
-void QCX_BindUnavailableServices(qcx_host_api_v1_t *host);
 
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"

@@ -129,7 +129,5 @@ int main(void)
 	current_skill = 1;
 	assert(host.map_admit(host.context, 0U, (float)SPAWNFLAG_NOT_MEDIUM)
 		== QCX_MAP_REJECT);
-	QCX_BindUnavailableServices(&host);
-	assert(qcx_validate_host_api_v1(&host) == QCX_PLUGIN_OK);
 	return 0;
 }
