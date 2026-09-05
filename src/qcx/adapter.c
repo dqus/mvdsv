@@ -52,7 +52,6 @@ void QCX_LoadProgs(qcx_transport_kind_t transport_kind)
 	QCX_BindWorldServices(&qcx_host);
 	QCX_BindMovementServices(&qcx_host);
 	QCX_BindNetworkServices(&qcx_host);
-	QCX_BindUnavailableServices(&qcx_host);
 	qcx_published = false;
 	QCX_AdapterStateSelect(&qcx_state, transport_kind);
 	const qcx_plugin_status_t status = QCX_TransportOpen(transport_kind,
