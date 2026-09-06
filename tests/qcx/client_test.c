@@ -23,6 +23,10 @@ static client_t *reliable_client;
 static int reliable_value;
 static int mvd_write_count;
 static char printed[MAX_INFO_STRING];
+static int stuffcmd_calls;
+static int centerprint_calls;
+static int logfrag_calls;
+static int multicast_calls;
 
 void SV_Error(char *error, ...) { (void)error; abort(); }
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot) { return slot < 2U ? &entities[slot] : NULL; }
@@ -49,7 +53,12 @@ void MSG_WriteLong(sizebuf_t *buffer, int value) { (void)buffer; direct_destinat
 void MSG_WriteCoord(sizebuf_t *buffer, float value) { (void)buffer; direct_destination = 1; direct_value = (int)value; }
 void MSG_WriteAngle(sizebuf_t *buffer, float value) { (void)buffer; direct_destination = 1; direct_value = (int)value; }
 void MSG_WriteString(sizebuf_t *buffer, const char *value) { (void)buffer; direct_destination = 1; strlcpy(printed, value, sizeof(printed)); }
-void SV_Multicast(vec3_t origin, int destination) { assert(origin[0] == 1.0f); direct_destination = destination; }
+void SV_Multicast(vec3_t origin, int destination)
+{
+	(void)origin;
+	(void)destination;
+	abort();
+}
 qbool MVDWrite_Begin(byte type, int recipient, int size) { (void)type; (void)recipient; (void)size; ++mvd_write_count; return true; }
 void MVD_MSG_WriteByte(const int value) { reliable_value = value; }
 void MVD_MSG_WriteShort(const int value) { (void)value; }
@@ -57,7 +66,34 @@ void MVD_MSG_WriteLong(const int value) { (void)value; }
 void MVD_MSG_WriteCoord(const float value) { (void)value; }
 void MVD_MSG_WriteAngle(const float value) { (void)value; }
 void MVD_MSG_WriteString(const char *value) { (void)value; }
-void SV_QC_LogFrag(edict_t *killer, edict_t *victim) { assert(killer == &entities[0]); assert(victim == &entities[1]); }
+void PF2_stuffcmd(int entnum, char *text, int flags)
+{
+	assert(entnum == 1);
+	assert(!strcmp(text, "cmd\n"));
+	assert(flags == 0);
+	++stuffcmd_calls;
+}
+
+void PF2_centerprint(int entnum, char *text)
+{
+	assert(entnum == 1);
+	assert(!strcmp(text, "center"));
+	++centerprint_calls;
+}
+
+void PF2_logfrag(int killer_entnum, int victim_entnum)
+{
+	assert(killer_entnum == 1);
+	assert(victim_entnum == 7);
+	++logfrag_calls;
+}
+
+void PF2_multicast(float x, float y, float z, int destination)
+{
+	assert(x == 1.0f && y == 2.0f && z == 3.0f);
+	direct_destination = destination;
+	++multicast_calls;
+}
 void SZ_Print(sizebuf_t *buffer, const char *text) { (void)buffer; strlcpy(printed, text, sizeof(printed)); }
 void SV_Write_Log(int type, int level, char *text) { (void)type; (void)level; strlcpy(printed, text, sizeof(printed)); }
 char *va(const char *format, ...) { static char value[MAX_INFO_STRING]; va_list args; va_start(args, format); vsnprintf(value, sizeof(value), format, args); va_end(args); return value; }
@@ -98,6 +134,12 @@ int main(void)
 	assert(!strcmp(printed, "hello"));
 	host.sprint(host.context, 0U, 1.0f, (const uint8_t *)"client", 6U);
 	assert(!strcmp(printed, "client"));
+	host.stuffcmd(host.context, 0U, (const uint8_t *)"cmd\n", 4U);
+	assert(stuffcmd_calls == 1);
+	host.centerprint(host.context, 0U, (const uint8_t *)"center", 6U);
+	assert(centerprint_calls == 1);
+	host.logfrag(host.context, 0U, 1U);
+	assert(logfrag_calls == 1);
 	sv.mvdrecording = true;
 	host.write_byte(host.context, 1.0f, 37.0f, 0U);
 	assert(reliable_client == &svs.clients[0] && reliable_value == 37);
@@ -117,6 +159,6 @@ int main(void)
 	assert(parms[0] == 4.0f);
 	const float origin[3] = {1.0f, 2.0f, 3.0f};
 	host.multicast(host.context, origin, 2.0f);
-	assert(direct_destination == 2);
+	assert(direct_destination == 2 && multicast_calls == 1);
 	return 0;
 }
