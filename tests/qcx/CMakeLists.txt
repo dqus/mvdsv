@@ -488,3 +488,53 @@ if(QC2CPP_COMPILER)
 			-DFIXTURE_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/reentry-generated
 			-P ${CMAKE_CURRENT_SOURCE_DIR}/reentry_fixture_test.cmake)
 endif()
+
+function(qcx_set_test_labels test_name labels)
+	if(TEST ${test_name})
+		set_tests_properties(${test_name} PROPERTIES LABELS "${labels}")
+	endif()
+endfunction()
+
+foreach(test_name IN ITEMS
+	qcx_naming
+	qcx_transport
+	qcx_adapter_state
+	qcx_program_type_routes
+	qcx_terminal
+	qcx_startup_failure
+	qcx_globals
+	qcx_globals_boundary
+	qcx_entities
+	qcx_services_world
+	qcx_client
+	qcx_client_routes
+	qcx_reentry
+	qcx_touch_links
+	qcx_entry_routes
+	qcx_startup_routes
+	qcx_entity_reference_routes
+	qcx_legacy_entity_references
+	qcx_optional_fields
+	qcx_optional_field_routes
+	qcx_legacy_strings
+	qcx_string_routes
+	qcx_legacy_optional_fields_pr1
+	qcx_legacy_optional_fields_pr2
+	qcx_save_format
+	qcx_restore)
+	qcx_set_test_labels(${test_name} "qcx;fast")
+endforeach()
+
+foreach(test_name IN ITEMS
+	qcx_reentry_fixture
+	qc2cpp_optional_fields_native_build
+	qc2cpp_optional_fields_wasm_build)
+	qcx_set_test_labels(${test_name} "qcx;integration;external")
+endforeach()
+
+add_test(NAME qcx_label_contract
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_BINARY_DIR=${PROJECT_BINARY_DIR}
+		-DCMAKE_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/label_contract_test.cmake)
+qcx_set_test_labels(qcx_label_contract "qcx;fast;contract")
