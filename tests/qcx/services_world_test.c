@@ -16,14 +16,17 @@ static entvars_t test_entity_state;
 static edict_t test_entity;
 static entvars_t test_spawned_state;
 static edict_t test_spawned;
-static int linked;
-static int antilag_reset;
 static int freed;
 static int precached_model;
 static int precached_sound;
 static int cvar_set;
 static char queued_command[MAXCMDBUF];
 static char entity_model[MAX_QPATH];
+static int setorigin_calls;
+static int setsize_calls;
+static int setmodel_calls;
+static int lightstyle_calls;
+static int makestatic_calls;
 
 void SV_Error(char *error, ...)
 {
@@ -31,20 +34,84 @@ void SV_Error(char *error, ...)
 	abort();
 }
 
-edict_t *QCX_SlotToEdict(qcx_entity_id_t slot) { return slot == 0U ? &test_entity : slot == 1U ? &test_spawned : NULL; }
-qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity) { return entity == &test_entity ? 0U : entity == &test_spawned ? 1U : QCX_INVALID_ENTITY_ID; }
-void SV_AntilagReset(edict_t *entity) { assert(entity == &test_entity); ++antilag_reset; }
-void SV_LinkEdict(edict_t *entity, qbool touch) { assert(entity == &test_entity); assert(!touch); ++linked; }
-int SV_QC_SetModel(edict_t *entity, const char *name) { assert(entity == &test_entity); assert(!strcmp(name, entity_model)); entity->v->modelindex = 3; return 1; }
-int SV_QC_PrecacheSound(const char *name) { assert(!strcmp(name, "sound/test.wav")); ++precached_sound; return 1; }
-int SV_QC_PrecacheModel(const char *name) { assert(!strcmp(name, "progs/test.mdl")); ++precached_model; return 1; }
-void SV_QC_LightStyle(int style, const char *value) { assert(style == 2); assert(!strcmp(value, "abc")); }
-void SV_QC_MakeStatic(edict_t *entity, const char *model_name) { assert(entity == &test_entity); assert(!strcmp(model_name, entity_model)); }
+edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
+{
+	return slot == 0U ? &test_entity : slot == 1U ? &test_spawned : NULL;
+}
+
+qcx_entity_id_t QCX_EdictToSlot(const edict_t *entity)
+{
+	return entity == &test_entity ? 0U : entity == &test_spawned ? 1U
+		: QCX_INVALID_ENTITY_ID;
+}
+
+void SV_AntilagReset(edict_t *entity)
+{
+	assert(entity == &test_entity);
+	abort();
+}
+
+void SV_LinkEdict(edict_t *entity, qbool touch)
+{
+	assert(entity == &test_entity);
+	assert(!touch);
+	abort();
+}
+
+void PF2_setorigin(edict_t *entity, float x, float y, float z)
+{
+	assert(entity == &test_entity);
+	VectorSet(entity->v->origin, x, y, z);
+	++setorigin_calls;
+}
+
+void PF2_setsize(edict_t *entity, float min_x, float min_y, float min_z,
+	float max_x, float max_y, float max_z)
+{
+	assert(entity == &test_entity);
+	VectorSet(entity->v->mins, min_x, min_y, min_z);
+	VectorSet(entity->v->maxs, max_x, max_y, max_z);
+	VectorSubtract(entity->v->maxs, entity->v->mins, entity->v->size);
+	++setsize_calls;
+}
+
+void PF2_setmodel(edict_t *entity, char *name)
+{
+	assert(entity == &test_entity);
+	assert(!strcmp(name, "progs/test.mdl"));
+	assert(QCX_SetEntityString(entity, "model", name));
+	entity->v->modelindex = 3;
+	++setmodel_calls;
+}
+
+void PF2_precache_sound(char *name)
+{
+	assert(!strcmp(name, "sound/test.wav"));
+	++precached_sound;
+}
+
+void PF2_precache_model(char *name)
+{
+	assert(!strcmp(name, "progs/test.mdl"));
+	++precached_model;
+}
+
+void PF2_lightstyle(int style, char *value)
+{
+	assert(style == 2);
+	assert(!strcmp(value, "abc"));
+	++lightstyle_calls;
+}
+
+void PF2_makestatic(edict_t *entity)
+{
+	assert(entity == &test_entity);
+	++makestatic_calls;
+}
 void SV_QC_ChangeLevel(const char *map) { assert(!strcmp(map, "dm6")); }
 edict_t *ED_Alloc(void) { test_spawned.e.free = false; return &test_spawned; }
 void ED_Free(edict_t *entity) { assert(entity == &test_spawned); entity->e.free = true; ++freed; }
 int QCX_SetEntityString(edict_t *entity, const char *field, const char *value) { assert(entity == &test_entity); assert(!strcmp(field, "model")); strlcpy(entity_model, value, sizeof(entity_model)); return 1; }
-qcx_plugin_status_t QCX_CopyEntityString(const edict_t *entity, const char *field, char *out, uint32_t capacity, uint32_t *required) { assert(entity == &test_entity); assert(!strcmp(field, "model")); assert(capacity > strlen(entity_model)); strcpy(out, entity_model); if (required != NULL) *required = (uint32_t)strlen(entity_model) + 1U; return QCX_PLUGIN_OK; }
 void *Hunk_AllocName(int size, const char *name) { static char storage[4][MAX_QPATH]; static int next; assert(size <= MAX_QPATH); assert(!strcmp(name, "qc2cpp")); return storage[next++ % 4]; }
 void SV_FlushSignon(void) { }
 float Cvar_Value(const char *name) { assert(!strcmp(name, "skill")); return 2.0f; }
@@ -94,11 +161,13 @@ int main(void)
 	const float maxs[3] = {4.0f, 5.0f, 6.0f};
 	host.setorigin(host.context, 0U, origin);
 	assert(test_entity.v->origin[0] == 10.0f && test_entity.v->origin[2] == 30.0f);
-	assert(antilag_reset == 1 && linked == 1);
+	assert(setorigin_calls == 1);
 	host.setsize(host.context, 0U, mins, maxs);
-	assert(test_entity.v->size[0] == 5.0f && test_entity.v->size[2] == 9.0f && linked == 2);
+	assert(test_entity.v->size[0] == 5.0f && test_entity.v->size[2] == 9.0f
+		&& setsize_calls == 1);
 	host.setmodel(host.context, 0U, (const uint8_t *)"progs/test.mdl", 14U);
-	assert(!strcmp(entity_model, "progs/test.mdl") && test_entity.v->modelindex == 3);
+	assert(!strcmp(entity_model, "progs/test.mdl") && test_entity.v->modelindex == 3
+		&& setmodel_calls == 1);
 	assert(host.spawn(host.context) == 1U);
 	host.remove(host.context, 1U);
 	assert(freed == 1 && test_spawned.e.free);
@@ -106,12 +175,14 @@ int main(void)
 	assert(host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U, NULL, 0U) == 14U);
 	assert(precached_model == 1 && precached_sound == 1);
 	host.lightstyle(host.context, 2.0f, (const uint8_t *)"abc", 3U);
+	assert(lightstyle_calls == 1);
 	assert(host.cvar(host.context, (const uint8_t *)"skill", 5U) == 2.0f);
 	host.cvar_set(host.context, (const uint8_t *)"skill", 5U, (const uint8_t *)"3", 1U);
 	assert(cvar_set == 1);
 	host.localcmd(host.context, (const uint8_t *)"status\n", 7U);
 	assert(!strcmp(queued_command, "status\n"));
 	host.makestatic(host.context, 0U);
+	assert(makestatic_calls == 1);
 	host.changelevel(host.context, (const uint8_t *)"dm6", 3U);
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"alpha", 5U,
 		(const uint8_t *)"1.5", 3U) == QCX_MAP_METADATA_HANDLED);

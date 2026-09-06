@@ -109,6 +109,15 @@ void        PR_SetMapName(const char *value);
 #define     PR_SetEntityString(entity, address, value) PR2_SetEntityString(entity, &address, value)
 #define     PR_SetGlobalString(address, value) PR2_SetGlobalString(&address, value)
 void		PR2_RunError(char *error, ...);
+void		PF2_setorigin(edict_t *entity, float x, float y, float z);
+void		PF2_setsize(edict_t *entity,
+			float min_x, float min_y, float min_z,
+			float max_x, float max_y, float max_z);
+void		PF2_setmodel(edict_t *entity, char *model);
+void		PF2_precache_sound(char *name);
+void		PF2_precache_model(char *name);
+void		PF2_lightstyle(int style, char *value);
+void		PF2_makestatic(edict_t *entity);
 eval_t*		PR2_GetEdictFieldValue(edict_t *ed, char *field);
 #define PR_GetEdictFieldValue PR2_GetEdictFieldValue
 int			ED2_FindFieldOffset(char *field);
