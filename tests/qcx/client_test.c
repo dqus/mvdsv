@@ -18,15 +18,21 @@ int msg_anglesize = 1;
 static entvars_t entity_state[2];
 static edict_t entities[2];
 static int direct_destination;
-static int direct_value;
-static client_t *reliable_client;
-static int reliable_value;
-static int mvd_write_count;
 static char printed[MAX_INFO_STRING];
 static int stuffcmd_calls;
 static int centerprint_calls;
 static int logfrag_calls;
 static int multicast_calls;
+static int write_byte_calls;
+static int write_char_calls;
+static int write_short_calls;
+static int write_long_calls;
+static int write_coord_calls;
+static int write_angle_calls;
+static int write_string_calls;
+static int write_entity_calls;
+static int setspawnparms_calls;
+static int infokey_calls;
 
 void SV_Error(char *error, ...) { (void)error; abort(); }
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot) { return slot < 2U ? &entities[slot] : NULL; }
@@ -37,30 +43,30 @@ void SV_BroadcastPrintf(int level, char *format, ...)
 { va_list args; assert(level == 2); va_start(args, format); vsnprintf(printed, sizeof(printed), format, args); va_end(args); }
 void SV_ClientPrintf(client_t *client, int level, char *format, ...)
 { va_list args; assert(client == &svs.clients[0]); assert(level == 1); va_start(args, format); vsnprintf(printed, sizeof(printed), format, args); va_end(args); }
-void ClientReliableCheckBlock(client_t *client, int size) { (void)size; reliable_client = client; }
-void ClientReliableWrite_Begin(client_t *client, int command, int size) { (void)command; (void)size; reliable_client = client; }
-void ClientReliableWrite_Byte(client_t *client, int value) { reliable_client = client; reliable_value = value; }
-void ClientReliableWrite_Char(client_t *client, int value) { reliable_client = client; reliable_value = value; }
-void ClientReliableWrite_Short(client_t *client, int value) { reliable_client = client; reliable_value = value; }
-void ClientReliableWrite_Long(client_t *client, int value) { reliable_client = client; reliable_value = value; }
-void ClientReliableWrite_Coord(client_t *client, float value) { reliable_client = client; reliable_value = (int)value; }
-void ClientReliableWrite_Angle(client_t *client, float value) { reliable_client = client; reliable_value = (int)value; }
-void ClientReliableWrite_String(client_t *client, char *value) { reliable_client = client; strlcpy(printed, value, sizeof(printed)); }
-void MSG_WriteByte(sizebuf_t *buffer, int value) { (void)buffer; direct_destination = 1; direct_value = value; }
-void MSG_WriteChar(sizebuf_t *buffer, int value) { (void)buffer; direct_destination = 1; direct_value = value; }
-void MSG_WriteShort(sizebuf_t *buffer, int value) { (void)buffer; direct_destination = 1; direct_value = value; }
-void MSG_WriteLong(sizebuf_t *buffer, int value) { (void)buffer; direct_destination = 1; direct_value = value; }
-void MSG_WriteCoord(sizebuf_t *buffer, float value) { (void)buffer; direct_destination = 1; direct_value = (int)value; }
-void MSG_WriteAngle(sizebuf_t *buffer, float value) { (void)buffer; direct_destination = 1; direct_value = (int)value; }
-void MSG_WriteString(sizebuf_t *buffer, const char *value) { (void)buffer; direct_destination = 1; strlcpy(printed, value, sizeof(printed)); }
+void ClientReliableCheckBlock(client_t *client, int size) { (void)client; (void)size; abort(); }
+void ClientReliableWrite_Begin(client_t *client, int command, int size) { (void)client; (void)command; (void)size; abort(); }
+void ClientReliableWrite_Byte(client_t *client, int value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_Char(client_t *client, int value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_Short(client_t *client, int value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_Long(client_t *client, int value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_Coord(client_t *client, float value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_Angle(client_t *client, float value) { (void)client; (void)value; abort(); }
+void ClientReliableWrite_String(client_t *client, char *value) { (void)client; (void)value; abort(); }
+void MSG_WriteByte(sizebuf_t *buffer, int value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteChar(sizebuf_t *buffer, int value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteShort(sizebuf_t *buffer, int value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteLong(sizebuf_t *buffer, int value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteCoord(sizebuf_t *buffer, float value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteAngle(sizebuf_t *buffer, float value) { (void)buffer; (void)value; abort(); }
+void MSG_WriteString(sizebuf_t *buffer, const char *value) { (void)buffer; (void)value; abort(); }
 void SV_Multicast(vec3_t origin, int destination)
 {
 	(void)origin;
 	(void)destination;
 	abort();
 }
-qbool MVDWrite_Begin(byte type, int recipient, int size) { (void)type; (void)recipient; (void)size; ++mvd_write_count; return true; }
-void MVD_MSG_WriteByte(const int value) { reliable_value = value; }
+qbool MVDWrite_Begin(byte type, int recipient, int size) { (void)type; (void)recipient; (void)size; return true; }
+void MVD_MSG_WriteByte(const int value) { (void)value; }
 void MVD_MSG_WriteShort(const int value) { (void)value; }
 void MVD_MSG_WriteLong(const int value) { (void)value; }
 void MVD_MSG_WriteCoord(const float value) { (void)value; }
@@ -93,6 +99,68 @@ void PF2_multicast(float x, float y, float z, int destination)
 	assert(x == 1.0f && y == 2.0f && z == 3.0f);
 	direct_destination = destination;
 	++multicast_calls;
+}
+
+void PF2_WriteByte(int to, int value, edict_t *msg_entity)
+{
+	assert(to == 1 && value == 37 && msg_entity == &entities[0]);
+	++write_byte_calls;
+}
+
+void PF2_WriteChar(int to, int value, edict_t *msg_entity)
+{
+	assert(to == 0 && value == 38 && msg_entity == NULL);
+	++write_char_calls;
+}
+
+void PF2_WriteShort(int to, int value, edict_t *msg_entity)
+{
+	assert(to == 2 && value == 39 && msg_entity == NULL);
+	++write_short_calls;
+}
+
+void PF2_WriteLong(int to, int value, edict_t *msg_entity)
+{
+	assert(to == 3 && value == 40 && msg_entity == NULL);
+	++write_long_calls;
+}
+
+void PF2_WriteCoord(int to, float value, edict_t *msg_entity)
+{
+	assert(to == 4 && value == 41.0f && msg_entity == NULL);
+	++write_coord_calls;
+}
+
+void PF2_WriteAngle(int to, float value, edict_t *msg_entity)
+{
+	assert(to == 0 && value == 42.0f && msg_entity == NULL);
+	++write_angle_calls;
+}
+
+void PF2_WriteString(int to, char *value, edict_t *msg_entity)
+{
+	assert(to == 0 && !strcmp(value, "message") && msg_entity == NULL);
+	++write_string_calls;
+}
+
+void PF2_WriteEntity(int to, int value_entnum, edict_t *msg_entity)
+{
+	assert(to == 0 && value_entnum == 7 && msg_entity == NULL);
+	++write_entity_calls;
+}
+
+void PF2_setspawnparms(int entnum, float *out_parms)
+{
+	assert(entnum == 1);
+	out_parms[0] = 4.0f;
+	++setspawnparms_calls;
+}
+
+const char *PF2_infokey(int entnum, const char *key)
+{
+	assert(entnum == 1);
+	++infokey_calls;
+	return !strcmp(key, "name") || !strcmp(key, "netname") ? "player" : "";
 }
 void SZ_Print(sizebuf_t *buffer, const char *text) { (void)buffer; strlcpy(printed, text, sizeof(printed)); }
 void SV_Write_Log(int type, int level, char *text) { (void)type; (void)level; strlcpy(printed, text, sizeof(printed)); }
@@ -140,23 +208,30 @@ int main(void)
 	assert(centerprint_calls == 1);
 	host.logfrag(host.context, 0U, 1U);
 	assert(logfrag_calls == 1);
-	sv.mvdrecording = true;
 	host.write_byte(host.context, 1.0f, 37.0f, 0U);
-	assert(reliable_client == &svs.clients[0] && reliable_value == 37);
-	assert(mvd_write_count == 1);
-	sv.mvdrecording = false;
-	direct_destination = 0;
-	host.write_entity(host.context, 0.0f, 1U, 0U);
-	assert(direct_destination == 1 && direct_value == 7);
+	host.write_char(host.context, 0.0f, 38.0f, 2U);
+	host.write_short(host.context, 2.0f, 39.0f, 2U);
+	host.write_long(host.context, 3.0f, 40.0f, 2U);
+	host.write_coord(host.context, 4.0f, 41.0f, 2U);
+	host.write_angle(host.context, 0.0f, 42.0f, 2U);
+	host.write_string(host.context, 0.0f, (const uint8_t *)"message", 7U, 2U);
+	host.write_entity(host.context, 0.0f, 1U, 2U);
+	assert(write_byte_calls == 1 && write_char_calls == 1 && write_short_calls == 1
+		&& write_long_calls == 1 && write_coord_calls == 1 && write_angle_calls == 1
+		&& write_string_calls == 1 && write_entity_calls == 1);
 	uint8_t info[16] = {0};
 	assert(host.infokey(host.context, 0U, (const uint8_t *)"name", 4U, info, sizeof(info)) == 6U);
 	assert(!memcmp(info, "player", 6U));
 	memset(info, 0, sizeof(info));
 	assert(host.infokey(host.context, 0U, (const uint8_t *)"netname", 7U, info, sizeof(info)) == 6U);
 	assert(!memcmp(info, "player", 6U));
+	uint8_t truncated_info[4] = {0U, 0U, 0U, 0xffU};
+	assert(host.infokey(host.context, 0U, (const uint8_t *)"name", 4U, truncated_info, 3U) == 6U);
+	assert(!memcmp(truncated_info, "pla", 3U) && truncated_info[3] == 0xffU);
+	assert(infokey_calls == 3);
 	float parms[16] = {0};
 	host.setspawnparms(host.context, 0U, parms, sizeof(parms));
-	assert(parms[0] == 4.0f);
+	assert(parms[0] == 4.0f && setspawnparms_calls == 1);
 	const float origin[3] = {1.0f, 2.0f, 3.0f};
 	host.multicast(host.context, origin, 2.0f);
 	assert(direct_destination == 2 && multicast_calls == 1);
