@@ -26,8 +26,7 @@ foreach(forbidden IN ITEMS
 endforeach()
 
 # Every gameplay-capable host import uses the one test-only lifecycle observer.
-# The fixed count covers the complete current host API surface (the six numeric
-# write imports are emitted by one macro invocation).
+# The fixed count covers the complete current host API surface.
 set(gameplay_import_observers 0)
 foreach(service_source IN ITEMS
 	src/qcx/services_world.c
@@ -38,7 +37,7 @@ foreach(service_source IN ITEMS
 	list(LENGTH observed observed_count)
 	math(EXPR gameplay_import_observers "${gameplay_import_observers} + ${observed_count}")
 endforeach()
-if(NOT gameplay_import_observers EQUAL 38)
+if(NOT gameplay_import_observers EQUAL 43)
 	message(FATAL_ERROR
 		"every QCX gameplay host import must observe the init lifecycle; found ${gameplay_import_observers}")
 endif()
