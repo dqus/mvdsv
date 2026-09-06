@@ -1487,17 +1487,15 @@ void PF2_setspawnparms(int entnum, float *out_parms)
 PF2_changelevel
 ==============
 */
-void PF2_changelevel(char *s, char *entfile)
+void PF2_changelevel(const char *map, const char *entfile)
 {
 	static int last_spawncount;
 	char expanded[MAX_QPATH];
 
-	if (gamedata.APIversion < 15)
-		entfile = "";
 	// check to make sure the level exists.
 	// this is work around for bellow check about two changelevels,
 	// which lock server in one map if we trying switch to map which does't exist
-	snprintf(expanded, MAX_QPATH, "maps/%s.bsp", s);
+	snprintf(expanded, MAX_QPATH, "maps/%s.bsp", map);
 	if (!FS_FLocateFile(expanded, FSLFRT_IFFOUND, NULL))
 	{
 		Sys_Printf ("Can't find %s\n", expanded);
@@ -1511,10 +1509,10 @@ void PF2_changelevel(char *s, char *entfile)
 	last_spawncount = svs.spawncount;
 
 	if (entfile && *entfile) {
-		Cbuf_AddTextEx(&cbuf_server, va("map %s %s\n", s, entfile));
+		Cbuf_AddTextEx(&cbuf_server, va("map %s %s\n", map, entfile));
 	}
 	else {
-		Cbuf_AddTextEx(&cbuf_server, va("map %s\n", s));
+		Cbuf_AddTextEx(&cbuf_server, va("map %s\n", map));
 	}
 }
 
