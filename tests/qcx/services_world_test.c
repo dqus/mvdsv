@@ -28,6 +28,7 @@ static int setsize_calls;
 static int setmodel_calls;
 static int lightstyle_calls;
 static int makestatic_calls;
+static int changelevel_calls;
 
 void SV_Error(char *error, ...)
 {
@@ -108,6 +109,13 @@ void PF2_makestatic(edict_t *entity)
 {
 	assert(entity == &test_entity);
 	++makestatic_calls;
+}
+void PF2_changelevel(const char *map, const char *entfile)
+{
+	assert(!strcmp(map, "dm6"));
+	assert(entfile != NULL && *entfile == '\0');
+	strlcpy(queued_command, "map dm6\n", sizeof(queued_command));
+	++changelevel_calls;
 }
 edict_t *ED_Alloc(void) { test_spawned.e.free = false; return &test_spawned; }
 void ED_Free(edict_t *entity) { assert(entity == &test_spawned); entity->e.free = true; ++freed; }
@@ -195,6 +203,7 @@ int main(void)
 	svs.spawncount = 1;
 	host.changelevel(host.context, (const uint8_t *)"dm6", 3U);
 	assert(!strcmp(queued_command, "map dm6\n"));
+	assert(changelevel_calls == 1);
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"alpha", 5U,
 		(const uint8_t *)"1.5", 3U) == QCX_MAP_METADATA_HANDLED);
 	assert(test_entity.xv.alpha == 1.0f);

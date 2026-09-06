@@ -50,6 +50,8 @@ World services:
 - `precache_model` / `precache_model2` -> `PF2_precache_model`
 - `lightstyle` -> `PF2_lightstyle`
 - `makestatic` -> `PF2_makestatic`; rely on the existing QCX-aware `PR_GetEntityString` path
+- `changelevel` -> `PF2_changelevel(map, "")`; QCX intentionally adopts PR2's
+  BSP-existence validation and duplicate-changelevel suppression
 
 Movement services:
 
@@ -88,7 +90,6 @@ Keep the existing QCX implementation when the PR2 helper is VM-output-specific, 
 - `map_admit`
 - `map_time`
 - `map_post_spawn`
-- `changelevel` (PR2 adds BSP-existence behavior that QCX does not currently have)
 - `cvar_set` (QCX only changes an already existing cvar)
 - `ambientsound` (the current QCX missing-precache failure behavior differs from PR2)
 
