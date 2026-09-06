@@ -1238,23 +1238,22 @@ sizebuf_t *WriteDest2(int dest)
 	return NULL;
 }
 
-static client_t *Write_GetClient(void)
+static client_t *Write_GetClient(edict_t *entity)
 {
-	int		entnum;
-	edict_t	*ent;
-
-	ent = PROG_TO_EDICT(pr_global_struct->msg_entity);
-	entnum = NUM_FOR_EDICT(ent);
+	if (entity == NULL) {
+		PR2_RunError("WriteDest: MSG_ONE requires a client entity");
+	}
+	const int entnum = NUM_FOR_EDICT(entity);
 	if (entnum < 1 || entnum > MAX_CLIENTS)
 		PR2_RunError("WriteDest: not a client");
 	return &svs.clients[entnum - 1];
 }
 
-void PF2_WriteByte(int to, int data)
+void PF2_WriteByte(int to, int data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 1);
 		ClientReliableWrite_Byte(cl, data);
 		if (sv.mvdrecording)
@@ -1269,11 +1268,11 @@ void PF2_WriteByte(int to, int data)
 		MSG_WriteByte(WriteDest2(to), data);
 }
 
-void PF2_WriteChar(int to, int data)
+void PF2_WriteChar(int to, int data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 1);
 		ClientReliableWrite_Char(cl, data);
 		if (sv.mvdrecording)
@@ -1288,11 +1287,11 @@ void PF2_WriteChar(int to, int data)
 		MSG_WriteChar(WriteDest2(to), data);
 }
 
-void PF2_WriteShort(int to, int data)
+void PF2_WriteShort(int to, int data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 2);
 		ClientReliableWrite_Short(cl, data);
 		if (sv.mvdrecording)
@@ -1307,11 +1306,11 @@ void PF2_WriteShort(int to, int data)
 		MSG_WriteShort(WriteDest2(to), data);
 }
 
-void PF2_WriteLong(int to, int data)
+void PF2_WriteLong(int to, int data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 4);
 		ClientReliableWrite_Long(cl, data);
 		if (sv.mvdrecording)
@@ -1326,7 +1325,7 @@ void PF2_WriteLong(int to, int data)
 		MSG_WriteLong(WriteDest2(to), data);
 }
 
-void PF2_WriteAngle(int to, float data)
+void PF2_WriteAngle(int to, float data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
@@ -1335,7 +1334,7 @@ void PF2_WriteAngle(int to, float data)
 #else
 		int size = 1;
 #endif
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, size);
 		ClientReliableWrite_Angle(cl, data);
 		if (sv.mvdrecording)
@@ -1350,7 +1349,7 @@ void PF2_WriteAngle(int to, float data)
 		MSG_WriteAngle(WriteDest2(to), data);
 }
 
-void PF2_WriteCoord(int to, float data)
+void PF2_WriteCoord(int to, float data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
@@ -1359,7 +1358,7 @@ void PF2_WriteCoord(int to, float data)
 #else
 		int size = 2;
 #endif
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, size);
 		ClientReliableWrite_Coord(cl, data);
 		if (sv.mvdrecording)
@@ -1374,11 +1373,11 @@ void PF2_WriteCoord(int to, float data)
 		MSG_WriteCoord(WriteDest2(to), data);
 }
 
-void PF2_WriteString(int to, char *data)
+void PF2_WriteString(int to, char *data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 1 + strlen(data));
 		ClientReliableWrite_String(cl, data);
 		if (sv.mvdrecording)
@@ -1393,11 +1392,11 @@ void PF2_WriteString(int to, char *data)
 		MSG_WriteString(WriteDest2(to), data);
 }
 
-void PF2_WriteEntity(int to, int data)
+void PF2_WriteEntity(int to, int data, edict_t *msg_entity)
 {
 	if (to == MSG_ONE)
 	{
-		client_t *cl = Write_GetClient();
+		client_t *cl = Write_GetClient(msg_entity);
 		ClientReliableCheckBlock(cl, 2);
 		ClientReliableWrite_Short(cl,data );//G_EDICTNUM(OFS_PARM1)
 		if (sv.mvdrecording)
@@ -1468,7 +1467,7 @@ void PF2_makestatic(edict_t *ent)
 PF2_setspawnparms
 ==============
 */
-void PF2_setspawnparms(int entnum)
+void PF2_setspawnparms(int entnum, float *out_parms)
 {
 	int			i;
 	client_t	*client;
@@ -1480,7 +1479,7 @@ void PF2_setspawnparms(int entnum)
 	client = svs.clients + (entnum - 1);
 
 	for (i = 0; i < NUM_SPAWN_PARMS; i++)
-		(&pr_global_struct->parm1)[i] = client->spawn_parms[i];
+		out_parms[i] = client->spawn_parms[i];
 }
 
 /*
@@ -1564,11 +1563,10 @@ PF2_getinfokey
 string(entity e, string key) infokey
 ==============
 */
-void PF2_infokey(int e1, char *key, char *valbuff, int sizebuff)
-//(int e1, char *key, char *valbuff, int sizebuff)
+const char *PF2_infokey(int e1, const char *key)
 {
 	static char ov[256];
-	char		*value;
+	const char	*value;
 
 	value = ov;
 
@@ -1607,7 +1605,7 @@ void PF2_infokey(int e1, char *key, char *valbuff, int sizebuff)
 		else if (!strcmp(key, "servername")) {
 			value = SERVER_NAME;
 		}
-		else if ((value = Info_ValueForKey(svs.info, key)) == NULL || !*value)
+		else if ((value = Info_ValueForKey(svs.info, (char *)key)) == NULL || !*value)
 			value = Info_Get(&_localinfo_, key);
 	}
 	else if (e1 > 0 && e1 <= MAX_CLIENTS)
@@ -1655,11 +1653,7 @@ void PF2_infokey(int e1, char *key, char *valbuff, int sizebuff)
 	else
 		value = "";
 
-	if ((int) strlen(value) > sizebuff)
-		Con_DPrintf("PR2_infokey: buffer size too small\n");
-
-	strlcpy(valbuff, value, sizebuff);
-	//	RETURN_STRING(value);
+	return value == NULL ? "" : value;
 }
 
 /*
@@ -2679,7 +2673,7 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 		PF2_makestatic(VME(1));
 		return 0;
 	case G_SETSPAWNPARAMS:
-		PF2_setspawnparms(args[1]);
+		PF2_setspawnparms(args[1], &pr_global_struct->parm1);
 		return 0;
 	case G_CHANGELEVEL:
 		PF2_changelevel(VMA(1), VMA(2));
@@ -2689,7 +2683,7 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 		return 0;
 	case G_GETINFOKEY:
 		VM_CheckBounds(sv_vm, args[3], args[4]);
-		PF2_infokey(args[1], VMA(2), VMA(3), args[4]);
+		strlcpy(VMA(3), PF2_infokey(args[1], VMA(2)), args[4]);
 		return 0;
 	case G_MULTICAST:
 		PF2_multicast(VMV(1), args[4]);
@@ -2698,28 +2692,28 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 		PF2_disable_updates(args[1], VMF(2));
 		return 0;
 	case G_WRITEBYTE:
-		PF2_WriteByte(args[1], args[2]);
+		PF2_WriteByte(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITECHAR:
-		PF2_WriteChar(args[1], args[2]);
+		PF2_WriteChar(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITESHORT:
-		PF2_WriteShort(args[1], args[2]);
+		PF2_WriteShort(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITELONG:
-		PF2_WriteLong(args[1], args[2]);
+		PF2_WriteLong(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITEANGLE:
-		PF2_WriteAngle(args[1], VMF(2));
+		PF2_WriteAngle(args[1], VMF(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITECOORD:
-		PF2_WriteCoord(args[1], VMF(2));
+		PF2_WriteCoord(args[1], VMF(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITESTRING:
-		PF2_WriteString(args[1], VMA(2));
+		PF2_WriteString(args[1], VMA(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_WRITEENTITY:
-		PF2_WriteEntity(args[1], args[2]);
+		PF2_WriteEntity(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
 		return 0;
 	case G_FLUSHSIGNON:
 		SV_FlushSignon();

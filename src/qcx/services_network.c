@@ -50,55 +50,18 @@ static int QCX_CopyText(const uint8_t *bytes, qcx_byte_count_t size, char *out,
 	return 1;
 }
 
-static sizebuf_t *QCX_WriteDestination(float destination)
+static int QCX_MessageDestination(float destination)
 {
 	const int value = (int)destination;
 	if ((float)value != destination) {
 		SV_Error("qc2cpp message destination must be integral");
 	}
-	switch (value) {
-	case QCX_MSG_BROADCAST:
-		return &sv.datagram;
-	case QCX_MSG_ALL:
-		return &sv.reliable_datagram;
-	case QCX_MSG_INIT:
-		if (sv.state != ss_loading) {
-			SV_Error("qc2cpp MSG_INIT is only valid while loading");
-		}
-		return &sv.signon;
-	case QCX_MSG_MULTICAST:
-		return &sv.multicast;
-	default:
-		SV_Error("qc2cpp invalid message destination %d", value);
-		return NULL;
-	}
+	return value;
 }
 
-static int QCX_IsMessageOne(float destination)
+static edict_t *QCX_MessageEntity(int destination, qcx_entity_id_t msg_entity)
 {
-	const int value = (int)destination;
-	if ((float)value != destination) {
-		SV_Error("qc2cpp message destination must be integral");
-	}
-	return value == QCX_MSG_ONE;
-}
-
-static int QCX_CoordMessageSize(void)
-{
-#ifdef FTE_PEXT_FLOATCOORDS
-	return msg_coordsize;
-#else
-	return 2;
-#endif
-}
-
-static int QCX_AngleMessageSize(void)
-{
-#ifdef FTE_PEXT_FLOATCOORDS
-	return msg_anglesize;
-#else
-	return 1;
-#endif
+	return destination == QCX_MSG_ONE ? QCX_RequireNetworkEdict(msg_entity) : NULL;
 }
 
 static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
@@ -157,29 +120,53 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 	}
 }
 
-#define QCX_DEFINE_WRITE(name, writer, reliable_writer, mvd_writer, bytes) \
-static void QCX_Write##name(void *context, float destination, float value, \
-	qcx_entity_id_t msg_entity) \
-{ \
-	QCX_ObserveGameplayImport(context); \
-	if (QCX_IsMessageOne(destination)) { \
-		client_t *const client = QCX_RequireClient(msg_entity); \
-		ClientReliableCheckBlock(client, bytes); \
-		reliable_writer(client, value); \
-		if (sv.mvdrecording && MVDWrite_Begin(dem_single, client - svs.clients, bytes)) { \
-			mvd_writer(value); \
-		} \
-	} else { \
-		writer(QCX_WriteDestination(destination), value); \
-	} \
+static void QCX_WriteByte(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteByte(to, (int)value, QCX_MessageEntity(to, msg_entity));
 }
 
-QCX_DEFINE_WRITE(Byte, MSG_WriteByte, ClientReliableWrite_Byte, MVD_MSG_WriteByte, 1)
-QCX_DEFINE_WRITE(Char, MSG_WriteChar, ClientReliableWrite_Char, MVD_MSG_WriteByte, 1)
-QCX_DEFINE_WRITE(Short, MSG_WriteShort, ClientReliableWrite_Short, MVD_MSG_WriteShort, 2)
-QCX_DEFINE_WRITE(Long, MSG_WriteLong, ClientReliableWrite_Long, MVD_MSG_WriteLong, 4)
-QCX_DEFINE_WRITE(Coord, MSG_WriteCoord, ClientReliableWrite_Coord, MVD_MSG_WriteCoord, QCX_CoordMessageSize())
-QCX_DEFINE_WRITE(Angle, MSG_WriteAngle, ClientReliableWrite_Angle, MVD_MSG_WriteAngle, QCX_AngleMessageSize())
+static void QCX_WriteChar(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteChar(to, (int)value, QCX_MessageEntity(to, msg_entity));
+}
+
+static void QCX_WriteShort(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteShort(to, (int)value, QCX_MessageEntity(to, msg_entity));
+}
+
+static void QCX_WriteLong(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteLong(to, (int)value, QCX_MessageEntity(to, msg_entity));
+}
+
+static void QCX_WriteCoord(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteCoord(to, value, QCX_MessageEntity(to, msg_entity));
+}
+
+static void QCX_WriteAngle(void *context, float destination, float value,
+	qcx_entity_id_t msg_entity)
+{
+	QCX_ObserveGameplayImport(context);
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteAngle(to, value, QCX_MessageEntity(to, msg_entity));
+}
 
 static void QCX_WriteString(void *context, float destination, const uint8_t *value,
 	qcx_byte_count_t value_size, qcx_entity_id_t msg_entity)
@@ -189,34 +176,17 @@ static void QCX_WriteString(void *context, float destination, const uint8_t *val
 	if (!QCX_CopyText(value, value_size, local, sizeof(local), "message")) {
 		return;
 	}
-	if (QCX_IsMessageOne(destination)) {
-		client_t *const client = QCX_RequireClient(msg_entity);
-		ClientReliableCheckBlock(client, 1 + (int)value_size);
-		ClientReliableWrite_String(client, local);
-		if (sv.mvdrecording && MVDWrite_Begin(dem_single, client - svs.clients,
-			1 + (int)value_size)) {
-			MVD_MSG_WriteString(local);
-		}
-	} else {
-		MSG_WriteString(QCX_WriteDestination(destination), local);
-	}
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteString(to, local, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteEntity(void *context, float destination, qcx_entity_id_t value,
 	qcx_entity_id_t msg_entity)
 {
 	QCX_ObserveGameplayImport(context);
-	const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(value));
-	if (QCX_IsMessageOne(destination)) {
-		client_t *const client = QCX_RequireClient(msg_entity);
-		ClientReliableCheckBlock(client, 2);
-		ClientReliableWrite_Short(client, entnum);
-		if (sv.mvdrecording && MVDWrite_Begin(dem_single, client - svs.clients, 2)) {
-			MVD_MSG_WriteShort(entnum);
-		}
-	} else {
-		MSG_WriteShort(QCX_WriteDestination(destination), entnum);
-	}
+	const int to = QCX_MessageDestination(destination);
+	PF2_WriteEntity(to, NUM_FOR_EDICT(QCX_RequireNetworkEdict(value)),
+		QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,
@@ -264,7 +234,7 @@ static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
 	if (out_parms == NULL || out_parms_size < sizeof(float) * 16U) {
 		SV_Error("qc2cpp setspawnparms requires sixteen floats");
 	}
-	memcpy(out_parms, QCX_RequireClient(entity)->spawn_parms, sizeof(float) * 16U);
+	PF2_setspawnparms(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), out_parms);
 }
 
 static void QCX_LogFrag(void *context, qcx_entity_id_t killer, qcx_entity_id_t victim)
@@ -283,67 +253,8 @@ static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
 	if (!QCX_CopyText(key, key_size, local, sizeof(local), "infokey")) {
 		return 0U;
 	}
-	const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity));
-	const char *value = "";
-	char local_value[256];
-	if (entnum == 0) {
-		const char *lookup = local;
-		if (lookup[0] == '\\') {
-			++lookup;
-			value = (!strcmp(lookup, "date_str") || !strcmp(lookup, "ip")
-				|| !strncmp(lookup, "realip", 7) || !strncmp(lookup, "download", 9)
-				|| !strcmp(lookup, "ping") || !strcmp(lookup, "*userid")
-				|| !strncmp(lookup, "login", 6) || !strcmp(lookup, "*VIP")
-				|| !strcmp(lookup, "*state") || !strcmp(lookup, "netname")
-				|| !strcmp(lookup, "mapname") || !strcmp(lookup, "modelname")
-				|| !strcmp(lookup, "version") || !strcmp(lookup, "servername"))
-				? "yes" : "no";
-		} else if (!strcmp(lookup, "date_str")) {
-			date_t date;
-			SV_TimeOfDay(&date, "%a %b %d, %H:%M:%S %Y");
-			value = date.str;
-		} else if (!strcmp(lookup, "mapname")) value = sv.mapname;
-		else if (!strcmp(lookup, "modelname")) value = sv.modelname;
-		else if (!strcmp(lookup, "version")) value = VersionStringFull();
-		else if (!strcmp(lookup, "servername")) value = SERVER_NAME;
-		else value = Info_ValueForKey(svs.info, lookup);
-		if (value == NULL || *value == '\0') value = Info_Get(&_localinfo_, lookup);
-	} else if (entnum >= 1 && entnum <= MAX_CLIENTS) {
-		client_t *const client = &svs.clients[entnum - 1];
-		if (!strcmp(local, "ip")) {
-			value = NET_BaseAdrToString(client->netchan.remote_address);
-		} else if (!strncmp(local, "realip", 7)) {
-			value = NET_BaseAdrToString(client->realip);
-		} else if (!strncmp(local, "download", 9)) {
-			snprintf(local_value, sizeof(local_value), "%d",
-				client->file_percent ? client->file_percent : -1);
-			value = local_value;
-		} else if (!strcmp(local, "ping")) {
-			snprintf(local_value, sizeof(local_value), "%d", SV_CalcPing(client));
-			value = local_value;
-		} else if (!strcmp(local, "*userid")) {
-			snprintf(local_value, sizeof(local_value), "%d", client->userid);
-			value = local_value;
-		} else if (!strncmp(local, "login", 6)) {
-			value = client->login;
-		} else if (!strcmp(local, "*VIP")) {
-			snprintf(local_value, sizeof(local_value), "%d", client->vip);
-			value = local_value;
-		} else if (!strcmp(local, "netname")) {
-			value = client->name;
-		} else if (!strcmp(local, "*state")) {
-			switch (client->state) {
-			case cs_free: value = "free"; break;
-			case cs_zombie: value = "zombie"; break;
-			case cs_preconnected: value = "preconnected"; break;
-			case cs_connected: value = "connected"; break;
-			case cs_spawned: value = "spawned"; break;
-			default: value = "unknown"; break;
-			}
-		} else {
-			value = Info_Get(&client->_userinfo_ctx_, local);
-		}
-	}
+	const char *const value = PF2_infokey(
+		NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local);
 	const qcx_byte_count_t required = (qcx_byte_count_t)strlen(value);
 	if (out != NULL && out_capacity != 0U) {
 		const qcx_byte_count_t copied = required < out_capacity ? required : out_capacity;
