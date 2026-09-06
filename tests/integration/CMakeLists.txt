@@ -340,3 +340,29 @@ if(MVDSV_QC2CPP_WASM)
 endif()
 
 add_custom_target(qc2cpp_acceptance_assets DEPENDS ${qc2cpp_acceptance_asset_targets})
+
+foreach(test_name IN ITEMS
+	qc2cpp_server_map_native
+	qc2cpp_legacy_strings_native
+	qc2cpp_optional_fields_native
+	qc2cpp_save_native_native
+	qc2cpp_fatal_native
+	qc2cpp_client_native
+	qc2cpp_network_native
+	qc2cpp_spectator_native
+	qc2cpp_save_connected_native
+	qc2cpp_server_map_wasm
+	qc2cpp_legacy_strings_wasm
+	qc2cpp_optional_fields_wasm
+	qc2cpp_save_wasm_wasm
+	qc2cpp_fatal_wasm
+	qc2cpp_restore_oom_wasm
+	qc2cpp_save_native_wasm
+	qc2cpp_save_wasm_native
+	qc2cpp_network_wasm
+	qc2cpp_spectator_wasm
+	qc2cpp_save_connected_wasm)
+	if(TEST ${test_name})
+		set_tests_properties(${test_name} PROPERTIES LABELS "qcx;integration;external")
+	endif()
+endforeach()

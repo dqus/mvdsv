@@ -117,16 +117,32 @@ post-publication guest fatal, Wasm trap, or post-commit restore failure clears
 host views once and terminates the server process. It does not resume the guest
 caller, rerun guest shutdown, or unload an executing native library/Wasm store.
 
-Run the complete configured acceptance matrix:
+Use the fast QCX tier for normal adapter changes. It requires neither generated
+game assets nor a Wasm game build:
 
 ```sh
-ctest --test-dir build/qc2cpp-wasm -R '^qc2cpp_' --no-tests=error --output-on-failure
+ctest --test-dir build/qc2cpp-wasm -L '^fast$' --no-tests=error --output-on-failure
 ```
 
-It covers checker/topology, map changes, native/Wasm and cross-transport saves,
-connected restore, enabled FTE client flows, and terminal fatal/restore-OOM
-subprocesses. Generated acceptance builds record compiler, checker, manifest,
-and WASI SDK identities in `qc2cpp-acceptance/*-input-ids.txt`.
+After a change to the QCX host/game boundary, regenerate the configured game
+artifacts and run the integration tier. It contains the generated QCX fixture
+and every configured native/Wasm acceptance test:
+
+```sh
+cmake --build build/qc2cpp-wasm --target qc2cpp_acceptance_assets -j4
+ctest --test-dir build/qc2cpp-wasm -L '^integration$' --no-tests=error --output-on-failure
+```
+
+The integration tier covers checker/topology, map changes, native/Wasm and
+cross-transport saves, connected restore, enabled FTE client flows, and
+terminal fatal/restore-OOM subprocesses. Generated acceptance builds record
+compiler, checker, manifest, and WASI SDK identities in
+`qc2cpp-acceptance/*-input-ids.txt`.
+
+The CI policy is provider-neutral: ordinary changes run `fast`; QCX adapter or
+generated-game changes run `integration` after its inputs are configured; a
+release consumes qc2cpp's pinned external-input verification lane. This guide
+does not add a hosted-CI workflow or download assets automatically.
 
 For a Wasmtime update, build qc2cpp with the candidate SDK, install it into a
 new prefix, configure both MVDSV modes, and run the full qc2cpp contract/corpus
