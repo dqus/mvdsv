@@ -28,7 +28,7 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
-# The audit is a fixed current compatibility surface: nine calls can reach QCX;
+# The audit is a fixed current compatibility surface: ten calls can reach QCX;
 # three retain their legacy-only contexts.  A new call requires a fresh audit.
 set(audited_sources pr_cmds.c pr2_cmds.c sv_demo.c sv_ents.c sv_phys.c sv_send.c sv_user.c sv_world.c)
 set(audited_contents "")
@@ -38,8 +38,8 @@ foreach(source IN LISTS audited_sources)
 endforeach()
 string(REGEX MATCHALL "PR_GetEntityString[ \t\r\n]*\\(" audited_calls "${audited_contents}")
 list(LENGTH audited_calls audited_call_count)
-if(NOT audited_call_count EQUAL 12)
-	message(FATAL_ERROR "expected exactly 12 audited PR_GetEntityString calls, found ${audited_call_count}")
+if(NOT audited_call_count EQUAL 13)
+	message(FATAL_ERROR "expected exactly 13 audited PR_GetEntityString calls, found ${audited_call_count}")
 endif()
 
 function(require_legacy_call_context source marker)
