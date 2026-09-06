@@ -28,6 +28,9 @@
 #include "qwsvdef.h"
 #include "vm.h"
 #include "vm_local.h"
+#ifdef QCX_ENABLED
+#include "qcx/adapter.h"
+#endif
 
 #define SETUSERINFO_STAR          (1<<0) // allow set star keys
 
@@ -93,6 +96,12 @@ int NUM_FOR_GAME_EDICT(byte *e)
 
 intptr_t PR2_EntityStringLocation(string_t offset, int max_size);
 void static PR2_SetEntityString_model(edict_t *ed, string_t *target, char *s) {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		PR2_SetEntityString(ed, target, s);
+		return;
+	}
+#endif
 	if (!sv_vm) {
 		PR1_SetString(target, s);
 		return;
