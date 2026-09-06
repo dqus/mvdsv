@@ -254,6 +254,11 @@ add_test(NAME qcx_client_routes
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/client_routes_test.cmake)
 
+add_test(NAME qcx_pr2_api_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/pr2_api_routes_test.cmake)
+
 add_executable(qcx_reentry_test
 	reentry_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entries.c
@@ -508,6 +513,7 @@ foreach(test_name IN ITEMS
 	qcx_services_world
 	qcx_client
 	qcx_client_routes
+	qcx_pr2_api_routes
 	qcx_reentry
 	qcx_touch_links
 	qcx_entry_routes
