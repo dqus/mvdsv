@@ -118,42 +118,11 @@ static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *t
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_STUFFTEXT];
-	client_t *const client = QCX_RequireClient(entity);
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "stuffcmd")) {
 		return;
 	}
-	if (!strncmp(local, "disconnect\n", MAX_STUFFTEXT)) {
-		client->drop = true;
-		return;
-	}
-	if (strlen(client->stufftext_buf) + strlen(local) >= MAX_STUFFTEXT) {
-		SV_Error("qc2cpp stufftext buffer overflow");
-	}
-	strlcat(client->stufftext_buf, local, MAX_STUFFTEXT);
-	if (strchr(client->stufftext_buf, '\n') != NULL) {
-		ClientReliableWrite_Begin(client, svc_stufftext,
-			2 + (int)strlen(client->stufftext_buf));
-		ClientReliableWrite_String(client, client->stufftext_buf);
-		if (sv.mvdrecording && MVDWrite_Begin(dem_single, client - svs.clients,
-			2 + (int)strlen(client->stufftext_buf))) {
-			MVD_MSG_WriteByte(svc_stufftext);
-			MVD_MSG_WriteString(client->stufftext_buf);
-		}
-		if ((int)sv_specprint.value & QCX_SPECPRINT_STUFFCMD) {
-			const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity));
-			for (int index = 0; index < MAX_CLIENTS; ++index) {
-				client_t *const spectator = &svs.clients[index];
-				if (client->state && spectator->spectator
-					&& spectator->spec_track == entnum
-					&& (client->spec_print & QCX_SPECPRINT_STUFFCMD)) {
-					ClientReliableWrite_Begin(spectator, svc_stufftext,
-						2 + (int)strlen(client->stufftext_buf));
-					ClientReliableWrite_String(spectator, client->stufftext_buf);
-				}
-			}
-		}
-		client->stufftext_buf[0] = '\0';
-	}
+	(void)QCX_RequireClient(entity);
+	PF2_stuffcmd(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local, 0);
 }
 
 static void QCX_BPrint(void *context, float level, const uint8_t *text,
@@ -258,27 +227,8 @@ static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "centerprint")) {
 		return;
 	}
-	client_t *const client = QCX_RequireClient(entity);
-	ClientReliableWrite_Begin(client, svc_centerprint, 2 + (int)text_size);
-	ClientReliableWrite_String(client, local);
-	if (sv.mvdrecording && MVDWrite_Begin(dem_single, client - svs.clients,
-		2 + (int)text_size)) {
-		MVD_MSG_WriteByte(svc_centerprint);
-		MVD_MSG_WriteString(local);
-	}
-	if ((int)sv_specprint.value & QCX_SPECPRINT_CENTERPRINT) {
-		const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity));
-		for (int index = 0; index < MAX_CLIENTS; ++index) {
-			client_t *const spectator = &svs.clients[index];
-			if (client->state && spectator->spectator
-				&& spectator->spec_track == entnum
-				&& (client->spec_print & QCX_SPECPRINT_CENTERPRINT)) {
-				ClientReliableWrite_Begin(spectator, svc_centerprint,
-					2 + (int)text_size);
-				ClientReliableWrite_String(spectator, local);
-			}
-		}
-	}
+	(void)QCX_RequireClient(entity);
+	PF2_centerprint(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local);
 }
 
 static void QCX_AmbientSound(void *context, const float origin[3],
@@ -320,7 +270,8 @@ static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
 static void QCX_LogFrag(void *context, qcx_entity_id_t killer, qcx_entity_id_t victim)
 {
 	QCX_ObserveGameplayImport(context);
-	SV_QC_LogFrag(QCX_RequireNetworkEdict(killer), QCX_RequireNetworkEdict(victim));
+	PF2_logfrag(NUM_FOR_EDICT(QCX_RequireNetworkEdict(killer)),
+		NUM_FOR_EDICT(QCX_RequireNetworkEdict(victim)));
 }
 
 static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
@@ -407,7 +358,7 @@ static void QCX_Multicast(void *context, const float origin[3], float destinatio
 	if (origin == NULL) {
 		SV_Error("qc2cpp multicast requires an origin");
 	}
-	SV_Multicast((float *)origin, (int)destination);
+	PF2_multicast(origin[0], origin[1], origin[2], (int)destination);
 }
 
 void QCX_BindNetworkServices(qcx_host_api_v1_t *host)
