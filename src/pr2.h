@@ -126,6 +126,16 @@ void		PF2_stuffcmd(int entnum, char *text, int flags);
 void		PF2_centerprint(int entnum, char *text);
 void		PF2_logfrag(int killer_entnum, int victim_entnum);
 void		PF2_multicast(float x, float y, float z, int destination);
+void		PF2_WriteByte(int to, int value, edict_t *msg_entity);
+void		PF2_WriteChar(int to, int value, edict_t *msg_entity);
+void		PF2_WriteShort(int to, int value, edict_t *msg_entity);
+void		PF2_WriteLong(int to, int value, edict_t *msg_entity);
+void		PF2_WriteCoord(int to, float value, edict_t *msg_entity);
+void		PF2_WriteAngle(int to, float value, edict_t *msg_entity);
+void		PF2_WriteString(int to, char *value, edict_t *msg_entity);
+void		PF2_WriteEntity(int to, int value_entnum, edict_t *msg_entity);
+void		PF2_setspawnparms(int entnum, float *out_parms);
+const char	*PF2_infokey(int entnum, const char *key);
 eval_t*		PR2_GetEdictFieldValue(edict_t *ed, char *field);
 #define PR_GetEdictFieldValue PR2_GetEdictFieldValue
 int			ED2_FindFieldOffset(char *field);
