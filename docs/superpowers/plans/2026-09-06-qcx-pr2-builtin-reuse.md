@@ -478,13 +478,23 @@ static client_t *Write_GetClient(edict_t *entity)
 
 Add the explicit `edict_t *msg_entity` argument to all eight PF2 writer signatures and use it only on the `MSG_ONE` path.
 
-Update every PR2 syscall case to pass:
+Add a private selector that resolves the hidden PR2 global only for `MSG_ONE`:
 
 ```c
-PROG_TO_EDICT(pr_global_struct->msg_entity)
+static edict_t *PR2_WriteMessageEntity(int destination)
+{
+	if (destination != MSG_ONE) {
+		return NULL;
+	}
+	return PROG_TO_EDICT(pr_global_struct->msg_entity);
+}
 ```
 
-as the new final PF2 argument. Preserve the existing `WriteDest2()` handling for all non-`MSG_ONE` destinations.
+Update every PR2 `G_WRITE*` syscall case to pass
+`PR2_WriteMessageEntity(args[1])` as the new final PF2 argument. This preserves
+the old behavior: non-`MSG_ONE` destinations do not evaluate `msg_entity` at
+all. Preserve the existing `WriteDest2()` handling for all non-`MSG_ONE`
+destinations.
 
 - [ ] **Step 4: Route QCX Write* imports through the explicit PF2 writers**
 
