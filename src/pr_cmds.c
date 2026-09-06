@@ -22,10 +22,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
-#ifdef QCX_ENABLED
-#include "qcx/services.h"
-#endif
-
 static tokenizecontext_t pr1_tokencontext;
 
 #define	RETURN_EDICT(e) (((int *)pr_globals)[OFS_RETURN] = EDICT_TO_PROG(e))
@@ -124,16 +120,12 @@ This is the only valid way to move an object without using the physics of the wo
 setorigin (entity, origin)
 =================
 */
-void SV_QC_SetOrigin(edict_t *entity, const float origin[3])
-{
-	VectorCopy(origin, entity->v->origin);
-	SV_AntilagReset(entity);
-	SV_LinkEdict(entity, false);
-}
-
 void PF_setorigin (void)
 {
-	SV_QC_SetOrigin(G_EDICT(OFS_PARM0), G_VECTOR(OFS_PARM1));
+	edict_t *const entity = G_EDICT(OFS_PARM0);
+	VectorCopy(G_VECTOR(OFS_PARM1), entity->v->origin);
+	SV_AntilagReset(entity);
+	SV_LinkEdict(entity, false);
 }
 
 
@@ -146,17 +138,13 @@ the size box is rotated by the current angle
 setsize (entity, minvector, maxvector)
 =================
 */
-void SV_QC_SetSize(edict_t *entity, const float mins[3], const float maxs[3])
-{
-	VectorCopy(mins, entity->v->mins);
-	VectorCopy(maxs, entity->v->maxs);
-	VectorSubtract(maxs, mins, entity->v->size);
-	SV_LinkEdict(entity, false);
-}
-
 void PF_setsize (void)
 {
-	SV_QC_SetSize(G_EDICT(OFS_PARM0), G_VECTOR(OFS_PARM1), G_VECTOR(OFS_PARM2));
+	edict_t *const entity = G_EDICT(OFS_PARM0);
+	VectorCopy(G_VECTOR(OFS_PARM1), entity->v->mins);
+	VectorCopy(G_VECTOR(OFS_PARM2), entity->v->maxs);
+	VectorSubtract(entity->v->maxs, entity->v->mins, entity->v->size);
+	SV_LinkEdict(entity, false);
 }
 
 
@@ -168,7 +156,7 @@ setmodel(entity, model)
 Also sets size, mins, and maxs for inline bmodels
 =================
 */
-int SV_QC_SetModel(edict_t *entity, const char *name)
+static int PR1_SetModel(edict_t *entity, const char *name)
 {
 	int			i;
 	char		*m, **check;
@@ -217,7 +205,7 @@ static void PF_setmodel (void)
 	edict_t *const entity = G_EDICT(OFS_PARM0);
 	char *const name = G_STRING(OFS_PARM1);
 	entity->v->model = G_INT(OFS_PARM1);
-	if (!SV_QC_SetModel(entity, name))
+	if (!PR1_SetModel(entity, name))
 		PR_RunError("PF_setmodel: no precache: %s\n", name);
 }
 
@@ -769,7 +757,7 @@ entity checkclient() = #17
 =================
 */
 #define	MAX_CHECK	16
-edict_t *SV_QC_CheckClient(edict_t *self)
+static edict_t *PR1_CheckClient(edict_t *self)
 {
 	edict_t	*ent;
 	int		l;
@@ -803,7 +791,7 @@ edict_t *SV_QC_CheckClient(edict_t *self)
 
 static void PF_checkclient (void)
 {
-	RETURN_EDICT(SV_QC_CheckClient(PROG_TO_EDICT(pr_global_struct->self)));
+	RETURN_EDICT(PR1_CheckClient(PROG_TO_EDICT(pr_global_struct->self)));
 }
 
 //============================================================================
@@ -1351,7 +1339,7 @@ void PF_precache_file (void)
 	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
 }
 
-int SV_QC_PrecacheSound(const char *name)
+static int PR1_PrecacheSound(const char *name)
 {
 	int		i;
 
@@ -1377,11 +1365,11 @@ void PF_precache_sound (void)
 {
 	char *const name = G_STRING(OFS_PARM0);
 	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	if (!SV_QC_PrecacheSound(name))
+	if (!PR1_PrecacheSound(name))
 		PR_RunError("PF_precache_sound failed");
 }
 
-int SV_QC_PrecacheModel(const char *name)
+static int PR1_PrecacheModel(const char *name)
 {
 	int i;
 
@@ -1407,7 +1395,7 @@ void PF_precache_model (void)
 {
 	char *const name = G_STRING(OFS_PARM0);
 	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	if (!SV_QC_PrecacheModel(name))
+	if (!PR1_PrecacheModel(name))
 		PR_RunError("PF_precache_model failed");
 }
 
@@ -1465,7 +1453,7 @@ PF_walkmove
 float(float yaw, float dist) walkmove
 ===============
 */
-float SV_QC_WalkMove(edict_t *ent, float yaw, float dist)
+static float PR1_WalkMove(edict_t *ent, float yaw, float dist)
 {
 	vec3_t	move;
 	dfunction_t	*oldf;
@@ -1494,7 +1482,7 @@ void PF_walkmove (void)
 {
 	edict_t *const ent = PROG_TO_EDICT(pr_global_struct->self);
 	const int oldself = pr_global_struct->self;
-	G_FLOAT(OFS_RETURN) = SV_QC_WalkMove(ent, G_FLOAT(OFS_PARM0), G_FLOAT(OFS_PARM1));
+	G_FLOAT(OFS_RETURN) = PR1_WalkMove(ent, G_FLOAT(OFS_PARM0), G_FLOAT(OFS_PARM1));
 	pr_global_struct->self = oldself;
 }
 
@@ -1505,7 +1493,7 @@ PF_droptofloor
 void() droptofloor
 ===============
 */
-float SV_QC_DropToFloor(edict_t *ent)
+static float PR1_DropToFloor(edict_t *ent)
 {
 	vec3_t		end;
 	trace_t		trace;
@@ -1529,7 +1517,7 @@ float SV_QC_DropToFloor(edict_t *ent)
 
 void PF_droptofloor (void)
 {
-	G_FLOAT(OFS_RETURN) = SV_QC_DropToFloor(PROG_TO_EDICT(pr_global_struct->self));
+	G_FLOAT(OFS_RETURN) = PR1_DropToFloor(PROG_TO_EDICT(pr_global_struct->self));
 }
 
 /*
@@ -1539,7 +1527,7 @@ PF_lightstyle
 void(float style, string value) lightstyle
 ===============
 */
-void SV_QC_LightStyle(int style, const char *value)
+static void PR1_LightStyle(int style, const char *value)
 {
 	client_t	*client;
 	int			j;
@@ -1571,7 +1559,7 @@ void SV_QC_LightStyle(int style, const char *value)
 
 void PF_lightstyle (void)
 {
-	SV_QC_LightStyle((int)G_FLOAT(OFS_PARM0), G_STRING(OFS_PARM1));
+	PR1_LightStyle((int)G_FLOAT(OFS_PARM0), G_STRING(OFS_PARM1));
 }
 
 void PF_rint (void)
@@ -2223,7 +2211,7 @@ void PF_WriteEntity (void)
 
 int SV_ModelIndex (char *name);
 
-void SV_QC_MakeStatic(edict_t *ent, const char *model_name)
+static void PR1_MakeStatic(edict_t *ent, const char *model_name)
 {
 	entity_state_t* s;
 	if (sv.static_entity_count >= sizeof(sv.static_entities) / sizeof(sv.static_entities[0])) {
@@ -2264,7 +2252,7 @@ void SV_QC_MakeStatic(edict_t *ent, const char *model_name)
 void PF_makestatic (void)
 {
 	edict_t *const entity = G_EDICT(OFS_PARM0);
-	SV_QC_MakeStatic(entity, PR_GetEntityString(entity->v->model));
+	PR1_MakeStatic(entity, PR_GetEntityString(entity->v->model));
 }
 
 //=============================================================================
@@ -2297,7 +2285,7 @@ void PF_setspawnparms (void)
 PF_changelevel
 ==============
 */
-void SV_QC_ChangeLevel(const char *map)
+static void PR1_ChangeLevel(const char *map)
 {
 	static	int	last_spawncount;
 
@@ -2311,7 +2299,7 @@ void SV_QC_ChangeLevel(const char *map)
 
 void PF_changelevel (void)
 {
-	SV_QC_ChangeLevel(G_STRING(OFS_PARM0));
+	PR1_ChangeLevel(G_STRING(OFS_PARM0));
 }
 
 
@@ -2322,7 +2310,7 @@ PF_logfrag
 logfrag (killer, killee)
 ==============
 */
-void SV_QC_LogFrag(edict_t *ent1, edict_t *ent2)
+static void PR1_LogFrag(edict_t *ent1, edict_t *ent2)
 {
 	int		e1, e2;
 	char	*s;
@@ -2363,7 +2351,7 @@ void SV_QC_LogFrag(edict_t *ent1, edict_t *ent2)
 
 void PF_logfrag (void)
 {
-	SV_QC_LogFrag(G_EDICT(OFS_PARM0), G_EDICT(OFS_PARM1));
+	PR1_LogFrag(G_EDICT(OFS_PARM0), G_EDICT(OFS_PARM1));
 }
 
 /*

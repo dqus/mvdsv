@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -108,7 +109,6 @@ void PF2_makestatic(edict_t *entity)
 	assert(entity == &test_entity);
 	++makestatic_calls;
 }
-void SV_QC_ChangeLevel(const char *map) { assert(!strcmp(map, "dm6")); }
 edict_t *ED_Alloc(void) { test_spawned.e.free = false; return &test_spawned; }
 void ED_Free(edict_t *entity) { assert(entity == &test_spawned); entity->e.free = true; ++freed; }
 int QCX_SetEntityString(edict_t *entity, const char *field, const char *value) { assert(entity == &test_entity); assert(!strcmp(field, "model")); strlcpy(entity_model, value, sizeof(entity_model)); return 1; }
@@ -118,6 +118,15 @@ float Cvar_Value(const char *name) { assert(!strcmp(name, "skill")); return 2.0f
 cvar_t *Cvar_Find(const char *name) { assert(!strcmp(name, "skill")); return &deathmatch; }
 void Cvar_Set(cvar_t *var, char *value) { assert(var == &deathmatch); assert(!strcmp(value, "3")); ++cvar_set; }
 void Cbuf_AddText(const char *text) { strlcpy(queued_command, text, sizeof(queued_command)); }
+char *va(const char *format, ...)
+{
+	static char value[MAXCMDBUF];
+	va_list args;
+	va_start(args, format);
+	vsnprintf(value, sizeof(value), format, args);
+	va_end(args);
+	return value;
+}
 void Con_Printf(char *format, ...) { (void)format; abort(); }
 
 static void test_unpublish(void *context) { (void)context; }
@@ -183,7 +192,9 @@ int main(void)
 	assert(!strcmp(queued_command, "status\n"));
 	host.makestatic(host.context, 0U);
 	assert(makestatic_calls == 1);
+	svs.spawncount = 1;
 	host.changelevel(host.context, (const uint8_t *)"dm6", 3U);
+	assert(!strcmp(queued_command, "map dm6\n"));
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"alpha", 5U,
 		(const uint8_t *)"1.5", 3U) == QCX_MAP_METADATA_HANDLED);
 	assert(test_entity.xv.alpha == 1.0f);
