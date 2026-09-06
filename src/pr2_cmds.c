@@ -2561,6 +2561,15 @@ void PF2_VisibleTo(int viewer, int first, int len, byte *visible)
 
 #define VMV(x) _vmf(args[x]), _vmf(args[(x) + 1]), _vmf(args[(x) + 2])
 #define VME(x) EDICT_NUM(args[x])
+
+static edict_t *PR2_WriteMessageEntity(int destination)
+{
+	if (destination != MSG_ONE) {
+		return NULL;
+	}
+	return PROG_TO_EDICT(pr_global_struct->msg_entity);
+}
+
 intptr_t PR2_GameSystemCalls(intptr_t *args) {
 	switch (args[0]) {
 	case G_GETAPIVERSION:
@@ -2692,28 +2701,28 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 		PF2_disable_updates(args[1], VMF(2));
 		return 0;
 	case G_WRITEBYTE:
-		PF2_WriteByte(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteByte(args[1], args[2], PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITECHAR:
-		PF2_WriteChar(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteChar(args[1], args[2], PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITESHORT:
-		PF2_WriteShort(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteShort(args[1], args[2], PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITELONG:
-		PF2_WriteLong(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteLong(args[1], args[2], PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITEANGLE:
-		PF2_WriteAngle(args[1], VMF(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteAngle(args[1], VMF(2), PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITECOORD:
-		PF2_WriteCoord(args[1], VMF(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteCoord(args[1], VMF(2), PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITESTRING:
-		PF2_WriteString(args[1], VMA(2), PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteString(args[1], VMA(2), PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_WRITEENTITY:
-		PF2_WriteEntity(args[1], args[2], PROG_TO_EDICT(pr_global_struct->msg_entity));
+		PF2_WriteEntity(args[1], args[2], PR2_WriteMessageEntity(args[1]));
 		return 0;
 	case G_FLUSHSIGNON:
 		SV_FlushSignon();
