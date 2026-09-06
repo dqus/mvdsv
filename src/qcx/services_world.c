@@ -251,14 +251,9 @@ static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
 static void QCX_ChangeLevel(void *context, const uint8_t *map, qcx_byte_count_t map_size)
 {
 	QCX_ObserveGameplayImport(context);
-	char local[MAX_QPATH];
-	if (QCX_CopyText(map, map_size, local, sizeof(local), "map")) {
-		static int last_spawncount;
-		if (svs.spawncount == last_spawncount) {
-			return;
-		}
-		last_spawncount = svs.spawncount;
-		Cbuf_AddText(va("map %s\n", local));
+	char map_name[MAX_QPATH];
+	if (QCX_CopyText(map, map_size, map_name, sizeof(map_name), "map")) {
+		PF2_changelevel(map_name, "");
 	}
 }
 
