@@ -122,10 +122,14 @@ setorigin (entity, origin)
 */
 void PF_setorigin (void)
 {
-	edict_t *const entity = G_EDICT(OFS_PARM0);
-	VectorCopy(G_VECTOR(OFS_PARM1), entity->v->origin);
-	SV_AntilagReset(entity);
-	SV_LinkEdict(entity, false);
+	edict_t	*e;
+	float	*org;
+
+	e = G_EDICT(OFS_PARM0);
+	org = G_VECTOR(OFS_PARM1);
+	VectorCopy (org, e->v->origin);
+	SV_AntilagReset (e);
+	SV_LinkEdict (e, false);
 }
 
 
@@ -140,11 +144,16 @@ setsize (entity, minvector, maxvector)
 */
 void PF_setsize (void)
 {
-	edict_t *const entity = G_EDICT(OFS_PARM0);
-	VectorCopy(G_VECTOR(OFS_PARM1), entity->v->mins);
-	VectorCopy(G_VECTOR(OFS_PARM2), entity->v->maxs);
-	VectorSubtract(entity->v->maxs, entity->v->mins, entity->v->size);
-	SV_LinkEdict(entity, false);
+	edict_t	*e;
+	float	*min, *max;
+
+	e = G_EDICT(OFS_PARM0);
+	min = G_VECTOR(OFS_PARM1);
+	max = G_VECTOR(OFS_PARM2);
+	VectorCopy (min, e->v->mins);
+	VectorCopy (max, e->v->maxs);
+	VectorSubtract (max, min, e->v->size);
+	SV_LinkEdict (e, false);
 }
 
 
@@ -156,57 +165,52 @@ setmodel(entity, model)
 Also sets size, mins, and maxs for inline bmodels
 =================
 */
-static int PR1_SetModel(edict_t *entity, const char *name)
+static void PF_setmodel (void)
 {
 	int			i;
+	edict_t		*e;
 	char		*m, **check;
 	cmodel_t	*mod;
-	m = (char *)name;
+
+	e = G_EDICT(OFS_PARM0);
+	m = G_STRING(OFS_PARM1);
 
 // check to see if model was properly precached
 	for (i = 0, check = sv.model_precache; i < MAX_MODELS && *check ; i++, check++)
 		if (!strcmp(*check, m))
 			goto ok;
-	return 0;
+	PR_RunError ("PF_setmodel: no precache: %s\n", m);
 ok:
-	entity->v->modelindex = i;
+
+	e->v->model = G_INT(OFS_PARM1);
+	e->v->modelindex = i;
 
 // if it is an inline model, get the size information for it
 	if (m[0] == '*')
 	{
 		mod = CM_InlineModel (m);
-		VectorCopy(mod->mins, entity->v->mins);
-		VectorCopy(mod->maxs, entity->v->maxs);
-		VectorSubtract(mod->maxs, mod->mins, entity->v->size);
-		SV_LinkEdict(entity, false);
+		VectorCopy (mod->mins, e->v->mins);
+		VectorCopy (mod->maxs, e->v->maxs);
+		VectorSubtract (mod->maxs, mod->mins, e->v->size);
+		SV_LinkEdict (e, false);
 	}
 	else if (pr_nqprogs)
 	{
 		// hacks to make NQ progs happy
-		if (!strcmp(PR1_GetString(entity->v->model), "maps/b_explob.bsp"))
+		if (!strcmp(PR1_GetString(e->v->model), "maps/b_explob.bsp"))
 		{
-			VectorClear(entity->v->mins);
-			VectorSet(entity->v->maxs, 32, 32, 64);
+			VectorClear (e->v->mins);
+			VectorSet (e->v->maxs, 32, 32, 64);
 		}
 		else
 		{
 			// FTE does this, so we do, too; I'm not sure if it makes a difference
-			VectorSet(entity->v->mins, -16, -16, -16);
-			VectorSet(entity->v->maxs, 16, 16, 16);
+			VectorSet (e->v->mins, -16, -16, -16);
+			VectorSet (e->v->maxs, 16, 16, 16);
 		}
-		VectorSubtract(entity->v->maxs, entity->v->mins, entity->v->size);
-		SV_LinkEdict(entity, false);
+		VectorSubtract (e->v->maxs, e->v->mins, e->v->size);
+		SV_LinkEdict (e, false);
 	}
-	return 1;
-}
-
-static void PF_setmodel (void)
-{
-	edict_t *const entity = G_EDICT(OFS_PARM0);
-	char *const name = G_STRING(OFS_PARM1);
-	entity->v->model = G_INT(OFS_PARM1);
-	if (!PR1_SetModel(entity, name))
-		PR_RunError("PF_setmodel: no precache: %s\n", name);
 }
 
 /*
@@ -757,9 +761,9 @@ entity checkclient() = #17
 =================
 */
 #define	MAX_CHECK	16
-static edict_t *PR1_CheckClient(edict_t *self)
+static void PF_checkclient (void)
 {
-	edict_t	*ent;
+	edict_t	*ent, *self;
 	int		l;
 	vec3_t	vieworg;
 	
@@ -774,24 +778,22 @@ static edict_t *PR1_CheckClient(edict_t *self)
 	ent = EDICT_NUM(sv.lastcheck);
 	if (ent->e.free || ent->v->health <= 0)
 	{
-		return sv.edicts;
+		RETURN_EDICT(sv.edicts);
+		return;
 	}
 
 // if current entity can't possibly see the check entity, return 0
+	self = PROG_TO_EDICT(pr_global_struct->self);
 	VectorAdd (self->v->origin, self->v->view_ofs, vieworg);
 	l = CM_Leafnum(CM_PointInLeaf(vieworg)) - 1;
 	if ( (l<0) || !(checkpvs[l>>3] & (1<<(l&7)) ) )
 	{
-		return sv.edicts;
+		RETURN_EDICT(sv.edicts);
+		return;
 	}
 
 // might be able to see it
-	return ent;
-}
-
-static void PF_checkclient (void)
-{
-	RETURN_EDICT(PR1_CheckClient(PROG_TO_EDICT(pr_global_struct->self)));
+	RETURN_EDICT(ent);
 }
 
 //============================================================================
@@ -1339,64 +1341,54 @@ void PF_precache_file (void)
 	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
 }
 
-static int PR1_PrecacheSound(const char *name)
+void PF_precache_sound (void)
 {
+	char	*s;
 	int		i;
 
 	if (sv.state != ss_loading)
-		return 0;
-	if (name == NULL || name[0] <= ' ')
-		return 0;
+		PR_RunError ("PF_Precache_*: Precache can only be done in spawn functions");
+
+	s = G_STRING(OFS_PARM0);
+	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
+	PR_CheckEmptyString (s);
 
 	for (i=0 ; i<MAX_SOUNDS ; i++)
 	{
 		if (!sv.sound_precache[i])
 		{
-			sv.sound_precache[i] = (char *)name;
-			return 1;
+			sv.sound_precache[i] = s;
+			return;
 		}
-		if (!strcmp(sv.sound_precache[i], name))
-			return 1;
+		if (!strcmp(sv.sound_precache[i], s))
+			return;
 	}
-	return 0;
+	PR_RunError ("PF_precache_sound: overflow");
 }
 
-void PF_precache_sound (void)
+void PF_precache_model (void)
 {
-	char *const name = G_STRING(OFS_PARM0);
-	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	if (!PR1_PrecacheSound(name))
-		PR_RunError("PF_precache_sound failed");
-}
-
-static int PR1_PrecacheModel(const char *name)
-{
-	int i;
+	char	*s;
+	int		i;
 
 	if (sv.state != ss_loading)
-		return 0;
-	if (name == NULL || name[0] <= ' ')
-		return 0;
+		PR_RunError ("PF_Precache_*: Precache can only be done in spawn functions");
+
+	s = G_STRING(OFS_PARM0);
+	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
+	PR_CheckEmptyString (s);
 
 	for (i=0 ; i<MAX_MODELS ; i++)
 	{
 		if (!sv.model_precache[i])
 		{
-			sv.model_precache[i] = (char *)name;
-			return 1;
+			sv.model_precache[i] = s;
+			return;
 		}
-		if (!strcmp(sv.model_precache[i], name))
-			return 1;
+		if (!strcmp(sv.model_precache[i], s))
+			return;
 	}
-	return 0;
-}
-
-void PF_precache_model (void)
-{
-	char *const name = G_STRING(OFS_PARM0);
-	G_INT(OFS_RETURN) = G_INT(OFS_PARM0);
-	if (!PR1_PrecacheModel(name))
-		PR_RunError("PF_precache_model failed");
+	PR_RunError ("PF_precache_model: overflow");
 }
 
 static void PF_precache_vwep_model (void)
@@ -1453,14 +1445,22 @@ PF_walkmove
 float(float yaw, float dist) walkmove
 ===============
 */
-static float PR1_WalkMove(edict_t *ent, float yaw, float dist)
+void PF_walkmove (void)
 {
+	edict_t	*ent;
+	float	yaw, dist;
 	vec3_t	move;
 	dfunction_t	*oldf;
+	int 	oldself;
+
+	ent = PROG_TO_EDICT(pr_global_struct->self);
+	yaw = G_FLOAT(OFS_PARM0);
+	dist = G_FLOAT(OFS_PARM1);
 
 	if ( !( (int)ent->v->flags & (FL_ONGROUND|FL_FLY|FL_SWIM) ) )
 	{
-		return 0.0f;
+		G_FLOAT(OFS_RETURN) = 0;
+		return;
 	}
 
 	yaw = yaw*M_PI*2 / 360;
@@ -1471,18 +1471,13 @@ static float PR1_WalkMove(edict_t *ent, float yaw, float dist)
 
 	// save program state, because SV_movestep may call other progs
 	oldf = pr_xfunction;
-	const float result = SV_movestep(ent, move, true);
+	oldself = pr_global_struct->self;
 
-	// The caller owns the self restoration boundary.
+	G_FLOAT(OFS_RETURN) = SV_movestep(ent, move, true);
+
+
+	// restore program state
 	pr_xfunction = oldf;
-	return result;
-}
-
-void PF_walkmove (void)
-{
-	edict_t *const ent = PROG_TO_EDICT(pr_global_struct->self);
-	const int oldself = pr_global_struct->self;
-	G_FLOAT(OFS_RETURN) = PR1_WalkMove(ent, G_FLOAT(OFS_PARM0), G_FLOAT(OFS_PARM1));
 	pr_global_struct->self = oldself;
 }
 
@@ -1493,10 +1488,13 @@ PF_droptofloor
 void() droptofloor
 ===============
 */
-static float PR1_DropToFloor(edict_t *ent)
+void PF_droptofloor (void)
 {
+	edict_t		*ent;
 	vec3_t		end;
 	trace_t		trace;
+
+	ent = PROG_TO_EDICT(pr_global_struct->self);
 
 	VectorCopy (ent->v->origin, end);
 	end[2] -= 256;
@@ -1504,20 +1502,15 @@ static float PR1_DropToFloor(edict_t *ent)
 	trace = SV_Trace (ent->v->origin, ent->v->mins, ent->v->maxs, end, false, ent);
 
 	if (trace.fraction == 1 || trace.allsolid)
-		return 0.0f;
+		G_FLOAT(OFS_RETURN) = 0;
 	else
 	{
 		VectorCopy (trace.endpos, ent->v->origin);
 		SV_LinkEdict (ent, false);
 		ent->v->flags = (int)ent->v->flags | FL_ONGROUND;
 		ent->v->groundentity = EDICT_TO_PROG(trace.e.ent);
-		return 1.0f;
+		G_FLOAT(OFS_RETURN) = 1;
 	}
-}
-
-void PF_droptofloor (void)
-{
-	G_FLOAT(OFS_RETURN) = PR1_DropToFloor(PROG_TO_EDICT(pr_global_struct->self));
 }
 
 /*
@@ -1527,13 +1520,18 @@ PF_lightstyle
 void(float style, string value) lightstyle
 ===============
 */
-static void PR1_LightStyle(int style, const char *value)
+void PF_lightstyle (void)
 {
+	int		style;
+	char	*val;
 	client_t	*client;
 	int			j;
 
+	style = G_FLOAT(OFS_PARM0);
+	val = G_STRING(OFS_PARM1);
+
 	// change the string in sv
-	sv.lightstyles[style] = (char *)value;
+	sv.lightstyles[style] = val;
 
 	// send message to all clients on this server
 	if (sv.state != ss_active)
@@ -1542,24 +1540,19 @@ static void PR1_LightStyle(int style, const char *value)
 	for (j=0, client = svs.clients ; j<MAX_CLIENTS ; j++, client++)
 		if ( client->state == cs_spawned )
 		{
-			ClientReliableWrite_Begin (client, svc_lightstyle, strlen(value)+3);
+			ClientReliableWrite_Begin (client, svc_lightstyle, strlen(val)+3);
 			ClientReliableWrite_Char (client, style);
-			ClientReliableWrite_String (client, (char *)value);
+			ClientReliableWrite_String (client, val);
 		}
 	if (sv.mvdrecording)
 	{
-		if (MVDWrite_Begin( dem_all, 0, strlen(value)+3))
+		if (MVDWrite_Begin( dem_all, 0, strlen(val)+3))
 		{
 			MVD_MSG_WriteByte(svc_lightstyle);
 			MVD_MSG_WriteChar(style);
-			MVD_MSG_WriteString(value);
+			MVD_MSG_WriteString(val);
 		}
 	}
-}
-
-void PF_lightstyle (void)
-{
-	PR1_LightStyle((int)G_FLOAT(OFS_PARM0), G_STRING(OFS_PARM1));
 }
 
 void PF_rint (void)
@@ -2211,9 +2204,12 @@ void PF_WriteEntity (void)
 
 int SV_ModelIndex (char *name);
 
-static void PR1_MakeStatic(edict_t *ent, const char *model_name)
+void PF_makestatic (void)
 {
 	entity_state_t* s;
+	edict_t	*ent;
+
+	ent = G_EDICT(OFS_PARM0);
 	if (sv.static_entity_count >= sizeof(sv.static_entities) / sizeof(sv.static_entities[0])) {
 		ED_Free (ent);
 		return;
@@ -2222,7 +2218,7 @@ static void PR1_MakeStatic(edict_t *ent, const char *model_name)
 	s = &sv.static_entities[sv.static_entity_count];
 	memset(s, 0, sizeof(sv.static_entities[0]));
 	s->number = sv.static_entity_count + 1;
-	s->modelindex = SV_ModelIndex((char *)model_name);
+	s->modelindex = SV_ModelIndex(PR_GetEntityString(ent->v->model));
 	if (!s->modelindex) {
 		ED_Free (ent);
 		return;
@@ -2247,12 +2243,6 @@ static void PR1_MakeStatic(edict_t *ent, const char *model_name)
 
 	// throw the entity away now
 	ED_Free (ent);
-}
-
-void PF_makestatic (void)
-{
-	edict_t *const entity = G_EDICT(OFS_PARM0);
-	PR1_MakeStatic(entity, PR_GetEntityString(entity->v->model));
 }
 
 //=============================================================================
@@ -2285,8 +2275,9 @@ void PF_setspawnparms (void)
 PF_changelevel
 ==============
 */
-static void PR1_ChangeLevel(const char *map)
+void PF_changelevel (void)
 {
+	char	*s;
 	static	int	last_spawncount;
 
 	// make sure we don't issue two changelevels
@@ -2294,12 +2285,8 @@ static void PR1_ChangeLevel(const char *map)
 		return;
 	last_spawncount = svs.spawncount;
 
-	Cbuf_AddText(va("map %s\n", map));
-}
-
-void PF_changelevel (void)
-{
-	PR1_ChangeLevel(G_STRING(OFS_PARM0));
+	s = G_STRING(OFS_PARM0);
+	Cbuf_AddText (va("map %s\n",s));
 }
 
 
@@ -2310,14 +2297,18 @@ PF_logfrag
 logfrag (killer, killee)
 ==============
 */
-static void PR1_LogFrag(edict_t *ent1, edict_t *ent2)
+void PF_logfrag (void)
 {
+	edict_t	*ent1, *ent2;
 	int		e1, e2;
 	char	*s;
 	// -> scream
 	time_t		t;
 	struct tm	*tblock;
 	// <-
+
+	ent1 = G_EDICT(OFS_PARM0);
+	ent2 = G_EDICT(OFS_PARM1);
 
 	e1 = NUM_FOR_EDICT(ent1);
 	e2 = NUM_FOR_EDICT(ent2);
@@ -2347,11 +2338,6 @@ static void PR1_LogFrag(edict_t *ent1, edict_t *ent2)
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, va("%d\n", time(NULL)));
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, s);
 	//	SV_Write_Log(MOD_FRAG_LOG, 1, "}====================\n");
-}
-
-void PF_logfrag (void)
-{
-	PR1_LogFrag(G_EDICT(OFS_PARM0), G_EDICT(OFS_PARM1));
 }
 
 /*
