@@ -79,8 +79,6 @@ set(qc2cpp_fatal_manifest "${CMAKE_CURRENT_SOURCE_DIR}/../qcx/fixtures/fatal/pro
 set(qc2cpp_fatal_generated "${qc2cpp_acceptance_root}/fatal-generated")
 set(qc2cpp_fatal_native_build "${qc2cpp_acceptance_root}/fatal-native")
 set(qc2cpp_fatal_native_game "${qc2cpp_fatal_native_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
-set(qc2cpp_restore_oom_native_build "${qc2cpp_acceptance_root}/restore-oom-native")
-set(qc2cpp_restore_oom_native_game "${qc2cpp_restore_oom_native_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set(qc2cpp_native_build "${qc2cpp_acceptance_root}/native")
 set(qc2cpp_native_game "${qc2cpp_native_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set(qc2cpp_native_input_ids "${qc2cpp_acceptance_root}/native-input-ids.txt")
@@ -130,18 +128,8 @@ add_custom_command(
     VERBATIM)
 add_custom_target(qc2cpp_fatal_native_assets DEPENDS "${qc2cpp_fatal_native_game}")
 add_dependencies(qc2cpp_fatal_native_assets mvdsv)
-add_custom_command(
-    OUTPUT "${qc2cpp_restore_oom_native_game}"
-    COMMAND ${CMAKE_COMMAND} -S "${qc2cpp_fatal_generated}" -B "${qc2cpp_restore_oom_native_build}"
-        -G "${CMAKE_GENERATOR}" -DQC2CPP_NATIVE_PLUGIN=ON
-        -DQC2CPP_RUNTIME_ARENA_BYTES=32768U
-    COMMAND ${CMAKE_COMMAND} --build "${qc2cpp_restore_oom_native_build}" --target game
-    DEPENDS "${qc2cpp_fatal_generated}/CMakeLists.txt"
-    VERBATIM)
-add_custom_target(qc2cpp_restore_oom_native_assets DEPENDS "${qc2cpp_restore_oom_native_game}")
-add_dependencies(qc2cpp_restore_oom_native_assets mvdsv)
 
-set(qc2cpp_acceptance_asset_targets qc2cpp_acceptance_native_assets qc2cpp_fatal_native_assets qc2cpp_restore_oom_native_assets)
+set(qc2cpp_acceptance_asset_targets qc2cpp_acceptance_native_assets qc2cpp_fatal_native_assets)
 add_test(NAME qc2cpp_server_map_native
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
@@ -176,12 +164,6 @@ add_test(NAME qc2cpp_fatal_native
         --suite fatal --mode native --server $<TARGET_FILE:mvdsv>
         --artifacts "${qc2cpp_fatal_native_build}" --assets "${qc2cpp_assets}"
         --output "${qc2cpp_acceptance_root}/runs/fatal-native")
-add_test(NAME qc2cpp_restore_oom_native
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
-        --suite restore-oom --mode native --server $<TARGET_FILE:mvdsv>
-        --artifacts "${qc2cpp_fatal_native_build}"
-        --destination-artifacts "${qc2cpp_restore_oom_native_build}" --assets "${qc2cpp_assets}"
-        --output "${qc2cpp_acceptance_root}/runs/restore-oom-native")
 
 if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
     if(NOT EXISTS "${QC2CPP_FTE_CLIENT}")
@@ -268,7 +250,7 @@ if(MVDSV_QC2CPP_WASM)
             -G "${CMAKE_GENERATOR}"
             -DCMAKE_TOOLCHAIN_FILE=${qc2cpp_fatal_generated}/cmake/WasmToolchain.cmake
             -DQC_WASI_SDK_ROOT=${qc2cpp_wasi_sdk}
-            -DQC2CPP_RUNTIME_ARENA_BYTES=32768U
+            -DQC2CPP_RUNTIME_HEAP_BYTES=32768U
         COMMAND ${CMAKE_COMMAND} --build "${qc2cpp_restore_oom_wasm_build}" --target game
         DEPENDS "${qc2cpp_fatal_generated}/CMakeLists.txt"
         VERBATIM)
