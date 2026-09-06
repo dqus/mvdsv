@@ -55,7 +55,7 @@ def prepare_game_directory(run_root, assets, artifact, mode, *, entity_override=
     if entity_override:
         # The fatal/OOM fixture owns worldspawn and needs no stock entity
         # strings.  Retain the real BSP from the PAK while avoiding a second,
-        # unrelated arena-size dependency from the stock e1m1 entity lump.
+        # unrelated guest-allocation dependency from the stock e1m1 entity lump.
         (game_directory / "maps").mkdir()
         (game_directory / "maps" / "e1m1.ent").write_text(
             '{\n"classname" "worldspawn"\n}\n', encoding="ascii")
@@ -272,7 +272,7 @@ def run_fatal_suite(server, artifacts, assets, output, mode):
 
 
 def run_restore_oom_suite(server, artifacts, destination_artifacts, assets, output, mode):
-    """A valid restore that exhausts the guest arena is terminal after commit."""
+    """A valid restore that exhausts guest heap storage is terminal after commit."""
     output.mkdir(parents=True, exist_ok=True)
     # Save/load still passes through legacy bounded server paths; keep both
     # disposable roots short enough that the terminal test observes restore,
@@ -316,8 +316,8 @@ def run_restore_oom_suite(server, artifacts, destination_artifacts, assets, outp
     events = server_log.read_text(encoding="utf-8").splitlines()
     if sum("[qc2cpp-fatal] terminal-unpublish" in line for line in events) != 1:
         raise ProcessFailure(f"restore OOM did not unpublish exactly once: {events}")
-    if not any("logical restore exceeds runtime arena" in line for line in events):
-        raise ProcessFailure(f"restore OOM did not report the guest arena diagnostic: {events}")
+    if not any("logical restore allocation failed" in line for line in events):
+        raise ProcessFailure(f"restore OOM did not report the guest allocation diagnostic: {events}")
 
 
 def run_client_suite(server, artifacts, assets, output, mode, client):
