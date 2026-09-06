@@ -59,7 +59,13 @@ file(GLOB_RECURSE qc2cpp_generated_resource_inputs CONFIGURE_DEPENDS
     "${qc2cpp_source_root}/runtime/include/game/*"
     "${qc2cpp_source_root}/tools/qc2cpp-check/*")
 list(APPEND qc2cpp_generated_resource_inputs
-    "${qc2cpp_source_root}/cmake/WasmToolchain.cmake")
+    "${qc2cpp_source_root}/cmake/WasmToolchain.cmake"
+    "${qc2cpp_source_root}/runtime/src/freestanding_memory.cpp"
+    "${qc2cpp_source_root}/runtime/src/runtime_heap_native.cpp"
+    "${qc2cpp_source_root}/runtime/src/runtime_heap_wasm.cpp"
+    "${qc2cpp_source_root}/runtime/third_party/tlsf/include/tlsf.h"
+    "${qc2cpp_source_root}/runtime/third_party/tlsf/src/tlsf.c"
+    "${qc2cpp_source_root}/runtime/third_party/tlsf/LICENSE")
 
 set(qc2cpp_manifest_sources "${qc2cpp_manifest}")
 file(STRINGS "${qc2cpp_manifest}" qc2cpp_manifest_lines)
