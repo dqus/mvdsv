@@ -47,7 +47,7 @@ static void QCX_TraceLine(void *context, const float start[3], const float end[3
 static qcx_entity_id_t QCX_CheckClient(void *context, qcx_entity_id_t self)
 {
 	QCX_ObserveGameplayImport(context);
-	edict_t *const result = SV_QC_CheckClient(QCX_RequireMovementEdict(self));
+	edict_t *const result = PF2_checkclient(QCX_RequireMovementEdict(self));
 	const qcx_entity_id_t slot = QCX_EdictToSlot(result);
 	if (slot == QCX_INVALID_ENTITY_ID) {
 		SV_Error("qc2cpp checkclient returned an invalid entity");
@@ -65,8 +65,8 @@ static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 		SV_Error("qc2cpp walkmove has no shared globals");
 	}
 	const qcx_entity_id_t caller_self = globals->self;
-	const float result = SV_QC_WalkMove(QCX_RequireMovementEdict(caller_self), yaw,
-		distance);
+	const float result = (float)PF2_walkmove(
+		QCX_RequireMovementEdict(caller_self), yaw, distance);
 	globals->self = caller_self;
 	return result;
 }
@@ -74,7 +74,7 @@ static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 static float QCX_DropToFloor(void *context, qcx_entity_id_t self)
 {
 	QCX_ObserveGameplayImport(context);
-	return SV_QC_DropToFloor(QCX_RequireMovementEdict(self));
+	return (float)PF2_droptofloor(QCX_RequireMovementEdict(self));
 }
 
 static float QCX_CheckBottom(void *context, qcx_entity_id_t entity)
@@ -89,7 +89,7 @@ static float QCX_PointContents(void *context, const float point[3])
 	if (point == NULL) {
 		SV_Error("qc2cpp pointcontents requires a point");
 	}
-	return (float)SV_PointContents((float *)point);
+	return (float)PF2_pointcontents(point[0], point[1], point[2]);
 }
 
 static void QCX_Aim(void *context, qcx_entity_id_t entity, float speed,
