@@ -95,6 +95,14 @@ Keep the existing QCX implementation when the PR2 helper is VM-output-specific, 
 
 Small direct QCX implementations are acceptable; eliminating every duplicated line is not a goal.
 
+### PR2 API-version isolation
+
+`PR2_InitProg()` accepts game API version 16 or newer.  Shared `PF2_*`
+helpers therefore must not inspect `gamedata.APIversion` or retain obsolete
+pre-15 compatibility branches: they may be called by QCX as well as by the
+PR2 syscall dispatcher.  No pre-15 compatibility branch remains in the
+dispatcher either, because such a game cannot pass PR2 initialization.
+
 ## PR1 cleanup
 
 After all QCX callers stop using `SV_QC_*`, remove those declarations from `src/qcx/services.h` and remove the `qcx/services.h` dependency from `src/pr_cmds.c`.

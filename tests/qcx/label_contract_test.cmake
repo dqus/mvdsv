@@ -25,6 +25,7 @@ set(expected_fast
 	qcx_services_world
 	qcx_client
 	qcx_client_routes
+	qcx_pr2_api_routes
 	qcx_reentry
 	qcx_touch_links
 	qcx_entry_routes
