@@ -353,8 +353,6 @@ void PF2_sprint(int entnum, int level, char *s, int flags)
 	client_t *client, *cl;
 	int i;
 
-	if (gamedata.APIversion < 15)
-		flags = 0;
 	if (entnum < 1 || entnum > MAX_CLIENTS)
 	{
 		Con_Printf("tried to sprint to a non-client %d (%s)\n", entnum, s);
@@ -708,8 +706,6 @@ void PF2_stuffcmd(int entnum, char *str, int flags)
 	client_t *cl, *spec;
 	int j;
 
-	if (gamedata.APIversion < 15)
-		flags = 0;
 	if( !str )
 		PR2_RunError("PF2_stuffcmd: NULL pointer");
 
@@ -1913,9 +1909,6 @@ intptr_t PF2_FS_GetFileList(char *path, char *ext,
 	int numfiles = 0;
 	int i, j;
 
-	if (gamedata.APIversion < 15)
-		flags = 0;
-
 	memset(list, 0, sizeof(list));
 
 	dirptr   = listbuff;
@@ -2324,8 +2317,6 @@ void PF2_SetBotUserInfo(int entnum, char *key, char *value, int flags)
 	int     i;
 	extern char *shortinfotbl[];
 
-	if (gamedata.APIversion < 15)
-		flags = 0;
 	if (strstr(key, "&c") || strstr(key, "&r") || strstr(value, "&c") || strstr(value, "&r"))
 		return;
 
@@ -2606,12 +2597,8 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 	case G_SETMODEL:
 		PF2_setmodel(VME(1), VMA(2));
 		return 0;
-	case G_BPRINT: {
-		int flags = args[3];
-		if (gamedata.APIversion < 15)
-			flags = 0;
-		SV_BroadcastPrintfEx(args[1], flags, "%s", VMA(2));
-	}
+	case G_BPRINT:
+		SV_BroadcastPrintfEx(args[1], args[3], "%s", VMA(2));
 		return 0;
 	case G_SPRINT:
 		PF2_sprint(args[1], args[2], VMA(3), args[4]);
