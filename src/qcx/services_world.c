@@ -47,9 +47,7 @@ static void QCX_SetOrigin(void *context, qcx_entity_id_t slot, const float origi
 		SV_Error("qc2cpp setorigin requires origin");
 	}
 	edict_t *const entity = QCX_RequireEdict(slot);
-	VectorCopy(origin, entity->v->origin);
-	SV_AntilagReset(entity);
-	SV_LinkEdict(entity, false);
+	PF2_setorigin(entity, origin[0], origin[1], origin[2]);
 }
 
 static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *name,
@@ -58,11 +56,10 @@ static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *nam
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	edict_t *const entity = QCX_RequireEdict(slot);
-	if (!QCX_CopyText(name, name_size, local, sizeof(local), "model")
-		|| !QCX_SetEntityString(entity, "model", local)
-		|| !SV_QC_SetModel(entity, local)) {
+	if (!QCX_CopyText(name, name_size, local, sizeof(local), "model")) {
 		SV_Error("qc2cpp setmodel failed for %s", local);
 	}
+	PF2_setmodel(entity, local);
 }
 
 static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3],
@@ -73,10 +70,8 @@ static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3]
 		SV_Error("qc2cpp setsize requires bounds");
 	}
 	edict_t *const entity = QCX_RequireEdict(slot);
-	VectorCopy(mins, entity->v->mins);
-	VectorCopy(maxs, entity->v->maxs);
-	VectorSubtract(maxs, mins, entity->v->size);
-	SV_LinkEdict(entity, false);
+	PF2_setsize(entity,
+		mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
 }
 
 static qcx_entity_id_t QCX_Spawn(void *context)
@@ -160,13 +155,14 @@ static void QCX_MapPostSpawn(void *context, qcx_entity_id_t slot)
 
 static qcx_byte_count_t QCX_Precache(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity,
-	int (*operation)(const char *), const char *what)
+	void (*operation)(char *), const char *what)
 {
 	QCX_ObserveGameplayImport(context);
 	char *const persistent = QCX_CopyPersistentText(name, name_size, what);
-	if (persistent == NULL || !operation(persistent)) {
+	if (persistent == NULL) {
 		SV_Error("qc2cpp %s precache failed", what);
 	}
+	operation(persistent);
 	if (out != NULL && out_capacity >= name_size) {
 		memcpy(out, name, name_size);
 	}
@@ -177,14 +173,14 @@ static qcx_byte_count_t QCX_PrecacheModel(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
 {
 	return QCX_Precache(context, name, name_size, out, out_capacity,
-		SV_QC_PrecacheModel, "model");
+		PF2_precache_model, "model");
 }
 
 static qcx_byte_count_t QCX_PrecacheSound(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
 {
 	return QCX_Precache(context, name, name_size, out, out_capacity,
-		SV_QC_PrecacheSound, "sound");
+		PF2_precache_sound, "sound");
 }
 
 static void QCX_LightStyle(void *context, float style, const uint8_t *value,
@@ -198,7 +194,7 @@ static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 	if (persistent == NULL) {
 		return;
 	}
-	SV_QC_LightStyle((int)style, persistent);
+	PF2_lightstyle((int)style, persistent);
 }
 
 static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_size)
@@ -249,13 +245,7 @@ static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
 {
 	QCX_ObserveGameplayImport(context);
 	edict_t *const entity = QCX_RequireEdict(slot);
-	char model[MAX_QPATH];
-	uint32_t required = 0U;
-	if (QCX_CopyEntityString(entity, "model", model, sizeof(model), &required)
-		!= QCX_PLUGIN_OK) {
-		SV_Error("qc2cpp makestatic requires model");
-	}
-	SV_QC_MakeStatic(entity, model);
+	PF2_makestatic(entity);
 }
 
 static void QCX_ChangeLevel(void *context, const uint8_t *map, qcx_byte_count_t map_size)
