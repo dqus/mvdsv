@@ -735,6 +735,12 @@ void PR2_LoadProgs(void)
 //===========================================================================
 void PR2_GameConsoleCommand(void)
 {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		// QCX has no source-level console-command dispatch yet; do not call PR1.
+		return;
+	}
+#endif
 	int     old_other, old_self;
 	client_t	*cl;
 	int			i;
@@ -770,6 +776,12 @@ void PR2_GameConsoleCommand(void)
 //===========================================================================
 void PR2_PausedTic(float duration)
 {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		// QCX has no source-level paused-tic dispatch yet; do not call PR1.
+		return;
+	}
+#endif
 	if (sv_vm)
 		VM_Call(sv_vm, 1, GAME_PAUSED_TIC, (int)(duration*1000), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 	else
@@ -792,6 +804,12 @@ void PR2_ClearEdict(edict_t* e)
 //===========================================================================
 qbool PR2_SendEntity(edict_t* e, edict_t* to, int sendflags)
 {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		// QCX has no source-level CSQC-send dispatch yet; preserve the false result.
+		return false;
+	}
+#endif
 	qbool ret_val = false;
 	int old_self = pr_global_struct->self;
 	int old_other = pr_global_struct->other;
