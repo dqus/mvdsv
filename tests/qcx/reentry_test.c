@@ -23,6 +23,10 @@ static float observed_distance;
 static qbool bottom_result;
 static int contents_result;
 static qbool step_result;
+static int checkclient_calls;
+static int walkmove_calls;
+static int droptofloor_calls;
+static int pointcontents_calls;
 static int touch_call_count;
 static int think_call_count;
 static qbool mutate_touch_time;
@@ -156,13 +160,14 @@ trace_t SV_Trace(vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int type,
 	return trace_result;
 }
 
-edict_t *SV_QC_CheckClient(edict_t *self)
+edict_t *PF2_checkclient(edict_t *self)
 {
 	assert(self == &entities[3]);
+	++checkclient_calls;
 	return &entities[4];
 }
 
-float SV_QC_WalkMove(edict_t *entity, float yaw, float distance)
+int PF2_walkmove(edict_t *entity, float yaw, float distance)
 {
 	assert(entity == &entities[3]);
 	observed_yaw = yaw;
@@ -170,19 +175,28 @@ float SV_QC_WalkMove(edict_t *entity, float yaw, float distance)
 	globals.self = 6U;
 	globals.other = 7U;
 	globals.time = 29.0f;
-	return 0.75f;
+	++walkmove_calls;
+	return 1;
 }
 
-float SV_QC_DropToFloor(edict_t *entity)
+int PF2_droptofloor(edict_t *entity)
 {
 	assert(entity == &entities[3]);
-	return 1.0f;
+	++droptofloor_calls;
+	return 1;
 }
 
 qbool SV_CheckBottom(edict_t *entity)
 {
 	assert(entity == &entities[3]);
 	return bottom_result;
+}
+
+int PF2_pointcontents(float x, float y, float z)
+{
+	assert(x == 1.0f && y == 2.0f && z == 3.0f);
+	++pointcontents_calls;
+	return contents_result;
 }
 
 int SV_PointContents(vec3_t point)
@@ -312,19 +326,20 @@ int main(void)
 	assert(result.allsolid == 1.0f && result.fraction == 0.25f && result.entity == 4U);
 	assert(result.endpos[2] == 8.0f && result.plane_normal[1] == 1.0f);
 	assert(result.plane_dist == 9.0f);
-	assert(host.checkclient(NULL, 3U) == 4U);
+	assert(host.checkclient(NULL, 3U) == 4U && checkclient_calls == 1);
 	globals.self = 3U;
 	globals.other = 2U;
 	globals.time = 11.0f;
-	assert(host.walkmove(NULL, 3U, 45.0f, 12.0f) == 0.75f);
+	assert(host.walkmove(NULL, 3U, 45.0f, 12.0f) == 1.0f);
 	assert(observed_yaw == 45.0f && observed_distance == 12.0f);
-	assert(globals.self == 3U && globals.other == 7U && globals.time == 29.0f);
-	assert(host.droptofloor(NULL, 3U) == 1.0f);
+	assert(walkmove_calls == 1 && globals.self == 3U && globals.other == 7U
+		&& globals.time == 29.0f);
+	assert(host.droptofloor(NULL, 3U) == 1.0f && droptofloor_calls == 1);
 	bottom_result = true;
 	assert(host.checkbottom(NULL, 3U) == 1.0f);
 	contents_result = -3;
 	const float point[3] = {1.0f, 2.0f, 3.0f};
-	assert(host.pointcontents(NULL, point) == -3.0f);
+	assert(host.pointcontents(NULL, point) == -3.0f && pointcontents_calls == 1);
 	float aimed[3] = {0.0f, 0.0f, 0.0f};
 	const float forward[3] = {4.0f, 5.0f, 6.0f};
 	host.aim(NULL, 3U, 0.0f, forward, aimed, sizeof(aimed));

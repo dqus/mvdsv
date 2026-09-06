@@ -655,9 +655,9 @@ int PF2_newcheckclient(int check)
 
 #define	MAX_CHECK	16
 
-intptr_t PF2_checkclient(void)
+edict_t *PF2_checkclient(edict_t *self)
 {
-	edict_t	*ent, *self;
+	edict_t	*ent;
 	int		l;
 	vec3_t	view;
 
@@ -672,20 +672,18 @@ intptr_t PF2_checkclient(void)
 	ent = EDICT_NUM(sv.lastcheck);
 	if (ent->e.free || ent->v->health <= 0)
 	{
-		// RETURN_EDICT(sv.edicts);
-		return NUM_FOR_EDICT(sv.edicts);
+		return sv.edicts;
 	}
 
 	// if current entity can't possibly see the check entity, return 0
-	self = PROG_TO_EDICT(pr_global_struct->self);
 	VectorAdd(self->v->origin, self->v->view_ofs, view);
 	l = CM_Leafnum(CM_PointInLeaf(view)) - 1;
 	if ((l < 0) || !(checkpvs[l >> 3] & (1 << (l & 7))))
 	{
-		return NUM_FOR_EDICT(sv.edicts);
+		return sv.edicts;
 	}
 
-	return NUM_FOR_EDICT(ent);
+	return ent;
 }
 
 //============================================================================
@@ -2645,7 +2643,8 @@ intptr_t PR2_GameSystemCalls(intptr_t *args) {
 		PF2_traceline(VMV(1), VMV(4), args[7], args[8]);
 		return 0;
 	case G_CHECKCLIENT:
-		return PF2_checkclient();
+		return NUM_FOR_EDICT(
+			PF2_checkclient(PROG_TO_EDICT(pr_global_struct->self)));
 	case G_STUFFCMD:
 		PF2_stuffcmd(args[1], VMA(2), args[3]);
 		return 0;

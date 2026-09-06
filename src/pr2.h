@@ -118,6 +118,10 @@ void		PF2_precache_sound(char *name);
 void		PF2_precache_model(char *name);
 void		PF2_lightstyle(int style, char *value);
 void		PF2_makestatic(edict_t *entity);
+edict_t	*PF2_checkclient(edict_t *self);
+int		PF2_walkmove(edict_t *entity, float yaw, float distance);
+int		PF2_droptofloor(edict_t *entity);
+int		PF2_pointcontents(float x, float y, float z);
 eval_t*		PR2_GetEdictFieldValue(edict_t *ed, char *field);
 #define PR_GetEdictFieldValue PR2_GetEdictFieldValue
 int			ED2_FindFieldOffset(char *field);
