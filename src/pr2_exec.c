@@ -514,9 +514,9 @@ void PR2_BindServerState(void)
 		QCX_TestObserverServerStateBound();
 #endif
 		PR_ResetOptionalFieldOffsets();
-		if (!QCX_ResolveOptionalEntityFields()) {
+		if (!QCX_ResolveEntityFields()) {
 			QCX_Unpublish(NULL);
-			SV_Error("qc2cpp game did not publish compatible optional entity fields");
+			SV_Error("qc2cpp game did not publish compatible entity field capabilities");
 		}
 		return;
 	}

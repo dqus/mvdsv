@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -12,14 +15,14 @@ typedef enum failure_stage_e {
 	FAIL_NONE,
 	FAIL_BIND_ENTITIES,
 	FAIL_CONFIGURE_GLOBALS,
-	FAIL_OPTIONAL_FIELDS
+	FAIL_ENTITY_FIELDS
 } failure_stage_t;
 
 typedef enum event_e {
 	EVENT_BIND_ENTITIES,
 	EVENT_CONFIGURE_GLOBALS,
 	EVENT_RESET_OPTIONAL_FIELDS,
-	EVENT_RESOLVE_OPTIONAL_FIELDS,
+	EVENT_RESOLVE_ENTITY_FIELDS,
 	EVENT_UNPUBLISH,
 	EVENT_ERROR
 } event_t;
@@ -65,10 +68,10 @@ void PR_ResetOptionalFieldOffsets(void)
 	record_event(EVENT_RESET_OPTIONAL_FIELDS);
 }
 
-int QCX_ResolveOptionalEntityFields(void)
+int QCX_ResolveEntityFields(void)
 {
-	record_event(EVENT_RESOLVE_OPTIONAL_FIELDS);
-	return failure_stage != FAIL_OPTIONAL_FIELDS;
+	record_event(EVENT_RESOLVE_ENTITY_FIELDS);
+	return failure_stage != FAIL_ENTITY_FIELDS;
 }
 
 void QCX_Unpublish(void *context)
@@ -134,16 +137,16 @@ int main(void)
 	expect_failure(FAIL_CONFIGURE_GLOBALS, globals_failure,
 		sizeof(globals_failure) / sizeof(globals_failure[0]));
 
-	const event_t optional_failure[] = {
+	const event_t entity_fields_failure[] = {
 		EVENT_BIND_ENTITIES,
 		EVENT_CONFIGURE_GLOBALS,
 		EVENT_RESET_OPTIONAL_FIELDS,
-		EVENT_RESOLVE_OPTIONAL_FIELDS,
+		EVENT_RESOLVE_ENTITY_FIELDS,
 		EVENT_UNPUBLISH,
 		EVENT_ERROR,
 	};
-	expect_failure(FAIL_OPTIONAL_FIELDS, optional_failure,
-		sizeof(optional_failure) / sizeof(optional_failure[0]));
+	expect_failure(FAIL_ENTITY_FIELDS, entity_fields_failure,
+		sizeof(entity_fields_failure) / sizeof(entity_fields_failure[0]));
 
 	reset_fixture(FAIL_NONE);
 	PR2_BindServerState();
@@ -151,7 +154,7 @@ int main(void)
 		EVENT_BIND_ENTITIES,
 		EVENT_CONFIGURE_GLOBALS,
 		EVENT_RESET_OPTIONAL_FIELDS,
-		EVENT_RESOLVE_OPTIONAL_FIELDS,
+		EVENT_RESOLVE_ENTITY_FIELDS,
 	};
 	assert(event_count == sizeof(success) / sizeof(success[0]));
 	for (unsigned i = 0U; i < event_count; ++i) {
