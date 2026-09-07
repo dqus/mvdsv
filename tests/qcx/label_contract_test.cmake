@@ -32,6 +32,9 @@ set(expected_fast
 	qcx_startup_routes
 	qcx_entity_reference_routes
 	qcx_legacy_entity_references
+	qcx_model_presence_pr1
+	qcx_model_presence_pr2
+	qcx_model_presence_qcx
 	qcx_optional_fields
 	qcx_optional_field_routes
 	qcx_legacy_strings
