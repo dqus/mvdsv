@@ -66,6 +66,8 @@ void		PR2_GameSetNewParms(void);
 #define PR_GameSetNewParms PR2_GameSetNewParms
 void		PR2_GameSetChangeParms(void);
 #define PR_GameSetChangeParms PR2_GameSetChangeParms
+void		PR2_InitializePrecacheSlots(void);
+#define PR_InitializePrecacheSlots PR2_InitializePrecacheSlots
 void		PR2_PrepareRestoreResources(qbool restoring_qcx);
 #define PR_PrepareRestoreResources PR2_PrepareRestoreResources
 void		PR2_BindServerState(void);

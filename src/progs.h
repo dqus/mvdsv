@@ -230,6 +230,7 @@ void PR_SetTmpString(string_t* address, const char *s);
 
 void PR1_LoadProgs (void);
 void PR1_InitProg(void);
+void PR1_InitializePrecacheSlots(void);
 void PR1_PrepareRestoreResources(qbool restoring_qcx);
 void PR1_BindServerState(void);
 void PR1_ValidatePreparedRestore(qbool restoring_qcx);
@@ -262,6 +263,7 @@ qbool PR1_ClientCmd(void);
 #ifndef USE_PR2
 	#define PR_LoadProgs PR1_LoadProgs
 	#define PR_InitProg PR1_InitProg
+	#define PR_InitializePrecacheSlots PR1_InitializePrecacheSlots
 	#define PR_PrepareRestoreResources PR1_PrepareRestoreResources
 	#define PR_BindServerState PR1_BindServerState
 	#define PR_ValidatePreparedRestore PR1_ValidatePreparedRestore
