@@ -1296,7 +1296,7 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 	}
 
 	// ignore ents without visible models
-	if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model))
+	if (!ent->v->modelindex || !PR_EntityHasModel(ent))
 		return false;
 
 	if ( pvs && ent->e.num_leafs >= 0 )
@@ -1325,7 +1325,7 @@ void SV_WriteNQMuzzleFlashes(sizebuf_t *msg)
 		return;
 	}
 	for (e = 1, ent = EDICT_NUM(e); e < sv.num_edicts; ++e, ent = NEXT_EDICT(ent)) {
-		if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model)) {
+		if (!ent->v->modelindex || !PR_EntityHasModel(ent)) {
 			continue;
 		}
 		if ((int)ent->v->effects & EF_MUZZLEFLASH) {
