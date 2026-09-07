@@ -821,7 +821,7 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 	}
 
 	// ignore ents without visible models
-	if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model))
+	if (!ent->v->modelindex || !PR_EntityHasModel(ent))
 		return false;
 
 	if ( pvs && ent->e.num_leafs >= 0 )
@@ -1054,7 +1054,7 @@ void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder)
 		for (e=1, ent=EDICT_NUM(e) ; e < sv.num_edicts ; e++, ent = NEXT_EDICT(ent))
 		{
 			// ignore ents without visible models
-			if (!ent->v->modelindex || !*PR_GetEntityString(ent->v->model))
+			if (!ent->v->modelindex || !PR_EntityHasModel(ent))
 				continue;
 
 			// ignore if not touching a PV leaf (meag: this does nothing... complete or remove?)
