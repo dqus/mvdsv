@@ -1,3 +1,6 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
@@ -11,10 +14,15 @@ int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_tel
 
 static qcx_game_entity_memory_v1_t memory;
 static qcx_engine_field_exports_v1_t exports;
-static qcx_engine_field_descriptor_v1_t descriptors[10];
-static char names[][16] = {"items2", "maxspeed", "gravity", "movement", "vw_index",
-	"hideentity", "trackent", "visclients", "hideplayers", "teleported"};
-static qcx_shared_entity_state_v1_t entities[2];
+static qcx_engine_field_descriptor_v1_t descriptors[11];
+static char names[][17] = {"items2", "maxspeed", "gravity", "movement", "vw_index",
+	"hideentity", "trackent", "visclients", "hideplayers", "teleported",
+	"qcx.model.length"};
+typedef struct fixture_entity_s {
+	qcx_shared_entity_state_v1_t shared;
+	uint32_t model_length;
+} fixture_entity_t;
+static fixture_entity_t entities[2];
 
 void SV_Error(char *error, ...) { (void)error; assert(!"unexpected SV_Error"); }
 const qcx_game_api_v1_t *QCX_Game(void);
@@ -83,48 +91,86 @@ int main(void)
 	descriptor(7U, "qc.f32", 40U, sizeof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE);
 	descriptor(8U, "qc.f32", 44U, sizeof(float), QCX_ENGINE_FIELD_HOST_READ);
 	descriptor(9U, "qc.f32", 48U, sizeof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE);
+	descriptor(10U, "qc.u32", offsetof(fixture_entity_t, model_length),
+		sizeof(uint32_t), QCX_ENGINE_FIELD_HOST_READ);
+	descriptors[10].alignment = _Alignof(uint32_t);
 	exports = (qcx_engine_field_exports_v1_t){
 		.abi_version = QCX_ENGINE_FIELD_EXPORTS_ABI_VERSION_V1, .struct_size = sizeof(exports),
-		.entity_fields = {(qcx_guest_address_t)(uintptr_t)descriptors, 10U, sizeof(descriptors[0])},
+		.entity_fields = {(qcx_guest_address_t)(uintptr_t)descriptors, 11U, sizeof(descriptors[0])},
 	};
 	assert(QCX_ConfigureEntities((qcx_guest_address_t)(uintptr_t)&memory));
-	assert(QCX_ResolveOptionalEntityFields());
+	assert(QCX_ResolveEntityFields());
+	assert(QCX_BindEntities());
+	entities[1].model_length = 17U;
+	assert(QCX_EntityHasModel(&sv.edicts[1]));
+	entities[1].model_length = 0U;
+	assert(!QCX_EntityHasModel(&sv.edicts[1]));
 	assert(fofs_items2 == 4 && fofs_maxspeed == 8 && fofs_gravity == 12);
 	assert(fofs_movement == 16 && fofs_vw_index == 28 && fofs_hideentity == 32);
 	assert(fofs_trackent == 36 && fofs_visibility == 40 && fofs_hide_players == 44);
 	assert(fofs_teleported == 48);
 	reset_offsets();
 	descriptors[1].offset = 0U;
-	assert(QCX_ResolveOptionalEntityFields());
+	assert(QCX_ResolveEntityFields());
 	assert(fofs_maxspeed == 0 && fofs_items2 == 4 && fofs_hideentity == 32);
 	descriptors[1].offset = 8U;
 
 	/* Every invalid matrix property disables only that row. */
 	reset_offsets(); descriptors[1].type_id = type_id("qc.entity");
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
 	descriptors[1].type_id = type_id("qc.f32");
 	reset_offsets(); descriptors[1].size = 8U;
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
 	descriptors[1].size = sizeof(float);
 	reset_offsets(); descriptors[1].alignment = 8U;
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_trackent == 36);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_trackent == 36);
 	descriptors[1].alignment = _Alignof(float);
 	reset_offsets(); descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ;
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_items2 == 4);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_items2 == 4);
 	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE;
 	reset_offsets(); descriptors[1].offset = memory.entity_stride;
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
 	descriptors[1].offset = 8U;
 	reset_offsets(); descriptors[1].access_flags |= UINT32_C(4);
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
 	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE;
 	reset_offsets(); descriptors[9].name = descriptors[1].name;
-	assert(QCX_ResolveOptionalEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
 	descriptors[9].name = (qcx_abi_string_ref_v1_t){
 		(qcx_guest_address_t)(uintptr_t)names[9], (uint32_t)strlen(names[9]), 0U};
-	exports.entity_fields.count = 0U;
-	assert(!QCX_ResolveOptionalEntityFields());
+
+	/* The model length is a required, exact, unique capability. */
+	entities[1].model_length = 17U;
 	exports.entity_fields.count = 10U;
+	assert(!QCX_ResolveEntityFields());
+	assert(!QCX_EntityHasModel(&sv.edicts[1]));
+	exports.entity_fields.count = 11U;
+	descriptors[9].name = descriptors[10].name;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[9].name = (qcx_abi_string_ref_v1_t){
+		(qcx_guest_address_t)(uintptr_t)names[9], (uint32_t)strlen(names[9]), 0U};
+	descriptors[10].type_id = type_id("qc.f32");
+	assert(!QCX_ResolveEntityFields());
+	descriptors[10].type_id = type_id("qc.u32");
+	descriptors[10].size = 8U;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[10].size = sizeof(uint32_t);
+	descriptors[10].alignment = 8U;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[10].alignment = _Alignof(uint32_t);
+	descriptors[10].access_flags = QCX_ENGINE_FIELD_HOST_READ
+		| QCX_ENGINE_FIELD_HOST_WRITE;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[10].access_flags = QCX_ENGINE_FIELD_HOST_READ;
+	descriptors[10].offset = memory.entity_stride;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[10].offset = offsetof(fixture_entity_t, model_length);
+	assert(QCX_ResolveEntityFields());
+	assert(QCX_EntityHasModel(&sv.edicts[1]));
+
+	exports.entity_fields.count = 0U;
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields.count = 11U;
 	QCX_ClearEntities();
 	return 0;
 }
