@@ -69,16 +69,13 @@ const char *QCX_BorrowLegacyString(int32_t token)
 		return NULL;
 	}
 	qcx_legacy_string_borrow_t *const borrow = &legacy_string_borrows[(uint32_t)token - 1U];
-	qcx_byte_count_t required = 0U;
-	qcx_plugin_status_t status = game->legacy_string_read(game->context, token, NULL,
-		0U, &required);
-	if ((status != QCX_PLUGIN_OK && status != QCX_PLUGIN_BUFFER_TOO_SMALL)
-		|| !QCX_ResizeLegacyStringBorrow(borrow, required)) {
+	if (!QCX_ResizeLegacyStringBorrow(borrow, 0U)) {
 		return NULL;
 	}
-	for (unsigned int attempt = 0U; attempt != 2U; ++attempt) {
+	/* Refresh existing storage; retry only when the current buffer is too small. */
+	for (unsigned int attempt = 0U; attempt != 3U; ++attempt) {
 		qcx_byte_count_t bytes = 0U;
-		status = game->legacy_string_read(game->context, token, borrow->bytes,
+		qcx_plugin_status_t status = game->legacy_string_read(game->context, token, borrow->bytes,
 			borrow->capacity - 1U, &bytes);
 		if (status == QCX_PLUGIN_OK) {
 			if (bytes >= borrow->capacity) {
