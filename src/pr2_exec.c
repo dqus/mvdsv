@@ -939,6 +939,23 @@ void PR2_InitProg(void)
 	}
 }
 
+void PR2_InitializePrecacheSlots(void)
+{
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		sv.sound_precache[0] = "";
+		sv.model_precache[0] = "";
+		return;
+	}
+#endif
+	if (sv_vm) {
+		sv.sound_precache[0] = "";
+		sv.model_precache[0] = "";
+		return;
+	}
+	PR1_InitializePrecacheSlots();
+}
+
 #endif /* USE_PR2 */
 
 #endif // !CLIENTONLY

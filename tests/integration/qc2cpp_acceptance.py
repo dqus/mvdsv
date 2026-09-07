@@ -83,6 +83,8 @@ def prepare_client_directory(run_root, assets):
 def assert_map_snapshot(snapshot, map_name):
     if snapshot.get("map") != map_name or snapshot.get("frame_count", 0) <= 2:
         raise ProcessFailure(f"map {map_name} did not reach a stable qc2cpp frame state: {snapshot}")
+    if snapshot.get("player_model_index", 0) <= 0:
+        raise ProcessFailure(f"map {map_name} did not precache a player render model: {snapshot}")
 
 
 def assert_network_events(events, sessions=1, map_change=False):

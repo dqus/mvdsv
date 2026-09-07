@@ -513,19 +513,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	sv.static_entity_count = 0;
 
 	SV_ClearWorld (); // clear physics interaction links
-
-#ifdef USE_PR2
-	if ( sv_vm )
-	{
-		sv.sound_precache[0] = "";
-		sv.model_precache[0] = "";
-	}
-	else
-#endif
-	{
-		sv.sound_precache[0] = pr_strings;
-		sv.model_precache[0] = pr_strings;
-	}
+	PR_InitializePrecacheSlots();
 	sv.model_precache[1] = sv.modelname;
 	sv.models[1] = sv.worldmodel;
 	for (i = 1; i < CM_NumInlineModels(); i++)
