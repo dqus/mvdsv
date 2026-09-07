@@ -43,6 +43,7 @@ typedef struct qcx_test_observer_s {
 
 static qcx_test_observer_t observer;
 static int forced_next_client_userid = -1;
+extern int sv_playermodel;
 static void QCX_TestReuseUserId_f(void);
 static void QCX_TestSaveState_f(void);
 static void QCX_TestReleaseConnectedClient_f(void);
@@ -55,8 +56,8 @@ static void QCX_TestObserverSendRestoreMarker(const char *marker);
 
 static void QCX_TestSnapshot_f(void)
 {
-	Con_Printf("{\"qc2cpp_test_snapshot\":{\"map\":\"%s\",\"frame_count\":%u,\"time\":%.6f,\"globals_address\":%" PRIuPTR "}}\n",
-		sv.mapname, observer.frame_count, sv.time, (uintptr_t)QCX_Globals());
+	Con_Printf("{\"qc2cpp_test_snapshot\":{\"map\":\"%s\",\"frame_count\":%u,\"time\":%.6f,\"globals_address\":%" PRIuPTR ",\"player_model_index\":%d}}\n",
+		sv.mapname, observer.frame_count, sv.time, (uintptr_t)QCX_Globals(), sv_playermodel);
 }
 
 static void QCX_TestEvents_f(void)
