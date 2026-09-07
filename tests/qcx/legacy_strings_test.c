@@ -80,14 +80,33 @@ int main(void)
 	assert(QCX_BorrowLegacyString(23) == NULL);
 	assert(QCX_BorrowLegacyString(7) == NULL);
 
+	uint32_t before_read = read_count;
+	assert(strcmp(QCX_BorrowLegacyString(1), "first") == 0);
+	assert(read_count == before_read + 1U);
+	/* Reuse storage, never cached contents: same-size writes must be visible. */
+	set_value(1, "fresh");
+	before_read = read_count;
+	assert(strcmp(QCX_BorrowLegacyString(1), "fresh") == 0);
+	assert(read_count == before_read + 1U);
+	set_value(1, "");
+	before_read = read_count;
+	assert(strcmp(QCX_BorrowLegacyString(1), "") == 0);
+	assert(read_count == before_read + 1U);
+	set_value(3, "");
+	before_read = read_count;
+	assert(strcmp(QCX_BorrowLegacyString(3), "") == 0);
+	assert(read_count == before_read + 1U);
+
 	const uint32_t before_mutation = read_count;
 	set_value(1, "changed");
 	assert(strcmp(QCX_BorrowLegacyString(1), "changed") == 0);
-	assert(read_count > before_mutation);
+	assert(read_count == before_mutation + 2U);
 
 	grow_during_read = 1;
 	set_value(1, "short");
+	before_read = read_count;
 	assert(strcmp(QCX_BorrowLegacyString(1), "expanded") == 0);
+	assert(read_count == before_read + 2U);
 
 	nested_read = 1;
 	assert(strcmp(QCX_BorrowLegacyString(1), "expanded") == 0);
