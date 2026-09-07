@@ -1306,6 +1306,12 @@ void PR1_InitProg(void)
 	sv.max_edicts = MAX_EDICTS;
 }
 
+void PR1_InitializePrecacheSlots(void)
+{
+	sv.sound_precache[0] = pr_strings;
+	sv.model_precache[0] = pr_strings;
+}
+
 void PR1_PrepareRestoreResources(qbool restoring_qcx)
 {
 	if (restoring_qcx) {
