@@ -356,6 +356,35 @@ elseif(UNIX)
 endif()
 add_test(NAME qcx_legacy_entity_references COMMAND qcx_legacy_entity_references_test)
 
+function(qcx_add_model_presence_test target)
+	add_executable(${target}
+		model_presence_test.c
+		${PROJECT_SOURCE_DIR}/src/pr_edict.c)
+	set_target_properties(${target} PROPERTIES
+		C_STANDARD 11
+		C_STANDARD_REQUIRED YES
+		C_EXTENSIONS OFF)
+	target_include_directories(${target} PRIVATE
+		${PROJECT_SOURCE_DIR}/src
+		${PROJECT_SOURCE_DIR}/src/qwprot/src)
+	target_compile_options(${target} PRIVATE
+		-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fdata-sections)
+	target_compile_definitions(${target} PRIVATE
+		SERVERONLY
+		__LITTLE_ENDIAN__Q__
+		${ARGN})
+	target_link_libraries(${target} PRIVATE Qc2cppHost::native)
+	if(APPLE)
+		target_link_options(${target} PRIVATE -Wl,-dead_strip)
+	elseif(UNIX)
+		target_link_options(${target} PRIVATE -Wl,--gc-sections)
+	endif()
+	add_test(NAME ${target} COMMAND ${target})
+endfunction()
+qcx_add_model_presence_test(qcx_model_presence_pr1)
+qcx_add_model_presence_test(qcx_model_presence_pr2 USE_PR2=1)
+qcx_add_model_presence_test(qcx_model_presence_qcx USE_PR2=1 QCX_ENABLED=1)
+
 add_executable(qcx_optional_fields_test
 	optional_fields_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entities.c)
@@ -520,6 +549,9 @@ foreach(test_name IN ITEMS
 	qcx_startup_routes
 	qcx_entity_reference_routes
 	qcx_legacy_entity_references
+	qcx_model_presence_pr1
+	qcx_model_presence_pr2
+	qcx_model_presence_qcx
 	qcx_optional_fields
 	qcx_optional_field_routes
 	qcx_legacy_strings

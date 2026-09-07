@@ -1468,4 +1468,17 @@ edict_t *PR_EntityFieldToEdict(const edict_t *owner, int field_offset)
 	return PROG_TO_EDICT(reference);
 }
 
+qbool PR_EntityHasModel(const edict_t *entity)
+{
+	if (entity == NULL || entity->v == NULL) {
+		return false;
+	}
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		return QCX_EntityHasModel(entity);
+	}
+#endif
+	return *PR_GetEntityString(entity->v->model) != '\0';
+}
+
 #endif // !CLIENTONLY
