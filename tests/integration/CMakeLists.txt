@@ -1,5 +1,11 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+add_test(NAME qc2cpp_profile_tool
+    COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_profile_tests.py")
+set_tests_properties(qc2cpp_profile_tool PROPERTIES
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+
 set(qc2cpp_acceptance_inputs
     QC2CPP_COMPILER
     QC2CPP_CHECKER
