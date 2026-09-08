@@ -421,3 +421,48 @@ test threshold.
 
 A target-neutral direct `qcx_string_view_v1` remains a separate investigation;
 this capability does not expose the private `qc::String` representation.
+
+## Post-Task 10 — direct QCX legacy-string projections
+
+Commit `3a3ece170c39cbcffa24916aae5d692112fc4a3a` replaces the copied
+legacy-string borrow route with a fixed direct projection of all eleven
+canonical `qc::String` fields. Generated games from qc2cpp
+`eeaaf61d2e6ea947409769987bdf8372420681af` publish required read-only
+`qcx.<field>.data` and `qcx.<field>.length` descriptors. The adapter validates
+all 22 descriptors at startup, then decodes an existing legacy token into its
+entity slot and field. A Native borrow reads the current pointer member; a
+Wasm borrow maps the current `offset, length + 1` span and verifies its NUL.
+Neither route invokes a guest entry, allocates, or copies payload bytes.
+
+The focused native/Wasm adapter suite (33 tests) passed, as did the six real
+process tests `qc2cpp_server_map_{native,wasm}`,
+`qc2cpp_legacy_strings_{native,wasm}`, and
+`qc2cpp_save_{native_native,wasm_wasm}`. A deliberately preserved pre-change
+Native game and Wasm game were each rejected by the new server with the
+specific missing capability `qcx.classname.data`; there is no legacy-copy
+fallback for an incomplete module.
+
+For a steady-state profile, three 60-second Time Profiler captures were made
+for PR1, pre-change Native, post-change Native, pre-change Wasm and post-change
+Wasm. Each run used `e1m1`, two headless FTE clients with continuous forward
+input, and Time Profiler with waiting threads disabled. The paired build setup
+was intentionally held constant: the server was the existing Debug MVDSV
+build and QW games were controlled Release artifacts. The raw local traces
+remain under `/tmp/qcx-string-profile.0cgQHC`.
+
+Separate 45-second `%CPU` samples (45 one-second observations per case) were:
+
+| Mode | Before | After |
+| --- | --- | --- |
+| Native | 0.924% (sigma 0.077; 0.7–1.1) | 0.947% (sigma 0.136; 0.6–1.3) |
+| Wasm | 1.118% (sigma 0.098; 0.9–1.3) | 1.102% (sigma 0.101; 0.9–1.3) |
+
+Both deltas are inside this low-load variation; this change removes a specific
+bridge cost rather than establishing a whole-server CPU improvement. A paired
+15-second Wasm `sample` had the pre-change stack
+`SV_UpdateClientStats -> PR2_GetEntityString -> QCX_BorrowLegacyString ->
+game_legacy_string_read -> call_scalars`. None of
+`PR2_GetEntityString`, `QCX_BorrowLegacyString`, `legacy_string_read`, or
+`QCX_CopyLegacyString` occurred in the post-change sample. Focused fixture
+counters and the source route contract independently prove that this absence
+is structural, not merely a sampling result.
