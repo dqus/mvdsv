@@ -106,6 +106,30 @@ build/qc2cpp-wasm/mvdsv -basedir /path/to/base -game qw \
 A selected qc2cpp transport never falls back to the legacy VM. A missing,
 incompatible, or invalid artifact is a startup error.
 
+## Performance profiling
+
+`tools/profile_qcx.py` is a local macOS profiling aid, not a CTest target or a
+CI performance gate. It starts a disposable MVDSV/FTE workload and defaults to
+`povdmm4`, a small map where players consistently see one another. The output
+directory must not exist: the tool owns it and preserves raw JSON samples,
+server/client logs and, with `--trace`, local Instruments Time Profiler data.
+
+For example, capture one Wasm run with explicit local inputs:
+
+```sh
+python3 tools/profile_qcx.py --mode wasm \
+  --server /path/to/mvdsv --client /path/to/fteqw-client \
+  --assets /path/to/id1 --game /path/to/game.wasm \
+  --output /tmp/qcx-wasm-profile
+```
+
+The legacy control uses the same command with
+`--mode pr1 --game /path/to/qwprogs.dat`. For a valid comparison, retain the
+same server/game build types, client count, client FPS, map, warm-up and window
+duration across runs. The tool stores raw samples only; decide whether a
+difference is meaningful from repeated comparable captures rather than a
+single CPU percentage.
+
 ## Legacy entity strings
 
 The generated game publishes fixed read-only projections for the data and
