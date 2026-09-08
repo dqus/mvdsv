@@ -74,6 +74,11 @@ int QCX_ResolveEntityFields(void)
 	return failure_stage != FAIL_ENTITY_FIELDS;
 }
 
+const char *QCX_EntityFieldError(void)
+{
+	return "qcx.model.data";
+}
+
 void QCX_Unpublish(void *context)
 {
 	(void)context;
