@@ -66,7 +66,23 @@ function(require_legacy_call_context source marker)
 	endif()
 endfunction()
 
-# Legacy-only calls are intentionally retained for the PR1 and legacy PR2 paths.
-# No QCX server route may be added beside them.
+# PR1 remains legacy-only. QCX world services deliberately reach PF2_makestatic;
+# it consumes the borrowed model before freeing the source edict.
 require_legacy_call_context(pr_cmds.c "void PF_makestatic (void)")
-require_legacy_call_context(pr2_cmds.c "void PF2_makestatic(edict_t *ent)")
+file(READ "${MVDSV_SOURCE_DIR}/src/qcx/services_world.c" world_services_source)
+string(FIND "${world_services_source}" "PF2_makestatic(entity)" makestatic_route)
+if(makestatic_route EQUAL -1)
+	message(FATAL_ERROR "QCX world services must route makestatic through PF2_makestatic")
+endif()
+file(READ "${MVDSV_SOURCE_DIR}/src/pr2_cmds.c" pr2_commands_source)
+string(FIND "${pr2_commands_source}" "s->modelindex = SV_ModelIndex(PR_GetEntityString(ent->v->model));"
+	model_read)
+string(FIND "${pr2_commands_source}" "\n\tED_Free(ent);" final_free)
+if(model_read EQUAL -1 OR final_free EQUAL -1 OR model_read GREATER final_free)
+	message(FATAL_ERROR "PF2_makestatic must consume its model before ED_Free")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/qcx/strings.c" borrowed_string_source)
+if(borrowed_string_source MATCHES "legacy_string_read|QCX_TransportIngress|calloc[ \t\r\n]*\\(|realloc[ \t\r\n]*\\(|malloc[ \t\r\n]*\\(")
+	message(FATAL_ERROR "QCX borrowed strings must not enter the game, allocate, or copy payloads")
+endif()
