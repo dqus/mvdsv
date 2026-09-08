@@ -48,6 +48,17 @@ class RunningProcess:
             if key in line:
                 return parse_json_observation(line, key)
 
+    @property
+    def pid(self):
+        return self._process.pid
+
+    @property
+    def is_running(self):
+        return self._process.poll() is None
+
+    def drain_output(self):
+        self._drain_available_output()
+
     def observe_until(self, command, key, predicate, *, timeout):
         """Poll a server-owned observation until its real state satisfies *predicate*."""
         deadline = time.monotonic() + timeout
