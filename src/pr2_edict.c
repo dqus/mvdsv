@@ -24,6 +24,9 @@
 #ifdef USE_PR2
 
 #include "qwsvdef.h"
+#ifdef QCX_ENABLED
+#include "qcx/adapter.h"
+#endif
 
 field_t *fields;
 
@@ -32,6 +35,10 @@ eval_t *PR2_GetEdictFieldValue(edict_t *ed, char *field)
 	char *s;
 	field_t	*f;
 
+#ifdef QCX_ENABLED
+	if (QCX_Active())
+		return NULL;
+#endif
 	if (!sv_vm)
 		return PR1_GetEdictFieldValue(ed, field);
 
@@ -68,6 +75,12 @@ void ED2_PrintEdict_f (void)
 {
 	extern void ED_PrintEdict_f (void);
 
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		Con_Printf("edict is unavailable for QCX\n");
+		return;
+	}
+#endif
 	if(!sv_vm)
 		ED_PrintEdict_f();
 }
@@ -83,6 +96,12 @@ void ED2_PrintEdicts (void)
 {
 	extern void ED_PrintEdicts (void);
 
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		Con_Printf("edicts are unavailable for QCX\n");
+		return;
+	}
+#endif
 	if(!sv_vm)
 		ED_PrintEdicts();
 }

@@ -178,6 +178,32 @@ elseif(UNIX)
 endif()
 add_test(NAME qcx_start_frame COMMAND qcx_start_frame_test)
 
+add_executable(qcx_pr2_introspection_test
+	pr2_introspection_test.c
+	${PROJECT_SOURCE_DIR}/src/pr2_exec.c
+	${PROJECT_SOURCE_DIR}/src/pr2_edict.c)
+set_target_properties(qcx_pr2_introspection_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_pr2_introspection_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_pr2_introspection_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_pr2_introspection_test PRIVATE
+	QCX_ENABLED=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_pr2_introspection_test PRIVATE Qc2cppHost::native)
+if(APPLE)
+	target_link_options(qcx_pr2_introspection_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_pr2_introspection_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_pr2_introspection COMMAND qcx_pr2_introspection_test)
+
 add_executable(qcx_globals_test
 	globals_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/globals.c
@@ -562,6 +588,7 @@ foreach(test_name IN ITEMS
 	qcx_terminal
 	qcx_startup_failure
 	qcx_start_frame
+	qcx_pr2_introspection
 	qcx_globals
 	qcx_globals_boundary
 	qcx_entities
