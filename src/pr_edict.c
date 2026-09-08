@@ -710,7 +710,7 @@ void ED_Count (void)
 		active++;
 		if (ent->v->solid)
 			solid++;
-		if (ent->v->model)
+		if (PR_EntityHasModel(ent))
 			models++;
 		if (ent->v->movetype == MOVETYPE_STEP)
 			step++;
