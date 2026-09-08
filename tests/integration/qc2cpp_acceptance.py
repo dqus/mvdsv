@@ -193,7 +193,7 @@ def require_log_marker(path, marker, timeout):
 
 
 def run_map_suite(server, artifacts, assets, output, mode, expect_optional_fields=False,
-                  expect_legacy_strings=False):
+                  expect_legacy_strings=False, expect_model_presence=False):
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-{mode}-", dir=output))
     basedir = prepare_game_directory(run_root, assets, artifacts, mode)
@@ -221,6 +221,17 @@ def run_map_suite(server, artifacts, assets, output, mode, expect_optional_field
                 "qc2cpp_test_legacy_strings", timeout=8)
             if legacy_strings.get("ready") is not True or legacy_strings.get("value") != "qcx-mutated":
                 raise ProcessFailure(f"QCX legacy string borrow failed: {legacy_strings}")
+        if expect_model_presence:
+            model_presence = process.observe("qc2cpp_test_model_presence",
+                "qc2cpp_test_model_presence", timeout=8)
+            expected_model_presence = {
+                "ready": True,
+                "visible": True,
+                "hidden": True,
+                "restored": True,
+            }
+            if model_presence != expected_model_presence:
+                raise ProcessFailure(f"QCX model presence failed: {model_presence}")
         process.send("map e1m2")
         time.sleep(0.5)
         second = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
@@ -664,12 +675,14 @@ def main():
     parser.add_argument("--client", type=pathlib.Path)
     parser.add_argument("--expect-optional-fields", action="store_true")
     parser.add_argument("--expect-legacy-strings", action="store_true")
+    parser.add_argument("--expect-model-presence", action="store_true")
     args = parser.parse_args()
     try:
         require_file(args.server)
         if args.suite == "map":
             run_map_suite(args.server, args.artifacts, args.assets, args.output, args.mode,
-                args.expect_optional_fields, args.expect_legacy_strings)
+                args.expect_optional_fields, args.expect_legacy_strings,
+                args.expect_model_presence)
         elif args.suite == "fatal":
             run_fatal_suite(args.server, args.artifacts, args.assets, args.output, args.mode)
         elif args.suite == "restore-oom":
