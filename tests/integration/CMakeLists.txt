@@ -136,11 +136,15 @@ add_custom_target(qc2cpp_fatal_native_assets DEPENDS "${qc2cpp_fatal_native_game
 add_dependencies(qc2cpp_fatal_native_assets mvdsv)
 
 set(qc2cpp_acceptance_asset_targets qc2cpp_acceptance_native_assets qc2cpp_fatal_native_assets)
+if(TARGET qc2cpp_optional_fields_native_assets)
+    list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_optional_fields_native_assets)
+endif()
 add_test(NAME qc2cpp_server_map_native
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
         --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
-        --output "${qc2cpp_acceptance_root}/runs/native")
+        --output "${qc2cpp_acceptance_root}/runs/native"
+        --expect-model-presence)
 add_test(NAME qc2cpp_legacy_strings_native
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
         --suite map --mode native --server $<TARGET_FILE:mvdsv>
@@ -265,11 +269,15 @@ if(MVDSV_QC2CPP_WASM)
     list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_acceptance_wasm_assets)
     list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_fatal_wasm_assets)
     list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_restore_oom_wasm_assets)
+    if(TARGET qc2cpp_optional_fields_wasm_assets)
+        list(APPEND qc2cpp_acceptance_asset_targets qc2cpp_optional_fields_wasm_assets)
+    endif()
     add_test(NAME qc2cpp_server_map_wasm
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
             --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
-            --output "${qc2cpp_acceptance_root}/runs/wasm")
+            --output "${qc2cpp_acceptance_root}/runs/wasm"
+            --expect-model-presence)
     add_test(NAME qc2cpp_legacy_strings_wasm
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
             --suite map --mode wasm --server $<TARGET_FILE:mvdsv>
