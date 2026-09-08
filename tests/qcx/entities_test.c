@@ -21,6 +21,11 @@ qbool QCX_Active(void)
 	return qcx_active;
 }
 
+qcx_transport_kind_t QCX_GameTransportKind(void)
+{
+	return QCX_TRANSPORT_NATIVE;
+}
+
 static void assert_invalid_entities_fixture(const char *directory, const char *name)
 {
 	qcx_transport_t *transport = NULL;

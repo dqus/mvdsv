@@ -383,8 +383,14 @@ static void QCX_TestLegacyStrings_f(void)
 		Con_Printf("{\"qc2cpp_test_legacy_strings\":{\"ready\":false}}\n");
 		return;
 	}
-	const char *const before = PR_GetEntityString(sv.edicts[0].v->message);
-	if (before == NULL || !QCX_SetEntityString(&sv.edicts[0], "message", "qcx-mutated")) {
+	{
+		const char *const before = PR_GetEntityString(sv.edicts[0].v->message);
+		if (before == NULL) {
+			Con_Printf("{\"qc2cpp_test_legacy_strings\":{\"ready\":false}}\n");
+			return;
+		}
+	}
+	if (!QCX_SetEntityString(&sv.edicts[0], "message", "qcx-mutated")) {
 		Con_Printf("{\"qc2cpp_test_legacy_strings\":{\"ready\":false}}\n");
 		return;
 	}
@@ -403,6 +409,7 @@ static void QCX_TestModelPresence_f(void)
 	qbool visible = false;
 	qbool hidden = false;
 	qbool restored = false;
+	qbool static_model = false;
 	edict_t *entity = NULL;
 
 	if (!QCX_Active() || Cmd_Argc() != 1) {
@@ -412,8 +419,9 @@ static void QCX_TestModelPresence_f(void)
 	if (entity == NULL || entity->v == NULL) {
 		goto done;
 	}
+	const char *const model = sv.model_precache[1];
 	entity->v->modelindex = 1;
-	if (!QCX_SetEntityString(entity, "model", "progs/player.mdl")) {
+	if (model == NULL || !QCX_SetEntityString(entity, "model", model)) {
 		goto done;
 	}
 	visible = PR_EntityHasModel(entity);
@@ -421,20 +429,26 @@ static void QCX_TestModelPresence_f(void)
 		goto done;
 	}
 	hidden = !PR_EntityHasModel(entity);
-	if (!QCX_SetEntityString(entity, "model", "progs/player.mdl")) {
+	if (!QCX_SetEntityString(entity, "model", model)) {
 		goto done;
 	}
 	restored = PR_EntityHasModel(entity);
-	ready = true;
+	const int static_before = sv.static_entity_count;
+	PF2_makestatic(entity);
+	entity = NULL;
+	static_model = sv.static_entity_count == static_before + 1
+		&& sv.static_entities[static_before].modelindex != 0;
+	ready = static_model;
 
 done:
 	if (entity != NULL) {
 		ED_Free(entity);
 	}
 	Con_Printf("{\"qc2cpp_test_model_presence\":{\"ready\":%s,"
-		"\"visible\":%s,\"hidden\":%s,\"restored\":%s}}\n",
+		"\"visible\":%s,\"hidden\":%s,\"restored\":%s,\"static_model\":%s}}\n",
 		ready ? "true" : "false", visible ? "true" : "false",
-		hidden ? "true" : "false", restored ? "true" : "false");
+		hidden ? "true" : "false", restored ? "true" : "false",
+		static_model ? "true" : "false");
 }
 
 void QCX_TestObserverClientConnect(uint32_t self)

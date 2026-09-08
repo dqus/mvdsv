@@ -2,6 +2,7 @@
 
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
+#include "qcx/strings.h"
 
 #include <limits.h>
 #include <string.h>
@@ -11,6 +12,20 @@ static qcx_guest_address_t qcx_entity_base;
 static uint32_t qcx_entity_stride;
 static uint32_t qcx_entity_capacity;
 static uint32_t qcx_model_length_offset = UINT32_MAX;
+static const char *qcx_entity_field_error;
+
+static const char *const qcx_legacy_string_data_names[QCX_LEGACY_STRING_FIELD_COUNT] = {
+	"qcx.classname.data", "qcx.model.data", "qcx.weaponmodel.data",
+	"qcx.netname.data", "qcx.target.data", "qcx.targetname.data",
+	"qcx.message.data", "qcx.noise.data", "qcx.noise1.data", "qcx.noise2.data",
+	"qcx.noise3.data"
+};
+static const char *const qcx_legacy_string_length_names[QCX_LEGACY_STRING_FIELD_COUNT] = {
+	"qcx.classname.length", "qcx.model.length", "qcx.weaponmodel.length",
+	"qcx.netname.length", "qcx.target.length", "qcx.targetname.length",
+	"qcx.message.length", "qcx.noise.length", "qcx.noise1.length",
+	"qcx.noise2.length", "qcx.noise3.length"
+};
 
 typedef struct qcx_optional_field_spec_s {
 	const char *name;
@@ -54,7 +69,7 @@ int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 		return 0;
 	}
 	const uint64_t span = (uint64_t)memory->entity_stride * memory->max_entities;
-	if (memory->entity_object_base > UINT64_MAX - span) {
+	if (span > UINT32_MAX || memory->entity_object_base > UINT64_MAX - span) {
 		return 0;
 	}
 	qcx_entity_memory = memory;
@@ -67,15 +82,21 @@ int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 
 int QCX_BindEntities(void)
 {
-	if (qcx_entity_memory == NULL || sv.max_edicts <= 0
+	const qcx_game_api_v1_t *const game = QCX_Game();
+	const uint64_t span = (uint64_t)qcx_entity_stride * qcx_entity_capacity;
+	void *storage = NULL;
+	if (qcx_entity_memory == NULL || game == NULL || game->memory_view == NULL
+		|| span > UINT32_MAX
+		|| game->memory_view(game->context, qcx_entity_base, (qcx_byte_count_t)span,
+			_Alignof(qcx_shared_entity_state_v1_t), &storage) != QCX_PLUGIN_OK
+		|| storage == NULL || sv.max_edicts <= 0
 		|| (uint32_t)sv.max_edicts > qcx_entity_capacity) {
 		return 0;
 	}
 	for (int slot = 0; slot < sv.max_edicts; ++slot) {
-		qcx_shared_entity_state_v1_t *const entity = QCX_Entity((qcx_entity_id_t)slot);
-		if (entity == NULL) {
-			return 0;
-		}
+		qcx_shared_entity_state_v1_t *const entity =
+			(qcx_shared_entity_state_v1_t *)((uint8_t *)storage
+				+ (size_t)slot * qcx_entity_stride);
 		sv.edicts[slot].v = (entvars_t *)entity;
 	}
 	return 1;
@@ -91,6 +112,8 @@ void QCX_ClearEntities(void)
 	qcx_entity_stride = 0U;
 	qcx_entity_capacity = 0U;
 	qcx_model_length_offset = UINT32_MAX;
+	qcx_entity_field_error = NULL;
+	QCX_ClearLegacyStringProjections();
 }
 
 qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot)
@@ -129,9 +152,39 @@ static int QCX_FieldNameEquals(const qcx_game_api_v1_t *game,
 		&& memcmp(view, name, descriptor->name.size) == 0;
 }
 
+static const qcx_engine_field_descriptor_v1_t *QCX_FindUniqueEntityField(
+	const qcx_game_api_v1_t *game, const qcx_engine_field_table_v1_t *table,
+	const void *table_view, const char *name)
+{
+	const qcx_engine_field_descriptor_v1_t *result = NULL;
+	for (uint32_t index = 0U; index < table->count; ++index) {
+		const qcx_engine_field_descriptor_v1_t *const descriptor =
+			(const qcx_engine_field_descriptor_v1_t *)((const uint8_t *)table_view
+				+ (size_t)index * table->descriptor_stride);
+		if (!QCX_FieldNameEquals(game, descriptor, name)) continue;
+		if (result != NULL) return NULL;
+		result = descriptor;
+	}
+	return result;
+}
+
+static int QCX_ValidLegacyStringProjection(
+	const qcx_engine_field_descriptor_v1_t *descriptor, qcx_engine_type_id_t type,
+	uint32_t size, uint32_t alignment)
+{
+	return descriptor != NULL && descriptor->type_id == type
+		&& descriptor->size == size && descriptor->alignment == alignment
+		&& descriptor->access_flags == QCX_ENGINE_FIELD_HOST_READ
+		&& descriptor->offset % descriptor->alignment == 0U
+		&& qcx_entity_stride >= descriptor->size
+		&& descriptor->offset <= qcx_entity_stride - descriptor->size;
+}
+
 int QCX_ResolveEntityFields(void)
 {
 	qcx_model_length_offset = UINT32_MAX;
+	qcx_entity_field_error = "entity field table";
+	QCX_ClearLegacyStringProjections();
 	const qcx_game_api_v1_t *const game = QCX_Game();
 	if (qcx_entity_memory == NULL || game == NULL || game->engine_fields == NULL) {
 		return 0;
@@ -166,33 +219,38 @@ int QCX_ResolveEntityFields(void)
 		|| table_view == NULL) {
 		return 0;
 	}
-	const qcx_engine_field_descriptor_v1_t *model_length = NULL;
-	for (uint32_t index = 0U; index < table->count; ++index) {
-		const qcx_engine_field_descriptor_v1_t *const descriptor =
-			(const qcx_engine_field_descriptor_v1_t *)((const uint8_t *)table_view
-				+ (size_t)index * table->descriptor_stride);
-		if (!QCX_FieldNameEquals(game, descriptor, "qcx.model.length")) continue;
-		if (model_length != NULL) return 0;
-		model_length = descriptor;
-	}
-	if (model_length == NULL
-		|| model_length->type_id != QCX_EngineTypeId("qc.u32")
-		|| model_length->size != sizeof(uint32_t)
-		|| model_length->alignment != _Alignof(uint32_t)
-		|| model_length->offset % model_length->alignment != 0U
-		|| model_length->access_flags != QCX_ENGINE_FIELD_HOST_READ
-		|| qcx_entity_stride < model_length->size
-		|| model_length->offset > qcx_entity_stride - model_length->size
-		|| qcx_entity_base > UINT64_MAX - model_length->offset) {
+	const qcx_transport_kind_t kind = QCX_GameTransportKind();
+	if (kind != QCX_TRANSPORT_NATIVE && kind != QCX_TRANSPORT_WASM) {
 		return 0;
 	}
-	void *model_length_view = NULL;
-	if (game->memory_view(game->context, qcx_entity_base + model_length->offset,
-		model_length->size, model_length->alignment, &model_length_view) != QCX_PLUGIN_OK
-		|| model_length_view == NULL) {
-		return 0;
+	const qcx_engine_type_id_t data_type = QCX_EngineTypeId(
+		kind == QCX_TRANSPORT_NATIVE ? "qc.string.data.native" : "qc.string.data.wasm32");
+	const uint32_t data_size = kind == QCX_TRANSPORT_NATIVE ? sizeof(char *)
+		: sizeof(uint32_t);
+	const uint32_t data_alignment = kind == QCX_TRANSPORT_NATIVE ? _Alignof(char *)
+		: _Alignof(uint32_t);
+	qcx_legacy_string_projection_t projections[QCX_LEGACY_STRING_FIELD_COUNT];
+	for (uint32_t field = 0U; field < QCX_LEGACY_STRING_FIELD_COUNT; ++field) {
+		const qcx_engine_field_descriptor_v1_t *const data = QCX_FindUniqueEntityField(
+			game, table, table_view, qcx_legacy_string_data_names[field]);
+		const qcx_engine_field_descriptor_v1_t *const length = QCX_FindUniqueEntityField(
+			game, table, table_view, qcx_legacy_string_length_names[field]);
+		if (!QCX_ValidLegacyStringProjection(data, data_type, data_size, data_alignment)) {
+			qcx_entity_field_error = qcx_legacy_string_data_names[field];
+			return 0;
+		}
+		if (!QCX_ValidLegacyStringProjection(length, QCX_EngineTypeId("qc.u32"),
+			sizeof(uint32_t), _Alignof(uint32_t))) {
+			qcx_entity_field_error = qcx_legacy_string_length_names[field];
+			return 0;
+		}
+		projections[field] = (qcx_legacy_string_projection_t){
+			.data_offset = data->offset,
+			.length_offset = length->offset,
+		};
 	}
-	qcx_model_length_offset = model_length->offset;
+	QCX_SetLegacyStringProjections(projections, kind);
+	qcx_model_length_offset = projections[QCX_LEGACY_MODEL_FIELD_INDEX].length_offset;
 	qcx_optional_field_spec_t specs[] = {
 		{"items2", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ, &fofs_items2},
 		{"maxspeed", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE, &fofs_maxspeed},
@@ -240,6 +298,11 @@ int QCX_ResolveEntityFields(void)
 		*spec->offset = (int)matched->offset;
 	}
 	return 1;
+}
+
+const char *QCX_EntityFieldError(void)
+{
+	return qcx_entity_field_error == NULL ? "entity field table" : qcx_entity_field_error;
 }
 
 qbool QCX_EntityHasModel(const edict_t *entity)

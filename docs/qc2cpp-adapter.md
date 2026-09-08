@@ -106,6 +106,19 @@ build/qc2cpp-wasm/mvdsv -basedir /path/to/base -game qw \
 A selected qc2cpp transport never falls back to the legacy VM. A missing,
 incompatible, or invalid artifact is a startup error.
 
+## Legacy entity strings
+
+The generated game publishes fixed read-only projections for the data and
+length of all eleven legacy entity-string fields. MVDSV resolves the existing
+legacy token directly to that live storage: Native reads the published pointer;
+Wasm validates and maps the published memory32 offset including the NUL byte.
+This borrow performs no game callback, allocation, or payload copy.
+
+The returned pointer is read-only and only valid until the next game call,
+resumption into a suspended game call, or unpublish. Code that must retain text
+uses the explicit QCX copy APIs instead. A game missing any required projection
+is rejected during startup; there is no compatibility copy fallback.
+
 ## Saves, failures, and verification
 
 QCMS saves are backend-neutral: native and Wasm restore each other's saves when

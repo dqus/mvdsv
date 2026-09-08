@@ -229,6 +229,7 @@ def run_map_suite(server, artifacts, assets, output, mode, expect_optional_field
                 "visible": True,
                 "hidden": True,
                 "restored": True,
+                "static_model": True,
             }
             if model_presence != expected_model_presence:
                 raise ProcessFailure(f"QCX model presence failed: {model_presence}")
