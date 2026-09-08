@@ -20,6 +20,7 @@ set(expected_fast
 	qcx_terminal
 	qcx_startup_failure
 	qcx_start_frame
+	qcx_pr2_introspection
 	qcx_globals
 	qcx_globals_boundary
 	qcx_entities
