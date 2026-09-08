@@ -101,6 +101,12 @@ void PR2_Init(void)
 
 void PR2_Profile_f(void)
 {
+#ifdef QCX_ENABLED
+	if (QCX_Active()) {
+		Con_Printf("profile is unavailable for QCX\n");
+		return;
+	}
+#endif
 	if(!sv_vm)
 	{
 		PR_Profile_f();
