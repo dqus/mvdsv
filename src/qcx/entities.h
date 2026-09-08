@@ -16,6 +16,7 @@ void QCX_ClearEntities(void);
 qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot);
 uint32_t QCX_EntityCapacity(void);
 int QCX_ResolveEntityFields(void);
+const char *QCX_EntityFieldError(void);
 qbool QCX_EntityHasModel(const struct edict_s *entity);
 qcx_entity_id_t QCX_EdictToSlot(const struct edict_s *edict);
 struct edict_s *QCX_SlotToEdict(qcx_entity_id_t slot);

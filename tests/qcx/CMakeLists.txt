@@ -237,7 +237,8 @@ add_test(NAME qcx_globals_boundary
 
 add_executable(qcx_entities_test
 	entities_test.c
-${PROJECT_SOURCE_DIR}/src/qcx/entities.c
+	${PROJECT_SOURCE_DIR}/src/qcx/entities.c
+	${PROJECT_SOURCE_DIR}/src/qcx/strings.c
 ${PROJECT_SOURCE_DIR}/src/qcx/transport.c
 ${PROJECT_SOURCE_DIR}/src/qcx/native.c
 ${PROJECT_SOURCE_DIR}/src/qcx/wasm.c)
@@ -438,7 +439,8 @@ qcx_add_model_presence_test(qcx_model_presence_qcx USE_PR2=1 QCX_ENABLED=1)
 
 add_executable(qcx_optional_fields_test
 	optional_fields_test.c
-	${PROJECT_SOURCE_DIR}/src/qcx/entities.c)
+	${PROJECT_SOURCE_DIR}/src/qcx/entities.c
+	${PROJECT_SOURCE_DIR}/src/qcx/strings.c)
 set_target_properties(qcx_optional_fields_test PROPERTIES
 	C_STANDARD 11
 	C_STANDARD_REQUIRED YES

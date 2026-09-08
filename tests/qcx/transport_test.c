@@ -23,8 +23,10 @@ int main(int argc, char **argv)
 	assert(QCX_TransportOpen(QCX_TRANSPORT_NATIVE, argv[1], "game", NULL, &transport, &diagnostic)
 	       == QCX_PLUGIN_OK);
 	assert(transport != NULL);
+	assert(QCX_TransportKind(transport) == QCX_TRANSPORT_NATIVE);
 	assert(QCX_TransportGame(transport) != NULL);
 	QCX_TransportClose(transport);
+	assert(QCX_TransportKind(NULL) == QCX_TRANSPORT_NONE);
 
 	assert(QCX_TransportOpen(QCX_TRANSPORT_NATIVE, argv[1], "bad", NULL, &transport, &diagnostic)
 	       == QCX_PLUGIN_BAD_ABI);

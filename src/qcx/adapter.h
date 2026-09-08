@@ -5,6 +5,7 @@
 
 qbool QCX_Active(void);
 const qcx_game_api_v1_t *QCX_Game(void);
+qcx_transport_kind_t QCX_GameTransportKind(void);
 void QCX_LoadProgs(qcx_transport_kind_t transport_kind);
 void QCX_InitProg(void);
 void QCX_Shutdown(void);

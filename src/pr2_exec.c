@@ -168,6 +168,8 @@ char *PR2_GetEntityString(string_t num)
 {
 #ifdef QCX_ENABLED
 	if (QCX_Active()) {
+		/* Borrowed bytes are read-only and valid only until the next game call,
+		 * resumption, or unpublish. Callers must consume them immediately. */
 		const char *const borrowed = QCX_BorrowLegacyString(num);
 		if (borrowed == NULL) {
 			SV_Error("qc2cpp could not resolve legacy string %d", num);
@@ -526,8 +528,10 @@ void PR2_BindServerState(void)
 #endif
 		PR_ResetOptionalFieldOffsets();
 		if (!QCX_ResolveEntityFields()) {
+			const char *const capability = QCX_EntityFieldError();
 			QCX_Unpublish(NULL);
-			SV_Error("qc2cpp game did not publish compatible entity field capabilities");
+			SV_Error("qc2cpp game did not publish compatible entity field capability %s",
+				capability);
 		}
 		return;
 	}
