@@ -4,6 +4,7 @@
 import importlib.util
 import pathlib
 import sys
+import tempfile
 import unittest
 
 
@@ -83,6 +84,52 @@ class ProfileToolTests(unittest.TestCase):
         self.assertLess(command.index("+vid_renderer"), command.index("+connect"))
         self.assertLess(command.index("+cl_maxfps"), command.index("+connect"))
         self.assertEqual(command[-2:], ["+connect", "127.0.0.1:27500"])
+
+    def test_basedir_owns_only_links_and_copies_beneath_the_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            assets = root / "assets"
+            maps = assets / "maps"
+            maps.mkdir(parents=True)
+            pak = assets / "PAK0.PAK"
+            pak.write_bytes(b"pak")
+            map_file = maps / "povdmm4.bsp"
+            map_file.write_bytes(b"map")
+            game = root / "game.wasm"
+            game.write_bytes(b"wasm")
+            arguments = self.profile.parse_arguments([
+                "--mode", "wasm",
+                "--server", str(root / "server"),
+                "--client", str(root / "fte"),
+                "--assets", str(assets),
+                "--game", str(game),
+                "--output", str(root / "output"),
+            ])
+
+            run = root / "run"
+            basedir = self.profile.prepare_basedir(arguments, run)
+
+            self.assertEqual(basedir, run / "base")
+            self.assertTrue((basedir / "qw" / "pak0.pak").is_symlink())
+            self.assertEqual((basedir / "qw" / "pak0.pak").resolve(), pak.resolve())
+            self.assertTrue((basedir / "qw" / "maps" / "povdmm4.bsp").is_symlink())
+            self.assertEqual((basedir / "qw" / "maps" / "povdmm4.bsp").resolve(),
+                             map_file.resolve())
+            self.assertEqual((basedir / "qw" / "game.wasm").read_bytes(), b"wasm")
+            self.assertEqual(sorted(path.name for path in assets.iterdir()),
+                             ["PAK0.PAK", "maps"])
+            with self.assertRaisesRegex(RuntimeError, "already exists"):
+                self.profile.prepare_basedir(arguments, run)
+
+    def test_trace_command_uses_time_profiler_and_a_bounded_attachment(self):
+        command = self.profile.trace_command(
+            42, pathlib.Path("capture.trace"), 60)
+        self.assertEqual(command[:6], ["xcrun", "xctrace", "record", "--template",
+                                       "Time Profiler", "--output"])
+        self.assertIn("capture.trace", command)
+        self.assertEqual(command[command.index("--attach") + 1], "42")
+        self.assertEqual(command[command.index("--time-limit") + 1], "60s")
+        self.assertIn("--no-prompt", command)
 
 
 if __name__ == "__main__":
