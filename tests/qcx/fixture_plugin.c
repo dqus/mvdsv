@@ -11,23 +11,48 @@ typedef struct fixture_global_object_s {
 	float teamplay;
 } fixture_global_object_t;
 
+enum { fixture_legacy_string_field_count = 11, fixture_model_field_index = 1 };
+
 typedef struct fixture_entity_object_s {
 	qcx_shared_entity_state_v1_t shared;
 	uint32_t fixture_extension;
-	uint32_t model_length;
+	char *string_data[fixture_legacy_string_field_count];
+	uint32_t string_length[fixture_legacy_string_field_count];
 } fixture_entity_object_t;
 
 static fixture_global_object_t fixture_globals;
 static fixture_entity_object_t fixture_entities[11];
-static uint8_t fixture_entity_strings[11][3][64];
-static qcx_byte_count_t fixture_entity_string_sizes[11][3];
+static uint8_t fixture_entity_strings[11][fixture_legacy_string_field_count][64];
+static qcx_byte_count_t fixture_entity_string_sizes[11][fixture_legacy_string_field_count];
 static uint8_t fixture_mapname[64];
 static qcx_byte_count_t fixture_mapname_size;
 static const uint8_t fixture_deathmatch_name[] = "deathmatch";
 static const uint8_t fixture_coop_name[] = "coop";
 static const uint8_t fixture_teamplay_name[] = "teamplay";
-static const uint8_t fixture_model_length_name[] = "qcx.model.length";
-static qcx_engine_field_descriptor_v1_t fixture_entity_fields[1];
+static const uint8_t *const fixture_entity_string_names[fixture_legacy_string_field_count] = {
+	(const uint8_t *)"classname", (const uint8_t *)"model", (const uint8_t *)"weaponmodel",
+	(const uint8_t *)"netname", (const uint8_t *)"target", (const uint8_t *)"targetname",
+	(const uint8_t *)"message", (const uint8_t *)"noise", (const uint8_t *)"noise1",
+	(const uint8_t *)"noise2", (const uint8_t *)"noise3"
+};
+static const uint8_t *const fixture_entity_data_names[fixture_legacy_string_field_count] = {
+	(const uint8_t *)"qcx.classname.data", (const uint8_t *)"qcx.model.data",
+	(const uint8_t *)"qcx.weaponmodel.data", (const uint8_t *)"qcx.netname.data",
+	(const uint8_t *)"qcx.target.data", (const uint8_t *)"qcx.targetname.data",
+	(const uint8_t *)"qcx.message.data", (const uint8_t *)"qcx.noise.data",
+	(const uint8_t *)"qcx.noise1.data", (const uint8_t *)"qcx.noise2.data",
+	(const uint8_t *)"qcx.noise3.data"
+};
+static const uint8_t *const fixture_entity_length_names[fixture_legacy_string_field_count] = {
+	(const uint8_t *)"qcx.classname.length", (const uint8_t *)"qcx.model.length",
+	(const uint8_t *)"qcx.weaponmodel.length", (const uint8_t *)"qcx.netname.length",
+	(const uint8_t *)"qcx.target.length", (const uint8_t *)"qcx.targetname.length",
+	(const uint8_t *)"qcx.message.length", (const uint8_t *)"qcx.noise.length",
+	(const uint8_t *)"qcx.noise1.length", (const uint8_t *)"qcx.noise2.length",
+	(const uint8_t *)"qcx.noise3.length"
+};
+static qcx_engine_field_descriptor_v1_t fixture_entity_fields[
+	fixture_legacy_string_field_count * 2];
 static qcx_engine_field_descriptor_v1_t fixture_global_fields[3];
 static qcx_engine_field_exports_v1_t fixture_engine_fields = {
 	.abi_version =
@@ -41,7 +66,7 @@ static qcx_engine_field_exports_v1_t fixture_engine_fields = {
 	.globals_size = sizeof(fixture_globals),
 	.entity_fields = {
 		.descriptors = (qcx_guest_address_t)(uintptr_t)fixture_entity_fields,
-		.count = 1U,
+		.count = fixture_legacy_string_field_count * 2,
 		.descriptor_stride = sizeof(fixture_entity_fields[0]),
 	},
 	.global_fields = {
@@ -142,27 +167,63 @@ static void fixture_configure_global_fields(void)
 
 static void fixture_configure_entity_fields(void)
 {
-	fixture_entity_fields[0] = (qcx_engine_field_descriptor_v1_t){
-		.name = {(qcx_guest_address_t)(uintptr_t)fixture_model_length_name,
-			sizeof(fixture_model_length_name) - 1U, 0U},
-		.type_id = fixture_engine_type_id("qc.u32"),
-		.offset = offsetof(fixture_entity_object_t, model_length),
-		.size = sizeof(fixture_entities[0].model_length),
-		.alignment = _Alignof(uint32_t),
-		.access_flags = QCX_ENGINE_FIELD_HOST_READ,
-	};
+	for (uint32_t field = 0U; field < fixture_legacy_string_field_count; ++field) {
+		const uint32_t data = field * 2U;
+		fixture_entity_fields[data] = (qcx_engine_field_descriptor_v1_t){
+			.name = {(qcx_guest_address_t)(uintptr_t)fixture_entity_data_names[field],
+				(uint32_t)strlen((const char *)fixture_entity_data_names[field]), 0U},
+			.type_id = fixture_engine_type_id("qc.string.data.native"),
+			.offset = offsetof(fixture_entity_object_t, string_data)
+				+ field * sizeof(fixture_entities[0].string_data[0]),
+			.size = sizeof(fixture_entities[0].string_data[0]),
+			.alignment = _Alignof(char *),
+			.access_flags = QCX_ENGINE_FIELD_HOST_READ,
+		};
+		fixture_entity_fields[data + 1U] = (qcx_engine_field_descriptor_v1_t){
+			.name = {(qcx_guest_address_t)(uintptr_t)fixture_entity_length_names[field],
+				(uint32_t)strlen((const char *)fixture_entity_length_names[field]), 0U},
+			.type_id = fixture_engine_type_id("qc.u32"),
+			.offset = offsetof(fixture_entity_object_t, string_length)
+				+ field * sizeof(fixture_entities[0].string_length[0]),
+			.size = sizeof(fixture_entities[0].string_length[0]),
+			.alignment = _Alignof(uint32_t),
+			.access_flags = QCX_ENGINE_FIELD_HOST_READ,
+		};
+	}
 }
 
 static int fixture_entity_string_field(const uint8_t *name, qcx_byte_count_t size)
 {
-	if (size == 5U && memcmp(name, "model", 5U) == 0) return 0;
-	if (size == 7U && memcmp(name, "netname", 7U) == 0) return 1;
-	if (size == 9U && memcmp(name, "classname", 9U) == 0) return 2;
+	for (uint32_t field = 0U; field < fixture_legacy_string_field_count; ++field) {
+		const size_t field_size = strlen((const char *)fixture_entity_string_names[field]);
+		if (size == field_size
+			&& memcmp(name, fixture_entity_string_names[field], field_size) == 0) {
+			return (int)field;
+		}
+	}
 	return -1;
 }
 
 static qcx_guest_address_t fixture_init(void *context, int32_t level_msec,
-	uint32_t random_seed) { (void)context; (void)level_msec; (void)random_seed; memset(&fixture_globals, 0, sizeof(fixture_globals)); memset(fixture_entities, 0, sizeof(fixture_entities)); memset(fixture_entity_strings, 0, sizeof(fixture_entity_strings)); memset(fixture_entity_string_sizes, 0, sizeof(fixture_entity_string_sizes)); fixture_configure_global_fields(); fixture_configure_entity_fields(); return (qcx_guest_address_t)(uintptr_t)&fixture_entity_memory; }
+	uint32_t random_seed)
+{
+	(void)context;
+	(void)level_msec;
+	(void)random_seed;
+	memset(&fixture_globals, 0, sizeof(fixture_globals));
+	memset(fixture_entities, 0, sizeof(fixture_entities));
+	memset(fixture_entity_strings, 0, sizeof(fixture_entity_strings));
+	memset(fixture_entity_string_sizes, 0, sizeof(fixture_entity_string_sizes));
+	for (uint32_t slot = 0U; slot < 11U; ++slot) {
+		for (uint32_t field = 0U; field < fixture_legacy_string_field_count; ++field) {
+			fixture_entities[slot].string_data[field] =
+				(char *)fixture_entity_strings[slot][field];
+		}
+	}
+	fixture_configure_global_fields();
+	fixture_configure_entity_fields();
+	return (qcx_guest_address_t)(uintptr_t)&fixture_entity_memory;
+}
 static void fixture_shutdown(void *context) { (void)context; }
 static qcx_guest_address_t fixture_address(void *context) { (void)context; return 0U; }
 static qcx_guest_address_t fixture_global_memory_address(void *context)
@@ -196,7 +257,16 @@ static void fixture_edict_think(void *context, qcx_entity_id_t self, float time,
 static uint32_t fixture_client_say(void *context, qcx_entity_id_t self, uint32_t team, const uint8_t *text, qcx_byte_count_t size)
 { (void)context; (void)self; (void)team; (void)text; (void)size; return 0U; }
 static void fixture_paused_tic(void *context, uint32_t duration_msec) { (void)context; (void)duration_msec; }
-static void fixture_clear_edict(void *context, qcx_entity_id_t self) { (void)context; if (self < 11U) memset(&fixture_entities[self], 0, sizeof(fixture_entities[self])); }
+static void fixture_clear_edict(void *context, qcx_entity_id_t self)
+{
+	(void)context;
+	if (self >= 11U) return;
+	memset(&fixture_entities[self], 0, sizeof(fixture_entities[self]));
+	for (uint32_t field = 0U; field < fixture_legacy_string_field_count; ++field) {
+		fixture_entities[self].string_data[field] =
+			(char *)fixture_entity_strings[self][field];
+	}
+}
 static uint32_t fixture_edict_csqc_send(void *context, qcx_entity_id_t self, qcx_entity_id_t other, uint32_t flags)
 { (void)context; (void)self; (void)other; (void)flags; return 0U; }
 static qcx_plugin_status_t fixture_string_read(void *context, qcx_object_scope_t scope, qcx_entity_id_t entity, const uint8_t *name, qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t capacity, qcx_byte_count_t *required)
@@ -234,7 +304,9 @@ static qcx_plugin_status_t fixture_string_write(void *context, qcx_object_scope_
 	if (field < 0 || size > sizeof(fixture_entity_strings[entity][field])) return QCX_PLUGIN_BAD_ARGUMENT;
 	if (size != 0U) memcpy(fixture_entity_strings[entity][field], bytes, size);
 	fixture_entity_string_sizes[entity][field] = size;
-	if (field == 0) fixture_entities[entity].model_length = size;
+	fixture_entities[entity].string_data[field] =
+		(char *)fixture_entity_strings[entity][field];
+	fixture_entities[entity].string_length[field] = size;
 	return QCX_PLUGIN_OK;
 }
 static qcx_plugin_status_t fixture_legacy_string_read(void *context, int32_t token, uint8_t *out, qcx_byte_count_t capacity, qcx_byte_count_t *required)
@@ -282,11 +354,20 @@ static qcx_plugin_status_t fixture_memory_view(void *context, qcx_guest_address_
 		|| (address == (qcx_guest_address_t)(uintptr_t)fixture_coop_name
 		&& size <= sizeof(fixture_coop_name) - 1U)
 		|| (address == (qcx_guest_address_t)(uintptr_t)fixture_teamplay_name
-		&& size <= sizeof(fixture_teamplay_name) - 1U)
-		|| (address == (qcx_guest_address_t)(uintptr_t)fixture_model_length_name
-		&& size <= sizeof(fixture_model_length_name) - 1U)) {
+		&& size <= sizeof(fixture_teamplay_name) - 1U)) {
 		*out_view = (void *)(uintptr_t)address;
 		return QCX_PLUGIN_OK;
+	}
+	for (uint32_t field = 0U; field < fixture_legacy_string_field_count; ++field) {
+		const uint8_t *const data_name = fixture_entity_data_names[field];
+		const uint8_t *const length_name = fixture_entity_length_names[field];
+		if ((address == (qcx_guest_address_t)(uintptr_t)data_name
+			&& size <= strlen((const char *)data_name))
+			|| (address == (qcx_guest_address_t)(uintptr_t)length_name
+				&& size <= strlen((const char *)length_name))) {
+			*out_view = (void *)(uintptr_t)address;
+			return QCX_PLUGIN_OK;
+		}
 	}
 	const qcx_guest_address_t globals_base = (qcx_guest_address_t)(uintptr_t)&fixture_globals;
 	if (address >= globals_base && address - globals_base <= sizeof(fixture_globals)

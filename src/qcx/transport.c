@@ -103,6 +103,11 @@ const qcx_game_api_v1_t *QCX_TransportGame(qcx_transport_t *transport)
 	return transport == NULL ? NULL : &transport->game;
 }
 
+qcx_transport_kind_t QCX_TransportKind(const qcx_transport_t *transport)
+{
+	return transport == NULL ? QCX_TRANSPORT_NONE : transport->transport_kind;
+}
+
 void QCX_TransportClose(qcx_transport_t *transport)
 {
 	if (transport == NULL) {

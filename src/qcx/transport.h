@@ -17,6 +17,7 @@ qcx_plugin_status_t QCX_TransportOpen(qcx_transport_kind_t transport_kind, const
                                     qcx_transport_t **out,
                                     qcx_program_diagnostic_v1_t *diagnostic);
 const qcx_game_api_v1_t *QCX_TransportGame(qcx_transport_t *transport);
+qcx_transport_kind_t QCX_TransportKind(const qcx_transport_t *transport);
 void QCX_TransportClose(qcx_transport_t *transport);
 
 #endif
