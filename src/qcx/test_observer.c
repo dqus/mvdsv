@@ -52,6 +52,7 @@ static void QCX_TestRestoreOom_f(void);
 static void QCX_TestEntityReferences_f(void);
 static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
+static void QCX_TestModelPresence_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
 
 static void QCX_TestSnapshot_f(void)
@@ -109,6 +110,7 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_entity_references", QCX_TestEntityReferences_f);
 	Cmd_AddCommand("qc2cpp_test_optional_fields", QCX_TestOptionalFields_f);
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
+	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
 }
 
 void QCX_TestObserverInitBegin(void)
@@ -393,6 +395,46 @@ static void QCX_TestLegacyStrings_f(void)
 	}
 	Con_Printf("{\"qc2cpp_test_legacy_strings\":{\"ready\":true,\"value\":\"%s\"}}\n",
 		after);
+}
+
+static void QCX_TestModelPresence_f(void)
+{
+	qbool ready = false;
+	qbool visible = false;
+	qbool hidden = false;
+	qbool restored = false;
+	edict_t *entity = NULL;
+
+	if (!QCX_Active() || Cmd_Argc() != 1) {
+		goto done;
+	}
+	entity = ED_Alloc();
+	if (entity == NULL || entity->v == NULL) {
+		goto done;
+	}
+	entity->v->modelindex = 1;
+	if (!QCX_SetEntityString(entity, "model", "progs/player.mdl")) {
+		goto done;
+	}
+	visible = PR_EntityHasModel(entity);
+	if (!QCX_SetEntityString(entity, "model", "")) {
+		goto done;
+	}
+	hidden = !PR_EntityHasModel(entity);
+	if (!QCX_SetEntityString(entity, "model", "progs/player.mdl")) {
+		goto done;
+	}
+	restored = PR_EntityHasModel(entity);
+	ready = true;
+
+done:
+	if (entity != NULL) {
+		ED_Free(entity);
+	}
+	Con_Printf("{\"qc2cpp_test_model_presence\":{\"ready\":%s,"
+		"\"visible\":%s,\"hidden\":%s,\"restored\":%s}}\n",
+		ready ? "true" : "false", visible ? "true" : "false",
+		hidden ? "true" : "false", restored ? "true" : "false");
 }
 
 void QCX_TestObserverClientConnect(uint32_t self)
