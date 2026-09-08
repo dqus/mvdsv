@@ -45,6 +45,7 @@ set(expected_fast
 	qcx_legacy_optional_fields_pr2
 	qcx_save_format
 	qcx_restore
+	qc2cpp_profile_tool
 	qcx_label_contract)
 
 set(expected_integration
