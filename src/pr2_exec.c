@@ -295,7 +295,12 @@ void PR2_GameStartFrame(qbool isBotFrame)
 {
 #ifdef QCX_ENABLED
 	if (QCX_Active()) {
-		QCX_StartFrame((float)sv.time, PR_GLOBAL(frametime), isBotFrame);
+		/* QCX v1 preserves QW StartFrame semantics: SV_RunBots is not a
+		 * second game-frame callback. */
+		if (isBotFrame) {
+			return;
+		}
+		QCX_StartFrame((float)sv.time, PR_GLOBAL(frametime), false);
 		return;
 	}
 #endif
