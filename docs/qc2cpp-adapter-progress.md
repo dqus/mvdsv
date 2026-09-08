@@ -390,3 +390,34 @@ This is intentionally a bounded correction for the two
 `PR2_BindServerState()` failure paths. It does not establish a generic
 interception policy for other post-publication engine or gameplay `SV_Error`
 paths.
+
+## Post-Task 10 — direct QCX model-presence acceptance
+
+The model-presence correction is accepted against MVDSV
+`d56ec09da3da9d6f60023f27f98bb198ab383cab`. Generated games now publish the
+live length of `EntityData::model` as the required read-only
+`qcx.model.length` engine field. The selected PR boundary implements
+`PR_EntityHasModel`: legacy PR1/PR2 still resolve their string token, while QCX
+reads the published length directly. The two `sv_ents.c` visibility checks use
+that boundary and continue to treat `modelindex` as a separate condition.
+
+Both Release QW artifacts were rebuilt from the current qc2cpp compiler. The
+native and Wasm server-map, retained legacy-string, and optional-field process
+tests all passed (six tests), followed by all 31 configured non-external QCX
+tests. The process observer also proved in each transport that a non-empty
+model is visible, an empty model is hidden without changing `modelindex`, and
+restoring the model text restores visibility.
+
+Before this correction the two-client Wasm run was observed at roughly 10%
+CPU in htop, with model-presence checks crossing the legacy string bridge. In
+the repeated Release e1m1 run with two active FTE clients, five `ps` samples
+ranged from 1.5% to 2.6% (2.1% average). The 15-second stack sample showed
+`SV_WriteEntitiesToClient` selecting
+`PR_EntityHasModel -> QCX_EntityHasModel`; it did not reach
+`PR2_GetEntityString`, `QCX_BorrowLegacyString`, or `legacy_string_read`.
+Those string symbols remained only under the separate, lower-frequency
+`SV_UpdateClientStats` text route. The percentages are observations, not a
+test threshold.
+
+A target-neutral direct `qcx_string_view_v1` remains a separate investigation;
+this capability does not expose the private `qc::String` representation.
