@@ -3,8 +3,10 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "qwsvdef.h"
+#include "qcx/client_command.h"
 #include "qcx/entries.h"
 #include "qcx/entities.h"
 #include "qcx/globals.h"
@@ -35,6 +37,16 @@ static int legacy_call_count;
 static func_t legacy_function;
 static jmp_buf error_jump;
 static qbool expecting_error;
+static int command_source_argc;
+static const char *command_source_argv[QCX_COMMAND_MAX_ARGS];
+static const char *command_source_raw_args;
+static int command_argc_calls;
+static int command_argv_calls;
+static int command_args_calls;
+static int command_call_count;
+static uint32_t command_result;
+static qcx_byte_count_t command_payload_size;
+static uint8_t command_payload[QCX_CLIENT_COMMAND_PAYLOAD_V1_MAX_SIZE];
 vec3_t vec3_origin;
 server_t sv;
 server_static_t svs;
@@ -60,6 +72,8 @@ void Con_DPrintf(char *format, ...) { (void)format; }
 void Cvar_SetROM(cvar_t *var, char *value) { (void)var; (void)value; }
 int Q_atoi(const char *text) { return atoi(text); }
 char *PR1_GetString(int value) { (void)value; return ""; }
+void PR1_SetString(string_t *address, char *value)
+{ (void)address; (void)value; }
 void *VM_ExplicitArgPtr(vm_t *vm, intptr_t value)
 { (void)vm; (void)value; return NULL; }
 
@@ -139,7 +153,16 @@ void QCX_ClientDisconnect(qcx_entity_id_t self, uint32_t spectator)
 { (void)self; (void)spectator; }
 uint32_t QCX_ClientUserInfoChanged(qcx_entity_id_t self, uint32_t after)
 { (void)self; (void)after; return 0U; }
-uint32_t QCX_ClientCommand(qcx_entity_id_t self) { (void)self; return 0U; }
+uint32_t QCX_ClientCommand(qcx_entity_id_t self, const uint8_t *payload,
+	qcx_byte_count_t payload_size)
+{
+	assert(self == 3U);
+	assert(payload != NULL && payload_size <= sizeof(command_payload));
+	memcpy(command_payload, payload, payload_size);
+	command_payload_size = payload_size;
+	++command_call_count;
+	return command_result;
+}
 void QCX_ClientKill(qcx_entity_id_t self) { (void)self; }
 uint32_t QCX_ClientSay(qcx_entity_id_t self, uint32_t team, const uint8_t *text,
 	qcx_byte_count_t size)
@@ -152,6 +175,24 @@ void QCX_ClientPostThink(qcx_entity_id_t self, float time, uint32_t spectator)
 void QCX_SetNewParms(float out_parms[16]) { (void)out_parms; }
 void QCX_SetChangeParms(qcx_entity_id_t self, float out_parms[16])
 { (void)self; (void)out_parms; }
+
+int Cmd_Argc(void)
+{
+	++command_argc_calls;
+	return command_source_argc;
+}
+
+char *Cmd_Argv(int index)
+{
+	++command_argv_calls;
+	return (char *)command_source_argv[index];
+}
+
+char *Cmd_Args(void)
+{
+	++command_args_calls;
+	return (char *)command_source_raw_args;
+}
 
 trace_t SV_Trace(vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int type,
 	edict_t *passedict)
@@ -247,6 +288,46 @@ static void expect_invalid_qcx_edict(const edict_t *entity)
 	expecting_error = false;
 }
 
+static uint32_t read_u32_le(const uint8_t *bytes)
+{
+	return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8U)
+		| ((uint32_t)bytes[2] << 16U) | ((uint32_t)bytes[3] << 24U);
+}
+
+static void expect_pr2_client_command_route(void)
+{
+	command_source_argc = 3;
+	command_source_argv[0] = "give";
+	command_source_argv[1] = "";
+	command_source_argv[2] = "shells";
+	command_source_raw_args = "  \"\" shells";
+	command_argc_calls = 0;
+	command_argv_calls = 0;
+	command_args_calls = 0;
+	command_call_count = 0;
+	command_result = 1U;
+	sv_player = &entities[3];
+	assert(PR2_ClientCmd());
+	assert(command_call_count == 1);
+	assert(command_argc_calls == 1 && command_args_calls == 1
+		&& command_argv_calls == 3);
+	assert(read_u32_le(command_payload) == 3U);
+	assert(read_u32_le(command_payload + 4U) == strlen(command_source_raw_args));
+	assert(read_u32_le(command_payload + 8U) == 10U);
+	assert(read_u32_le(command_payload + 12U) == 4U);
+	assert(read_u32_le(command_payload + 16U) == 0U);
+	assert(read_u32_le(command_payload + 20U) == 6U);
+	const size_t raw_offset = QCX_COMMAND_PAYLOAD_V1_HEADER_SIZE + 3U * 4U;
+	assert(!memcmp(command_payload + raw_offset, command_source_raw_args,
+		strlen(command_source_raw_args)));
+	assert(command_payload_size == raw_offset + strlen(command_source_raw_args) + 10U);
+
+	command_call_count = 0;
+	command_result = 0U;
+	assert(!PR2_ClientCmd());
+	assert(command_call_count == 1);
+}
+
 int main(void)
 {
 	pr_global_struct = (globalvars_t *)&globals;
@@ -279,6 +360,7 @@ int main(void)
 	PR2_EdictBlocked(96);
 	assert(legacy_call_count == 3 && legacy_function == 96);
 	qcx_active = true;
+	expect_pr2_client_command_route();
 	assert(EDICT_TO_PROG(NULL) == 0);
 	assert(EDICT_TO_PROG(&entities[0]) == 0);
 	assert(EDICT_TO_PROG(&entities[5]) == 5);

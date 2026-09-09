@@ -17,6 +17,31 @@ foreach(callback IN ITEMS
     endif()
 endforeach()
 
+# Client commands are parsed by the engine, so the PR2 seam must snapshot its
+# Cmd_* state before crossing into QCX. The backend still returns only the
+# handled bit, preserving the engine's normal fallback on zero.
+file(READ "${MVDSV_SOURCE_DIR}/src/qcx/entries.c" entries_source)
+foreach(required IN ITEMS
+    "#include \"qcx/client_command.h\""
+    "qcx_client_command_payload_v1_t payload"
+    "QCX_SnapshotClientCommand(&payload)"
+    "payload.bytes, payload.size")
+    string(FIND "${entries_source}" "${required}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "src/qcx/entries.c: missing client-command payload route: ${required}")
+    endif()
+endforeach()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/qcx/adapter.c" adapter_source)
+foreach(required IN ITEMS
+    "uint32_t QCX_ClientCommand(qcx_entity_id_t self, const uint8_t *payload,"
+    "game->client_command(game->context, self, payload, payload_size)")
+    string(FIND "${adapter_source}" "${required}" position)
+    if(position EQUAL -1)
+        message(FATAL_ERROR "src/qcx/adapter.c: missing client-command payload forwarding: ${required}")
+    endif()
+endforeach()
+
 # PR2 must not resolve the hidden msg_entity global unless the destination is
 # MSG_ONE. Non-client message routes historically ignore that global entirely.
 file(READ "${MVDSV_SOURCE_DIR}/src/pr2_cmds.c" pr2_cmds)
