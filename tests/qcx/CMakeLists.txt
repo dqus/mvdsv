@@ -75,7 +75,8 @@ set_target_properties(qcx_transport_test PROPERTIES
 	C_STANDARD_REQUIRED YES
 	C_EXTENSIONS OFF)
 target_include_directories(qcx_transport_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
-target_compile_options(qcx_transport_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_transport_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_transport_test PRIVATE QCX_NATIVE=1)
 if(MVDSV_QC2CPP_WASM)
 	target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
@@ -301,6 +302,23 @@ target_compile_definitions(qcx_client_test PRIVATE
 target_link_libraries(qcx_client_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_client COMMAND qcx_client_test)
 
+add_executable(qcx_client_command_payload_test
+	client_command_payload_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/client_command.c)
+set_target_properties(qcx_client_command_payload_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_client_command_payload_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_client_command_payload_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+target_compile_definitions(qcx_client_command_payload_test PRIVATE
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_client_command_payload_test PRIVATE Qc2cppHost::native)
+add_test(NAME qcx_client_command_payload COMMAND qcx_client_command_payload_test)
+
 add_test(NAME qcx_client_routes
 	COMMAND ${CMAKE_COMMAND}
 		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
@@ -313,6 +331,7 @@ add_test(NAME qcx_pr2_api_routes
 
 add_executable(qcx_reentry_test
 	reentry_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/client_command.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entries.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_movement.c
 	${PROJECT_SOURCE_DIR}/src/qcx/strings.c
@@ -327,7 +346,7 @@ target_include_directories(qcx_reentry_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
 target_compile_options(qcx_reentry_test PRIVATE
-	-Wall -Wextra -Wpedantic -Werror -ffunction-sections -fdata-sections)
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG -ffunction-sections -fdata-sections)
 set_source_files_properties(${PROJECT_SOURCE_DIR}/src/sv_phys.c PROPERTIES
 	COMPILE_OPTIONS "-Wno-missing-field-initializers;-Wno-unused-parameter;-Wno-empty-body")
 set_source_files_properties(${PROJECT_SOURCE_DIR}/src/pr2_exec.c PROPERTIES
@@ -596,6 +615,7 @@ foreach(test_name IN ITEMS
 	qcx_entities
 	qcx_services_world
 	qcx_client
+	qcx_client_command_payload
 	qcx_client_routes
 	qcx_pr2_api_routes
 	qcx_reentry
