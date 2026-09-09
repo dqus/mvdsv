@@ -238,8 +238,9 @@ static void fixture_client_flag(void *context, qcx_entity_id_t self, uint32_t sp
 { (void)context; (void)self; (void)spectator; }
 static uint32_t fixture_client_flag_result(void *context, qcx_entity_id_t self, uint32_t value)
 { (void)context; (void)self; (void)value; return 0U; }
-static uint32_t fixture_client_command(void *context, qcx_entity_id_t self)
-{ (void)context; (void)self; return 0U; }
+static uint32_t fixture_client_command(void *context, qcx_entity_id_t self,
+	const uint8_t *payload, qcx_byte_count_t payload_size)
+{ (void)context; (void)self; (void)payload; (void)payload_size; return 0U; }
 static void fixture_client_think(void *context, qcx_entity_id_t self, float time, float frametime, uint32_t spectator)
 { (void)context; (void)self; (void)time; (void)frametime; (void)spectator; }
 static void fixture_spectator_think(void *context, qcx_entity_id_t self, float time, float frametime)

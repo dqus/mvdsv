@@ -123,6 +123,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qcx/transport.c"
 		"${DIR_SRC}/qcx/native.c"
 		"${DIR_SRC}/qcx/wasm.c"
+		"${DIR_SRC}/qcx/client_command.c"
 		"${DIR_SRC}/qcx/adapter.c"
 		"${DIR_SRC}/qcx/adapter_state.c"
 		"${DIR_SRC}/qcx/entities.c"
