@@ -1,6 +1,7 @@
 #include "qwsvdef.h"
 
 #include "qcx/adapter.h"
+#include "qcx/client_command.h"
 #include "qcx/entities.h"
 #include "qcx/entries.h"
 
@@ -64,7 +65,13 @@ unsigned int QCX_DispatchClientUserInfoChanged(edict_t *client, unsigned int aft
 
 unsigned int QCX_DispatchClientCommand(edict_t *client)
 {
-	return QCX_ClientCommand(QCX_EntrySlot(client, "client command"));
+	qcx_client_command_payload_v1_t payload;
+	if (!QCX_SnapshotClientCommand(&payload)) {
+		SV_Error("qc2cpp client command snapshot is invalid");
+		return 0U;
+	}
+	return QCX_ClientCommand(QCX_EntrySlot(client, "client command"),
+		payload.bytes, payload.size);
 }
 
 void QCX_DispatchClientKill(edict_t *client)

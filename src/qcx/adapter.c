@@ -236,11 +236,12 @@ uint32_t QCX_ClientUserInfoChanged(qcx_entity_id_t self, uint32_t after)
 	return result;
 }
 
-uint32_t QCX_ClientCommand(qcx_entity_id_t self)
+uint32_t QCX_ClientCommand(qcx_entity_id_t self, const uint8_t *payload,
+	qcx_byte_count_t payload_size)
 {
 	const qcx_game_api_v1_t *const game = QCX_RequireGame("client command");
 	QCX_AdapterStateEnter(&qcx_state);
-	const uint32_t result = game->client_command(game->context, self);
+	const uint32_t result = game->client_command(game->context, self, payload, payload_size);
 	QCX_AdapterStateLeave(&qcx_state);
 	return result;
 }

@@ -21,7 +21,8 @@ void QCX_ClientConnect(qcx_entity_id_t self, uint32_t spectator);
 void QCX_PutClientInServer(qcx_entity_id_t self, uint32_t spectator);
 void QCX_ClientDisconnect(qcx_entity_id_t self, uint32_t spectator);
 uint32_t QCX_ClientUserInfoChanged(qcx_entity_id_t self, uint32_t after);
-uint32_t QCX_ClientCommand(qcx_entity_id_t self);
+uint32_t QCX_ClientCommand(qcx_entity_id_t self, const uint8_t *payload,
+	qcx_byte_count_t payload_size);
 void QCX_ClientKill(qcx_entity_id_t self);
 uint32_t QCX_ClientSay(qcx_entity_id_t self, uint32_t team, const uint8_t *text,
 	qcx_byte_count_t size);
