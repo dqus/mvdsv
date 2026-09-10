@@ -503,6 +503,18 @@ static void Cmd_New_f (void)
 	SV_LogPlayer(sv_client, "connect", 1);
 }
 
+void SV_QCXStartClientSignon(client_t *client)
+{
+	client_t *const saved_client = sv_client;
+	edict_t *const saved_player = sv_player;
+	if (client == NULL || client->state < cs_preconnected) return;
+	sv_client = client;
+	sv_player = client->edict;
+	Cmd_New_f();
+	sv_client = saved_client;
+	sv_player = saved_player;
+}
+
 /*
 ==================
 Cmd_Soundlist_f
@@ -986,6 +998,7 @@ static void Cmd_Begin_f (void)
 	unsigned pmodel = 0, emodel = 0;
 	int i;
 	qbool restoring_qcx_client = false;
+	qbool waiting_qcx_client = false;
 
 	if (sv_client->state == cs_spawned)
 		return; // don't begin again
@@ -1003,8 +1016,9 @@ static void Cmd_Begin_f (void)
 
 #if defined(QCX_ENABLED)
 	restoring_qcx_client = QCX_RestoreSessionClientPending(sv_client);
+	waiting_qcx_client = QCX_RestoreSessionClientWaiting(sv_client);
 #endif
-	if (!restoring_qcx_client && !sv.loadgame)
+	if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)
 	{
 		if (sv_client->spectator)
 			SV_SpawnSpectator ();
@@ -1051,7 +1065,7 @@ static void Cmd_Begin_f (void)
 	 * the restore.  FTE stops that signon after svc_setpause, so defer this
 	 * particular notification until QCX_RestoreSessionBegin clears the
 	 * restore reason.  The server remains paused throughout the handshake. */
-	if (sv.paused && !restoring_qcx_client)
+	if (sv.paused && !restoring_qcx_client && !waiting_qcx_client)
 	{
 		ClientReliableWrite_Begin (sv_client, svc_setpause, 2);
 		ClientReliableWrite_Byte (sv_client, sv.paused);

@@ -21,9 +21,9 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
-string(FIND "${sv_user}" "if (sv.paused && !restoring_qcx_client)" position)
+string(FIND "${sv_user}" "if (sv.paused && !restoring_qcx_client && !waiting_qcx_client)" position)
 if(position EQUAL -1)
-	message(FATAL_ERROR "Cmd_Spawn must defer pause notification for a QCX restore handshake")
+	message(FATAL_ERROR "Cmd_Begin must defer pause notification for every QCX restore handshake")
 endif()
 
 string(FIND "${sv_user}" "{\"qcx_restore_list\", Cmd_RestoreList_f, false}" position)
@@ -54,7 +54,8 @@ math(EXPR begin_length "${begin_end} - ${begin_begin}")
 string(SUBSTRING "${sv_user}" ${begin_begin} ${begin_length} begin_source)
 foreach(required IN ITEMS
 	"restoring_qcx_client = QCX_RestoreSessionClientPending(sv_client)"
-	"if (!restoring_qcx_client && !sv.loadgame)"
+	"waiting_qcx_client = QCX_RestoreSessionClientWaiting(sv_client)"
+	"if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)"
 	"if (sv.loadgame || restoring_qcx_client)")
 	string(FIND "${begin_source}" "${required}" position)
 	if(position EQUAL -1)

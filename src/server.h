@@ -825,6 +825,10 @@ void SV_SendServerinfo (client_t *client);
 void SV_ExtractFromUserinfo (client_t *cl, qbool namechanged);
 int SV_BoundRate (qbool dl, int rate);
 
+/* Starts the ordinary QW signon for a client which QCX has kept connected
+ * while it chose a saved restore identity. */
+void SV_QCXStartClientSignon (client_t *client);
+
 typedef struct
 {
 	int sec;

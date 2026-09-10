@@ -4,9 +4,11 @@
 #include "qcx/test_observer.h"
 #include "qcx/entities.h"
 #include "qcx/globals.h"
+#include "qcx/restore_session.h"
 
 #include <stdint.h>
 #include <inttypes.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +26,8 @@ typedef struct qcx_test_observer_s {
 	uint32_t put_client_in_server_count;
 	uint32_t spectator_put_client_in_server_count;
 	uint32_t client_disconnect_count;
+	uint32_t client_userinfo_before_count;
+	uint32_t client_userinfo_after_count;
 	uint32_t client_command_count;
 	uint32_t client_kill_count;
 	int32_t player_health_after_kill;
@@ -58,6 +62,9 @@ static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
 static void QCX_TestModelPresence_f(void);
 static void QCX_TestQwspMonster_f(void);
+static void QCX_TestRestoreSession_f(void);
+static void QCX_TestStuffClient_f(void);
+static void QCX_TestReleaseClient_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
 
 static void QCX_TestSnapshot_f(void)
@@ -74,7 +81,9 @@ static void QCX_TestEvents_f(void)
 		"\"client_connect_count\":%u,\"put_client_in_server_count\":%u,"
 		"\"last_client_userid\":%d,"
 		"\"spectator_put_client_in_server_count\":%u,"
-		"\"client_disconnect_count\":%u,\"client_command_count\":%u,"
+		"\"client_disconnect_count\":%u,"
+		"\"client_userinfo_before_count\":%u,"
+		"\"client_userinfo_after_count\":%u,\"client_command_count\":%u,"
 		"\"client_kill_count\":%u,"
 		"\"player_health_after_kill\":%d,"
 		"\"player_frags_after_kill\":%d,"
@@ -92,6 +101,8 @@ static void QCX_TestEvents_f(void)
 		observer.put_client_in_server_count, observer.last_client_userid,
 		observer.spectator_put_client_in_server_count,
 		observer.client_disconnect_count,
+		observer.client_userinfo_before_count,
+		observer.client_userinfo_after_count,
 		observer.client_command_count,
 		observer.client_kill_count, observer.player_health_after_kill,
 		observer.player_frags_after_kill,
@@ -102,6 +113,148 @@ static void QCX_TestEvents_f(void)
 		observer.teledeath_toucher, observer.shared_self_after_put_client,
 		observer.restore_replication_begin_count,
 		observer.restore_replication_complete_count);
+}
+
+static qbool QCX_TestJsonAppend(char **cursor, size_t *remaining, const char *format, ...)
+{
+	va_list arguments;
+	int written;
+	if (*remaining == 0U) return false;
+	va_start(arguments, format);
+	written = vsnprintf(*cursor, *remaining, format, arguments);
+	va_end(arguments);
+	if (written < 0 || (size_t)written >= *remaining) return false;
+	*cursor += written;
+	*remaining -= (size_t)written;
+	return true;
+}
+
+static qbool QCX_TestJsonString(char **cursor, size_t *remaining, const char *value)
+{
+	const unsigned char *input = (const unsigned char *)(value == NULL ? "" : value);
+	if (!QCX_TestJsonAppend(cursor, remaining, "\"")) return false;
+	while (*input != '\0') {
+		if (*input == '\\' || *input == '\"') {
+			if (!QCX_TestJsonAppend(cursor, remaining, "\\%c", *input)) return false;
+		} else if (*input < 0x20U || *input >= 0x80U) {
+			if (!QCX_TestJsonAppend(cursor, remaining, "?")) return false;
+		} else if (!QCX_TestJsonAppend(cursor, remaining, "%c", *input)) {
+			return false;
+		}
+		++input;
+	}
+	return QCX_TestJsonAppend(cursor, remaining, "\"");
+}
+
+static void QCX_TestRestoreSession_f(void)
+{
+	qcx_restore_session_status_t status;
+	char json[8192];
+	char *cursor = json;
+	size_t remaining = sizeof(json);
+	int slot;
+	qbool first = true;
+	QCX_RestoreSessionGetStatus(&status, Sys_DoubleTime());
+	if (!QCX_TestJsonAppend(&cursor, &remaining,
+		"{\"qc2cpp_test_restore_session\":{\"waiting\":%s,"
+		"\"paused\":%d,\"remaining_seconds\":%.3f,\"available\":%u,"
+		"\"bound\":%u,\"active\":%u,\"clients\":[",
+		status.waiting ? "true" : "false", sv.paused, status.remaining_seconds,
+		status.available_count, status.bound_count, status.active_count)) goto overflow;
+	for (slot = 0; slot < MAX_CLIENTS; ++slot) {
+		client_t *const client = &svs.clients[slot];
+		int edict_slot = -1;
+		if (client->state != cs_preconnected && client->state != cs_connected
+			&& client->state != cs_spawned) continue;
+		if (!first && !QCX_TestJsonAppend(&cursor, &remaining, ",")) goto overflow;
+		first = false;
+		if (client->edict != NULL) edict_slot = (int)(client->edict - sv.edicts);
+		if (!QCX_TestJsonAppend(&cursor, &remaining, "{\"slot\":%d,\"name\":", slot)
+			|| !QCX_TestJsonString(&cursor, &remaining, client->name)
+			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"spectator\":%s,\"team\":",
+				client->spectator ? "true" : "false")
+			|| !QCX_TestJsonString(&cursor, &remaining, client->team)
+			|| !QCX_TestJsonAppend(&cursor, &remaining,
+				",\"userinfo_spectator\":")
+			|| !QCX_TestJsonString(&cursor, &remaining,
+				Info_Get(&client->_userinfo_ctx_, "*spectator"))
+			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"userinfo_team\":")
+			|| !QCX_TestJsonString(&cursor, &remaining,
+				Info_Get(&client->_userinfo_ctx_, "team"))
+			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"wire_spectator\":")
+			|| !QCX_TestJsonString(&cursor, &remaining,
+				Info_Get(&client->_userinfoshort_ctx_, "*spectator"))
+			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"wire_team\":")
+			|| !QCX_TestJsonString(&cursor, &remaining,
+				Info_Get(&client->_userinfoshort_ctx_, "team"))
+			|| !QCX_TestJsonAppend(&cursor, &remaining,
+				",\"waiting\":%s,\"pending\":%s,\"edict_slot\":%d,"
+			"\"userid\":%d,\"netchan_qport\":%d,\"netchan_remote\":",
+			QCX_RestoreSessionClientWaiting(client) ? "true" : "false",
+			QCX_RestoreSessionClientPending(client) ? "true" : "false",
+			edict_slot, client->userid, client->netchan.qport)
+			|| !QCX_TestJsonString(&cursor, &remaining,
+				NET_AdrToString(client->netchan.remote_address))
+			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"spawn_parms\":[")) goto overflow;
+		for (int parm = 0; parm < NUM_SPAWN_PARMS; ++parm) {
+			if ((parm != 0 && !QCX_TestJsonAppend(&cursor, &remaining, ","))
+				|| !QCX_TestJsonAppend(&cursor, &remaining, "%.9g",
+					client->spawn_parms[parm])) goto overflow;
+		}
+		if (!QCX_TestJsonAppend(&cursor, &remaining, "]}")) goto overflow;
+	}
+	if (!QCX_TestJsonAppend(&cursor, &remaining, "]}}")) goto overflow;
+	Con_Printf("%s\n", json);
+	return;
+
+overflow:
+	Con_Printf("{\"qc2cpp_test_restore_session\":{\"error\":\"overflow\"}}\n");
+}
+
+static client_t *QCX_TestClientForSlot(const char *command)
+{
+	const int slot = Q_atoi(Cmd_Argv(1));
+	if (Cmd_Argc() < 2 || slot < 0 || slot >= MAX_CLIENTS) {
+		Con_Printf("Usage: %s <live client slot>\n", command);
+		return NULL;
+	}
+	if (svs.clients[slot].state != cs_preconnected
+		&& svs.clients[slot].state != cs_connected
+		&& svs.clients[slot].state != cs_spawned) {
+		Con_Printf("qc2cpp test client slot %d is not live\n", slot);
+		return NULL;
+	}
+	return &svs.clients[slot];
+}
+
+static void QCX_TestStuffClient_f(void)
+{
+	client_t *client;
+	char command[256];
+	if (Cmd_Argc() != 3) {
+		Con_Printf("Usage: qc2cpp_test_stuff_client <live client slot> <command>\n");
+		return;
+	}
+	client = QCX_TestClientForSlot("qc2cpp_test_stuff_client");
+	if (client == NULL) return;
+	if (strchr(Cmd_Argv(2), '\n') != NULL || strlen(Cmd_Argv(2)) >= sizeof(command) - 1U) {
+		Con_Printf("qc2cpp test client command is invalid or too long\n");
+		return;
+	}
+	snprintf(command, sizeof(command), "%s\n", Cmd_Argv(2));
+	ClientReliableWrite_Begin(client, svc_stufftext, (int)strlen(command) + 2);
+	ClientReliableWrite_String(client, command);
+	Con_Printf("{\"qc2cpp_test_stuff_client\":{\"slot\":%d}}\n",
+		(int)(client - svs.clients));
+}
+
+static void QCX_TestReleaseClient_f(void)
+{
+	client_t *const client = QCX_TestClientForSlot("qc2cpp_test_release_client");
+	if (client == NULL) return;
+	Con_Printf("{\"qc2cpp_test_release_client\":{\"slot\":%d}}\n",
+		(int)(client - svs.clients));
+	SV_DropClient(client);
 }
 
 void QCX_TestObserverRegisterCommands(void)
@@ -119,6 +272,9 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
 	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_monster", QCX_TestQwspMonster_f);
+	Cmd_AddCommand("qc2cpp_test_restore_session", QCX_TestRestoreSession_f);
+	Cmd_AddCommand("qc2cpp_test_stuff_client", QCX_TestStuffClient_f);
+	Cmd_AddCommand("qc2cpp_test_release_client", QCX_TestReleaseClient_f);
 }
 
 void QCX_TestObserverInitBegin(void)
@@ -546,6 +702,11 @@ void QCX_TestObserverPutClientInServer(uint32_t self, uint32_t spectator)
 	}
 }
 void QCX_TestObserverClientDisconnect(void) { ++observer.client_disconnect_count; }
+void QCX_TestObserverClientUserInfoChanged(uint32_t after)
+{
+	if (after != 0U) ++observer.client_userinfo_after_count;
+	else ++observer.client_userinfo_before_count;
+}
 void QCX_TestObserverClientCommand(void) { ++observer.client_command_count; }
 static void QCX_TestObserverSendRestoreMarker(const char *marker)
 {

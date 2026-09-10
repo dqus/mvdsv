@@ -176,6 +176,15 @@ def connected_save_client_command(client, basedir, port):
         "+connect", f"127.0.0.1:{port}"]
 
 
+def roster_client_command(client, basedir, port, *, name, team, spectator=False):
+    command = [str(client.resolve()), "-qc2cpp-save-connected-acceptance", "-nosound",
+        "-basedir", str(basedir.resolve()), "-game", "qw",
+        "+set", "name", name, "+set", "team", team]
+    if spectator:
+        command += ["+set", "spectator", "1"]
+    return command + ["+connect", f"127.0.0.1:{port}"]
+
+
 def available_udp_port():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as socket_handle:
         socket_handle.bind(("127.0.0.1", 0))
@@ -190,6 +199,80 @@ def require_log_marker(path, marker, timeout):
         time.sleep(0.05)
     contents = path.read_text(encoding="utf-8") if path.is_file() else "<missing>"
     raise ProcessFailure(f"client did not observe {marker!r}: {contents}")
+
+
+def roster_client(session, name):
+    for candidate in session.get("clients", []):
+        if candidate.get("name") == name:
+            return candidate
+    return None
+
+
+def only_roster_client(session, description):
+    clients = session.get("clients", [])
+    if len(clients) != 1:
+        raise ProcessFailure(f"{description}: expected one live client, got {session}")
+    return clients[0]
+
+
+def client_restore_identity(record):
+    return {
+        "slot": record["slot"],
+        "edict_slot": record["edict_slot"],
+        "userid": record["userid"],
+        "spawn_parms": record["spawn_parms"],
+        "netchan_qport": record["netchan_qport"],
+        "netchan_remote": record["netchan_remote"],
+    }
+
+
+def observe_restore_session(process, *, timeout=8):
+    return process.observe("qc2cpp_test_restore_session", "qc2cpp_test_restore_session",
+        timeout=timeout)
+
+
+def wait_restore_session(process, predicate, *, timeout, description):
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = observe_restore_session(process, timeout=min(1, deadline - time.monotonic()))
+        if predicate(last):
+            return last
+        time.sleep(0.05)
+    raise ProcessFailure(f"{description}: {last}")
+
+
+def wait_events(process, predicate, *, timeout, description):
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = process.observe("qc2cpp_test_events", "qc2cpp_test_events",
+            timeout=min(1, deadline - time.monotonic()))
+        if predicate(last):
+            return last
+        time.sleep(0.05)
+    raise ProcessFailure(f"{description}: {last}")
+
+
+def wait_client_exit(client_process, client_log, label):
+    try:
+        result = client_process.wait(timeout=15)
+    except subprocess.TimeoutExpired as error:
+        client_process.terminate()
+        client_process.wait(timeout=3)
+        raise ProcessFailure(f"{label} FTE client did not finish") from error
+    if result != 0:
+        contents = client_log.read_text(encoding="utf-8") if client_log.is_file() else "<missing>"
+        raise ProcessFailure(f"{label} FTE client failed: {contents}")
+
+
+def release_roster_clients(process, clients):
+    process.send("qc2cpp_test_release_connected_client")
+    for label, client_process, client_log in clients:
+        wait_client_exit(client_process, client_log, label)
+    # A normal QW drop becomes a zombie briefly; wait for its physical slot to
+    # become reusable before a later saved name is admitted to that slot.
+    time.sleep(3)
 
 
 def run_map_suite(server, artifacts, assets, output, mode, expect_optional_fields=False,
@@ -582,6 +665,13 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
             first_userid = events.get("last_client_userid", 0)
             if first_userid <= 0:
                 raise ProcessFailure(f"connected-save client has no observable userid: {events}")
+            saved_client = only_roster_client(
+                observe_restore_session(process, timeout=8),
+                "connected save did not expose its live client")
+            saved_identity = client_restore_identity(saved_client)
+            if saved_identity["userid"] != first_userid or len(saved_identity["spawn_parms"]) != 16:
+                raise ProcessFailure(
+                    f"connected save did not expose saved identity state: {saved_client}")
             process.send("save qc2cpp-connected")
             saved = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
             save_path = basedir / "qw" / "save" / "qc2cpp-connected.sav"
@@ -620,6 +710,13 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
                     or events.get("init_count") != 2
                     or events.get("normal_unpublish_count") != 1):
                 raise ProcessFailure(f"connected QCMS did not preserve fresh restore invariants: {events}")
+            restored_identity = client_restore_identity(only_roster_client(
+                observe_restore_session(process, timeout=8),
+                "connected restore did not retain its live client"))
+            if restored_identity != saved_identity:
+                raise ProcessFailure(
+                    "connected QCMS did not preserve saved slot, edict, spawn parms, or netchannel: "
+                    f"saved={saved_identity}, restored={restored_identity}")
             require_log_marker(
                 client_log, "[qc2cpp-save-connected] replication", timeout=4)
             post_restore_prethink_count = events.get("client_prethink_count", 0)
@@ -660,9 +757,317 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
         process.close()
 
 
+def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
+    """Exercise real named reclaim, timeout, role, team, and slot handoffs."""
+    output.mkdir(parents=True, exist_ok=True)
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qcx-roster-{mode}-", dir="/tmp"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode)
+    client_basedir = prepare_client_directory(run_root, assets)
+    port = available_udp_port()
+    process = RunningProcess(server_command(server, basedir, mode, port), run_root / "server.log")
+    launched_clients = []
+
+    def start_client(label, name, team, spectator=False):
+        log = run_root / f"{label}.log"
+        output_file = log.open("w", encoding="utf-8")
+        process_handle = subprocess.Popen(
+            roster_client_command(client, client_basedir, port, name=name, team=team,
+                                  spectator=spectator),
+            stdout=output_file, stderr=subprocess.STDOUT, text=True)
+        output_file.close()
+        launched = label, process_handle, log
+        launched_clients.append(launched)
+        return launched
+
+    def require_live(name, *, spectator, team, slot=None, waiting=None, pending=None, timeout=12):
+        def matches(session):
+            record = roster_client(session, name)
+            if record is None:
+                return False
+            if record.get("spectator") is not spectator or record.get("team") != team:
+                return False
+            if slot is not None and record.get("slot") != slot:
+                return False
+            if waiting is not None and record.get("waiting") is not waiting:
+                return False
+            return pending is None or record.get("pending") is pending
+        return wait_restore_session(process, matches, timeout=timeout,
+            description=f"{name} did not reach expected restore state")
+
+    def save_roster(name):
+        process.send(f"save {name}")
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        path = basedir / "qw" / "save" / f"{name}.sav"
+        if not path.is_file() or path.read_bytes()[:4] != b"QCMS":
+            raise ProcessFailure(f"{name} did not create a QCMS save")
+
+    def load_roster(name, timeout_value):
+        process.send(f"qcx_restore_wait_timeout {timeout_value}")
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        process.send(f"load {name}")
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+        return wait_restore_session(process,
+            lambda session: session.get("waiting") is True and session.get("available", 0) > 0,
+            timeout=8, description=f"{name} did not begin a roster wait")
+
+    try:
+        assert_map_snapshot(
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
+
+        # Save a named player, then let a mismatched real QW client inspect the
+        # list and claim Alice by receiving a normal reliable `name` command.
+        source_alice = start_client("source-alice", "Alice", "red")
+        require_live("Alice", spectator=False, team="red", waiting=False)
+        source_events = wait_events(process,
+            lambda events: events.get("client_connect_count") == 1
+            and events.get("put_client_in_server_count") == 1,
+            timeout=12, description="source Alice did not become active")
+        save_roster("qcx-roster-one")
+        release_roster_clients(process, [source_alice])
+
+        initial_wait = load_roster("qcx-roster-one", 60)
+        if initial_wait.get("paused", 0) & 4 == 0:
+            raise ProcessFailure(f"roster load did not set restore pause: {initial_wait}")
+        # A rejected replacement leaves the current roster, pause bit, and
+        # deadline intact.  A later valid replacement installs a fresh wait
+        # (here: the explicit infinite timeout) rather than inheriting it.
+        one_save = basedir / "qw" / "save" / "qcx-roster-one.sav"
+        original_one_save = one_save.read_bytes()
+        one_save.write_bytes(b"QCMS\x02\x00")
+        process.send("load qcx-roster-one")
+        malformed_replacement = observe_restore_session(process, timeout=8)
+        if (not malformed_replacement.get("waiting")
+                or malformed_replacement.get("available") != 1
+                or (malformed_replacement.get("paused", 0) & 4) == 0
+                or malformed_replacement.get("remaining_seconds", 0) <= 0):
+            raise ProcessFailure(f"malformed replacement changed the active roster: {malformed_replacement}")
+        one_save.write_bytes(original_one_save)
+        replacement_wait = load_roster("qcx-roster-one", 0)
+        if replacement_wait.get("remaining_seconds") != 0:
+            raise ProcessFailure(f"valid replacement retained the old deadline: {replacement_wait}")
+        initial_wait = load_roster("qcx-roster-one", 60)
+        charlie = start_client("charlie-claim", "Charlie", "blue", spectator=True)
+        charlie_waiting = require_live("Charlie", spectator=True, team="blue", waiting=True)
+        if charlie_waiting.get("available") != 1 or charlie_waiting.get("bound") != 0:
+            raise ProcessFailure(f"mismatched client did not leave Alice available: {charlie_waiting}")
+        charlie_slot = roster_client(charlie_waiting, "Charlie").get("slot")
+        process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "cmd qcx_restore_list"',
+            "qc2cpp_test_stuff_client", timeout=8)
+        require_log_marker(charlie[2], "Alice [player, team=red]", timeout=8)
+        callbacks_before_claim = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "name Alice"',
+            "qc2cpp_test_stuff_client", timeout=8)
+        alice_pending = require_live("Alice", spectator=False, team="red", slot=0,
+            waiting=False, pending=True)
+        alice_pending_record = roster_client(alice_pending, "Alice")
+        if (alice_pending_record.get("userinfo_spectator") != ""
+                or alice_pending_record.get("userinfo_team") != "red"
+                or alice_pending_record.get("wire_spectator") != ""
+                or alice_pending_record.get("wire_team") != "red"):
+            raise ProcessFailure(
+                f"Alice did not receive saved player/red userinfo before begin: {alice_pending_record}")
+        role_events_after_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (role_events_after_alice.get("client_userinfo_before_count")
+                != callbacks_before_claim.get("client_userinfo_before_count") + 1
+                or role_events_after_alice.get("client_userinfo_after_count")
+                != callbacks_before_claim.get("client_userinfo_after_count") + 1):
+            raise ProcessFailure(
+                "Alice's name claim did not produce exactly its normal UserInfo_Changed pair: "
+                f"{role_events_after_alice}")
+        claimed = require_live("Alice", spectator=False, team="red", slot=0,
+            waiting=False, pending=False)
+        if claimed.get("waiting") or claimed.get("pending"):
+            raise ProcessFailure(f"Alice name claim did not finish the roster session: {claimed}")
+        claimed_alice = roster_client(claimed, "Alice")
+        if claimed_alice.get("edict_slot") != 1:
+            raise ProcessFailure(f"Alice did not reclaim saved player edict: {claimed}")
+        callbacks_after_claim = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (callbacks_after_claim.get("client_connect_count") != callbacks_before_claim.get("client_connect_count")
+                or callbacks_after_claim.get("put_client_in_server_count") != callbacks_before_claim.get("put_client_in_server_count")):
+            raise ProcessFailure(f"Alice claim replayed connect/put callbacks: {callbacks_after_claim}")
+        require_log_marker(charlie[2], "[qc2cpp-save-connected] replication", timeout=8)
+        release_roster_clients(process, [charlie])
+
+        # An unmatched client has no gameplay callbacks until timeout ends its
+        # network-only wait, and then receives exactly one ordinary spawn.
+        load_roster("qcx-roster-one", 1)
+        timeout_charlie = start_client("charlie-timeout", "Charlie", "blue")
+        require_live("Charlie", spectator=False, team="blue", waiting=True)
+        callbacks_before_timeout = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        timed_out = wait_restore_session(process,
+            lambda session: session.get("waiting") is False,
+            timeout=6, description="one-second restore timeout did not complete")
+        if timed_out.get("paused", 0) & 4:
+            raise ProcessFailure(f"restore pause survived timeout: {timed_out}")
+        timeout_events = wait_events(process,
+            lambda events: events.get("client_connect_count")
+                == callbacks_before_timeout.get("client_connect_count", 0) + 1
+            and events.get("put_client_in_server_count")
+                == callbacks_before_timeout.get("put_client_in_server_count", 0) + 1,
+            timeout=12, description="timeout client did not receive exactly one normal spawn")
+        if (timeout_events.get("client_connect_count") != callbacks_before_timeout.get("client_connect_count", 0) + 1
+                or timeout_events.get("put_client_in_server_count") != callbacks_before_timeout.get("put_client_in_server_count", 0) + 1):
+            raise ProcessFailure(f"timeout replayed client callbacks: {timeout_events}")
+        release_roster_clients(process, [timeout_charlie])
+
+        # Zero is an infinite operator wait: after two real seconds it is still
+        # paused, then the explicit command releases the same single normal spawn.
+        load_roster("qcx-roster-one", 0)
+        manual_charlie = start_client("charlie-manual", "Charlie", "blue")
+        manual_waiting = require_live("Charlie", spectator=False, team="blue", waiting=True)
+        callbacks_before_manual = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        time.sleep(2)
+        still_waiting = observe_restore_session(process, timeout=8)
+        if not still_waiting.get("waiting") or (still_waiting.get("paused", 0) & 4) == 0:
+            raise ProcessFailure(f"zero timeout progressed without operator action: {still_waiting}")
+        process.send("qcx_restore_continue")
+        wait_restore_session(process, lambda session: session.get("waiting") is False,
+            timeout=8, description="qcx_restore_continue did not finish the wait")
+        wait_events(process,
+            lambda events: events.get("client_connect_count")
+                == callbacks_before_manual.get("client_connect_count", 0) + 1
+            and events.get("put_client_in_server_count")
+                == callbacks_before_manual.get("put_client_in_server_count", 0) + 1,
+            timeout=12, description="manual continuation did not spawn Charlie exactly once")
+        release_roster_clients(process, [manual_charlie])
+
+        # Save two real participants. Bob reconnects first into his saved
+        # spectator slot while asking for player/red; Alice asks for
+        # spectator/blue. The roster wins both role/team conflicts and the
+        # final placement is a slot permutation rather than arrival order.
+        callbacks_before_two_source = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        source_alice = start_client("two-source-alice", "Alice", "red")
+        source_bob = start_client("two-source-bob", "Bob", "blue", spectator=True)
+        two_source = wait_restore_session(process,
+            lambda session: roster_client(session, "Alice") is not None
+            and roster_client(session, "Bob") is not None,
+            timeout=12, description="two source clients did not connect")
+        wait_events(process,
+            lambda events: events.get("client_connect_count")
+                == callbacks_before_two_source.get("client_connect_count", 0) + 2
+            and events.get("put_client_in_server_count")
+                == callbacks_before_two_source.get("put_client_in_server_count", 0) + 2,
+            timeout=12, description="two source clients did not finish signon")
+        source_alice_slot = roster_client(two_source, "Alice").get("slot")
+        source_bob_slot = roster_client(two_source, "Bob").get("slot")
+        if source_alice_slot == source_bob_slot:
+            raise ProcessFailure(f"two source clients share a physical slot: {two_source}")
+        save_roster("qcx-roster-two")
+        callbacks_before_two_restore = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        release_roster_clients(process, [source_alice, source_bob])
+
+        # An active restored identity returns to the available roster on a
+        # network drop, without delivering a QC ClientDisconnect callback.  A
+        # subsequent claimant restores it again and Bob completes the wait.
+        load_roster("qcx-roster-two", 60)
+        reclaim_alice = start_client("reclaim-alice", "Alice", "red")
+        reclaim_active = require_live("Alice", spectator=False, team="red",
+            slot=source_alice_slot, waiting=False, pending=False)
+        if reclaim_active.get("active") != 1 or reclaim_active.get("available") != 1:
+            raise ProcessFailure(f"first restored identity did not leave Bob available: {reclaim_active}")
+        reclaim_events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        process.observe(f"qc2cpp_test_release_client {source_alice_slot}",
+            "qc2cpp_test_release_client", timeout=8)
+        released_reclaim = wait_restore_session(process,
+            lambda session: session.get("waiting") is True
+            and session.get("available") == 2 and session.get("active") == 0
+            and roster_client(session, "Alice") is None,
+            timeout=8, description="dropped restored Alice did not return to the roster")
+        events_after_reclaim_drop = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events_after_reclaim_drop.get("client_disconnect_count") != reclaim_events.get("client_disconnect_count"):
+            raise ProcessFailure(f"restored reclaim delivered a QC disconnect callback: {events_after_reclaim_drop}")
+        reclaim_alice_again = start_client("reclaim-alice-again", "Alice", "red")
+        require_live("Alice", spectator=False, team="red", slot=source_alice_slot,
+            waiting=False, pending=False)
+        reclaim_bob = start_client("reclaim-bob", "Bob", "blue", spectator=True)
+        reclaim_complete = wait_restore_session(process,
+            lambda session: session.get("waiting") is False
+            and roster_client(session, "Alice") is not None
+            and roster_client(session, "Bob") is not None,
+            timeout=15, description="reclaimed Alice and Bob did not complete the roster")
+        if (roster_client(reclaim_complete, "Alice").get("slot") != source_alice_slot
+                or roster_client(reclaim_complete, "Bob").get("slot") != source_bob_slot):
+            raise ProcessFailure(f"reclaimed identities lost their saved slots: {reclaim_complete}")
+        reclaim_complete_events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (reclaim_complete_events.get("client_connect_count") != callbacks_before_two_restore.get("client_connect_count")
+                or reclaim_complete_events.get("put_client_in_server_count") != callbacks_before_two_restore.get("put_client_in_server_count")):
+            raise ProcessFailure(f"reclaim replayed restored callbacks: {reclaim_complete_events}")
+        release_roster_clients(process, [reclaim_alice_again, reclaim_bob])
+
+        # Re-load the same two-entry roster, but invert arrival order this time
+        # to prove that final physical slots are a saved-slot permutation.
+        load_roster("qcx-roster-two", 60)
+        target_bob = start_client("two-target-bob", "Bob", "red")
+        role_events_before_bob = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        bob_pending = require_live("Bob", spectator=True, team="blue", slot=source_bob_slot,
+            waiting=False, pending=True)
+        bob_pending_record = roster_client(bob_pending, "Bob")
+        if (bob_pending_record.get("userinfo_spectator") != "1"
+                or bob_pending_record.get("userinfo_team") != "blue"
+                or bob_pending_record.get("wire_spectator") != "1"
+                or bob_pending_record.get("wire_team") != "blue"):
+            raise ProcessFailure(
+                f"Bob did not receive saved userinfo before begin: {bob_pending_record}")
+        role_events_after_bob = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (role_events_after_bob.get("client_userinfo_before_count")
+                != role_events_before_bob.get("client_userinfo_before_count")
+                or role_events_after_bob.get("client_userinfo_after_count")
+                != role_events_before_bob.get("client_userinfo_after_count")):
+            raise ProcessFailure(f"Bob forced restore invoked UserInfo_Changed: {role_events_after_bob}")
+        bob_transport_identity = client_restore_identity(bob_pending_record)
+        target_alice = start_client("two-target-alice", "Alice", "blue", spectator=True)
+        role_events_before_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        alice_pending = require_live("Alice", spectator=False, team="red", slot=source_alice_slot,
+            waiting=False, pending=True)
+        alice_pending_record = roster_client(alice_pending, "Alice")
+        if (alice_pending_record.get("userinfo_spectator") != ""
+                or alice_pending_record.get("userinfo_team") != "red"
+                or alice_pending_record.get("wire_spectator") != ""
+                or alice_pending_record.get("wire_team") != "red"):
+            raise ProcessFailure(
+                f"Alice did not receive saved player/red userinfo before begin: {alice_pending_record}")
+        role_events_after_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (role_events_after_alice.get("client_userinfo_before_count")
+                != role_events_before_alice.get("client_userinfo_before_count")
+                or role_events_after_alice.get("client_userinfo_after_count")
+                != role_events_before_alice.get("client_userinfo_after_count")):
+            raise ProcessFailure(f"Alice forced restore invoked UserInfo_Changed: {role_events_after_alice}")
+        restored_two = wait_restore_session(process,
+            lambda session: session.get("waiting") is False
+            and roster_client(session, "Alice") is not None
+            and roster_client(session, "Bob") is not None,
+            timeout=15, description="two-client roster did not finish")
+        final_alice = roster_client(restored_two, "Alice")
+        final_bob = roster_client(restored_two, "Bob")
+        if (final_alice.get("slot") != source_alice_slot
+                or final_alice.get("edict_slot") != source_alice_slot + 1
+                or final_alice.get("spectator") is not False or final_alice.get("team") != "red"
+                or final_bob.get("slot") != source_bob_slot
+                or final_bob.get("edict_slot") != source_bob_slot + 1
+                or final_bob.get("spectator") is not True or final_bob.get("team") != "blue"):
+            raise ProcessFailure(f"roster role/team or physical permutation failed: {restored_two}")
+        if client_restore_identity(final_bob) != bob_transport_identity:
+            raise ProcessFailure(
+                f"Alice slot permutation corrupted Bob's userid or netchannel: "
+                f"before={bob_transport_identity}, after={client_restore_identity(final_bob)}")
+        final_events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if (final_events.get("client_connect_count") != callbacks_before_two_restore.get("client_connect_count")
+                or final_events.get("put_client_in_server_count") != callbacks_before_two_restore.get("put_client_in_server_count")):
+            raise ProcessFailure(f"restored identities replayed connect/put callbacks: {final_events}")
+        require_log_marker(target_alice[2], "[qc2cpp-save-connected] replication", timeout=8)
+        require_log_marker(target_bob[2], "[qc2cpp-save-connected] replication", timeout=8)
+        release_roster_clients(process, [target_alice, target_bob])
+    finally:
+        for _label, client_process, _client_log in launched_clients:
+            if client_process.poll() is None:
+                client_process.terminate()
+                client_process.wait(timeout=3)
+        process.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", choices=("map", "fatal", "restore-oom", "client", "network", "command-route", "spectator", "save", "cross-save", "save-connected"), required=True)
+    parser.add_argument("--suite", choices=("map", "fatal", "restore-oom", "client", "network", "command-route", "spectator", "save", "cross-save", "save-connected", "roster-restore"), required=True)
     parser.add_argument("--mode", choices=("native", "wasm"), required=True)
     parser.add_argument("--server", type=pathlib.Path, required=True)
     parser.add_argument("--artifacts", type=pathlib.Path, required=True)
@@ -701,6 +1106,12 @@ def main():
                 raise ProcessFailure("save-connected suite requires --client")
             require_file(args.client)
             run_connected_save_suite(
+                args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
+        elif args.suite == "roster-restore":
+            if args.client is None:
+                raise ProcessFailure("roster-restore suite requires --client")
+            require_file(args.client)
+            run_roster_restore_suite(
                 args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
         else:
             if args.client is None:

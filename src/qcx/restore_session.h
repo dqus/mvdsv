@@ -6,6 +6,14 @@
 
 #include <stdint.h>
 
+typedef struct qcx_restore_session_status_s {
+	qbool waiting;
+	double remaining_seconds;
+	uint32_t available_count;
+	uint32_t bound_count;
+	uint32_t active_count;
+} qcx_restore_session_status_t;
+
 qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image,
 	double monotonic_now);
 void QCX_RestoreSessionInit(void);
@@ -13,6 +21,8 @@ void QCX_RestoreSessionContinue(void);
 void QCX_RestoreSessionCancel(void);
 qbool QCX_RestoreSessionBlocksSave(void);
 qbool QCX_RestoreSessionWaiting(void);
+void QCX_RestoreSessionGetStatus(qcx_restore_session_status_t *out,
+	double monotonic_now);
 qbool QCX_RestoreSessionSlotReserved(uint32_t slot);
 qbool QCX_RestoreSessionAdmissionRole(const char *raw_name, qbool *spectator);
 client_t *QCX_RestoreSessionAdmissionSlot(const char *raw_name);

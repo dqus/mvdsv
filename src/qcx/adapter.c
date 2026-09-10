@@ -230,6 +230,9 @@ uint32_t QCX_ClientUserInfoChanged(qcx_entity_id_t self, uint32_t after)
 	QCX_AdapterStateEnter(&qcx_state);
 	const uint32_t result = game->client_userinfo_changed(game->context, self, after);
 	QCX_AdapterStateLeave(&qcx_state);
+#if defined(QCX_TESTS)
+	QCX_TestObserverClientUserInfoChanged(after);
+#endif
 	return result;
 }
 
