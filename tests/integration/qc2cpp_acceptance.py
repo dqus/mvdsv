@@ -176,10 +176,14 @@ def connected_save_client_command(client, basedir, port):
         "+connect", f"127.0.0.1:{port}"]
 
 
-def roster_client_command(client, basedir, port, *, name, team, spectator=False):
-    command = [str(client.resolve()), "-qc2cpp-save-connected-acceptance", "-nosound",
-        "-basedir", str(basedir.resolve()), "-game", "qw",
+def roster_client_command(client, basedir, port, *, name, team, spectator=False,
+                          acceptance=True):
+    command = [str(client.resolve()), "-nosound", "-basedir", str(basedir.resolve()), "-game", "qw",
         "+set", "name", name, "+set", "team", team]
+    if acceptance:
+        command.insert(1, "-qc2cpp-save-connected-acceptance")
+    else:
+        command += ["+set", "vid_renderer", "headless"]
     if spectator:
         command += ["+set", "spectator", "1"]
     return command + ["+connect", f"127.0.0.1:{port}"]

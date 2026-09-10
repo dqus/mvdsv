@@ -26,6 +26,7 @@ set(expected_fast
 	qcx_entities
 	qcx_services_world
 	qcx_client
+	qcx_client_command_payload
 	qcx_client_routes
 	qcx_pr2_api_routes
 	qcx_reentry
@@ -45,6 +46,9 @@ set(expected_fast
 	qcx_legacy_optional_fields_pr2
 	qcx_save_format
 	qcx_restore
+	qcx_restore_roster
+	qcx_restore_session
+	qcx_restore_routes
 	qc2cpp_profile_tool
 	qcx_label_contract)
 
@@ -61,6 +65,10 @@ set(expected_integration
 	qc2cpp_network_native
 	qc2cpp_spectator_native
 	qc2cpp_save_connected_native
+	qc2cpp_roster_restore_native
+	qc2cpp_qwsp_monsters_native
+	qc2cpp_qwsp_command_route_native
+	qc2cpp_qwsp_restore_native
 	qc2cpp_server_map_wasm
 	qc2cpp_legacy_strings_wasm
 	qc2cpp_optional_fields_wasm
@@ -71,7 +79,13 @@ set(expected_integration
 	qc2cpp_save_wasm_native
 	qc2cpp_network_wasm
 	qc2cpp_spectator_wasm
-	qc2cpp_save_connected_wasm)
+	qc2cpp_save_connected_wasm
+	qc2cpp_roster_restore_wasm
+	qc2cpp_qwsp_monsters_wasm
+	qc2cpp_qwsp_command_route_wasm
+	qc2cpp_qwsp_restore_wasm
+	qc2cpp_qwsp_restore_native_wasm
+	qc2cpp_qwsp_restore_wasm_native)
 
 string(JSON test_count LENGTH "${ctest_json}" tests)
 math(EXPR last_test "${test_count} - 1")
