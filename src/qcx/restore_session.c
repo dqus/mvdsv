@@ -140,6 +140,22 @@ static void QCX_RestoreSessionQueueRestoredNew(client_t *client)
 	 * new direct-connect or ClientConnect callback. */
 	ClientReliableWrite_Begin(client, svc_stufftext, 20);
 	ClientReliableWrite_String(client, "changing\nreconnect\n");
+	client->send_message = true;
+}
+
+static void QCX_RestoreSessionQueueWaitingNew(client_t *client)
+{
+	/* A newcomer in the restore list was deliberately held before serverdata,
+	 * so starting its normal QW signon is now a server-side action.  This avoids
+	 * depending on an extra client command after its name update; it is the same
+	 * Cmd_New_f path an ordinary `new` request reaches.  The roster-list reply
+	 * may still occupy the one reliable retransmit slot, so discard that
+	 * deliberately obsolete pre-serverdata stream before queueing serverdata. */
+	SV_ClearReliable(client);
+	client->netchan.reliable_length = 0;
+	client->netchan.last_reliable_sequence = client->netchan.outgoing_sequence;
+	SV_QCXStartClientSignon(client);
+	client->send_message = true;
 }
 
 static void QCX_RestoreSessionRestoreOriginalIdentity(client_t *client)
@@ -416,6 +432,34 @@ qbool QCX_RestoreSessionWaiting(void)
 	return qcx_restore_session.state == QCX_RESTORE_SESSION_WAITING;
 }
 
+void QCX_RestoreSessionGetStatus(qcx_restore_session_status_t *out,
+	double monotonic_now)
+{
+	uint32_t index;
+	if (out == NULL) return;
+	memset(out, 0, sizeof(*out));
+	out->waiting = QCX_RestoreSessionWaiting();
+	if (!out->waiting) return;
+	if (qcx_restore_session.deadline > monotonic_now) {
+		out->remaining_seconds = qcx_restore_session.deadline - monotonic_now;
+	}
+	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
+		switch (qcx_restore_session.roster.entries[index].state) {
+		case QCX_RESTORE_ENTRY_AVAILABLE:
+			++out->available_count;
+			break;
+		case QCX_RESTORE_ENTRY_BOUND:
+			++out->bound_count;
+			break;
+		case QCX_RESTORE_ENTRY_ACTIVE:
+			++out->active_count;
+			break;
+		case QCX_RESTORE_ENTRY_ABANDONED:
+			break;
+		}
+	}
+}
+
 qbool QCX_RestoreSessionSlotReserved(uint32_t slot)
 {
 	uint32_t index;
@@ -514,7 +558,7 @@ static void QCX_RestoreSessionFinish(qbool abandon)
 			QCX_RestoreSessionQueueRestoredNew(client);
 		} else if (client->qcx_restore_waiting) {
 			QCX_RestoreSessionClearClientFlags(client);
-			QCX_RestoreSessionQueueRestoredNew(client);
+			QCX_RestoreSessionQueueWaitingNew(client);
 		} else {
 			QCX_RestoreSessionClearClientFlags(client);
 			QCX_RestoreSessionClearClientOriginalIdentity(client);
@@ -545,6 +589,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 	uint32_t index;
 	uint32_t slot;
 	qbool was_waiting[MAX_CLIENTS];
+	qbool queue_waiting_new[QCX_SAVE_MAX_CLIENTS];
 	(void)monotonic_now;
 	if (!QCX_RestoreSessionWaiting()) return;
 	if (QCX_RestoreRosterAllActive(&qcx_restore_session.roster)) {
@@ -559,6 +604,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 	}
 	if (!qcx_restore_session.dirty) return;
 	qcx_restore_session.dirty = false;
+	memset(queue_waiting_new, 0, sizeof(queue_waiting_new));
 
 	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
 		qcx_restore_roster_entry_t *const entry = &qcx_restore_session.roster.entries[index];
@@ -597,7 +643,11 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 				&qcx_restore_session.roster.entries[index].saved);
 			if (was_waiting[client_slot]
 				&& !qcx_restore_session.initial_handshake_pending) {
-				QCX_RestoreSessionQueueRestoredNew(client);
+				/* The binding is about to move the client object to its saved
+				 * slot.  Defer queuing the fresh `new` request until that
+				 * permutation has completed, so the reliable message stays with
+				 * the netchannel that will receive serverdata. */
+				queue_waiting_new[index] = true;
 			}
 		}
 	}
@@ -618,6 +668,14 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			&& (uint32_t)client_slot != entry->saved.saved_slot) {
 			QCX_RestoreSessionSwapClients((uint32_t)client_slot,
 				entry->saved.saved_slot);
+		}
+	}
+	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
+		int client_slot;
+		if (!queue_waiting_new[index]) continue;
+		client_slot = QCX_RestoreSessionFindClientForRoster(index);
+		if (client_slot >= 0) {
+			QCX_RestoreSessionQueueWaitingNew(&svs.clients[client_slot]);
 		}
 	}
 	if (qcx_restore_session.initial_handshake_pending) {
