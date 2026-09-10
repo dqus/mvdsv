@@ -290,6 +290,12 @@ if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
             --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
             --output "${qc2cpp_acceptance_root}/runs/save-connected-native"
             --client "${qc2cpp_fte_client}")
+    add_test(NAME qc2cpp_roster_restore_native
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+            --suite roster-restore --mode native --server $<TARGET_FILE:mvdsv>
+            --artifacts "${qc2cpp_native_build}" --assets "${qc2cpp_assets}"
+            --output "${qc2cpp_acceptance_root}/runs/roster-restore-native"
+            --client "${qc2cpp_fte_client}")
 endif()
 
 if(MVDSV_QC2CPP_WASM)
@@ -473,6 +479,12 @@ if(MVDSV_QC2CPP_WASM)
                 --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
                 --output "${qc2cpp_acceptance_root}/runs/save-connected-wasm"
                 --client "${qc2cpp_fte_client}")
+        add_test(NAME qc2cpp_roster_restore_wasm
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
+                --suite roster-restore --mode wasm --server $<TARGET_FILE:mvdsv>
+                --artifacts "${qc2cpp_wasm_build}" --assets "${qc2cpp_assets}"
+                --output "${qc2cpp_acceptance_root}/runs/roster-restore-wasm"
+                --client "${qc2cpp_fte_client}")
     endif()
 endif()
 
@@ -488,6 +500,7 @@ foreach(test_name IN ITEMS
 	qc2cpp_network_native
 	qc2cpp_spectator_native
 	qc2cpp_save_connected_native
+	qc2cpp_roster_restore_native
 	qc2cpp_qwsp_monsters_native
 	qc2cpp_qwsp_command_route_native
 	qc2cpp_server_map_wasm
@@ -501,6 +514,7 @@ foreach(test_name IN ITEMS
 	qc2cpp_network_wasm
 	qc2cpp_spectator_wasm
 	qc2cpp_save_connected_wasm
+	qc2cpp_roster_restore_wasm
 	qc2cpp_qwsp_monsters_wasm
 	qc2cpp_qwsp_command_route_wasm)
 	if(TEST ${test_name})
