@@ -113,7 +113,6 @@ void QCX_UnloadProgs(void)
 	QCX_ClearGlobals();
 	QCX_ClearEntities();
 	qcx_published = false;
-	QCX_SaveInvalidateConnectedSnapshot();
 	QCX_TransportClose(qcx_transport);
 	qcx_transport = NULL;
 
@@ -204,7 +203,6 @@ static const qcx_game_api_v1_t *QCX_RequireGame(const char *entry)
 void QCX_ClientConnect(qcx_entity_id_t self, uint32_t spectator)
 {
 	QCX_CALL_CLIENT("client connect", game->client_connect(game->context, self, spectator));
-	QCX_SaveInvalidateConnectedSnapshot();
 #if defined(QCX_TESTS)
 	QCX_TestObserverClientConnect(self);
 #endif
@@ -221,7 +219,6 @@ void QCX_PutClientInServer(qcx_entity_id_t self, uint32_t spectator)
 void QCX_ClientDisconnect(qcx_entity_id_t self, uint32_t spectator)
 {
 	QCX_CALL_CLIENT("client disconnect", game->client_disconnect(game->context, self, spectator));
-	QCX_SaveInvalidateConnectedSnapshot();
 #if defined(QCX_TESTS)
 	QCX_TestObserverClientDisconnect();
 #endif

@@ -1,6 +1,10 @@
 #include "qcx/restore_session.h"
 
 #include "qcx/restore_roster.h"
+#include "qcx/save.h"
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#endif
 
 #include <string.h>
 
@@ -15,9 +19,16 @@ typedef struct qcx_restore_session_s {
 	qcx_restore_roster_t roster;
 	uint32_t slot_capacity;
 	qbool dirty;
+	double deadline;
+	qbool continue_requested;
+	qbool initial_handshake_pending;
 } qcx_restore_session_t;
 
 static qcx_restore_session_t qcx_restore_session;
+cvar_t qcx_restore_wait_timeout = {"qcx_restore_wait_timeout", "60", CVAR_NONE, NULL,
+	0.0f, NULL, NULL};
+
+static void QCX_RestoreSessionReset(qbool notify_clients);
 
 extern void MVD_PlayerReset(int player);
 
@@ -39,6 +50,13 @@ static void QCX_RestoreSessionClearClientFlags(client_t *client)
 	client->qcx_restore_waiting = false;
 	client->qcx_restore_pending = false;
 	client->qcx_restore_roster_index = -1;
+}
+
+static void QCX_RestoreSessionClearClientOriginalIdentity(client_t *client)
+{
+	client->qcx_restore_has_original_identity = false;
+	client->qcx_restore_original_spectator = false;
+	client->qcx_restore_original_team[0] = '\0';
 }
 
 static void QCX_RestoreSessionRepairClient(client_t *client, uint32_t slot)
@@ -81,6 +99,12 @@ static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
 	const qcx_save_roster_entry_t *saved)
 {
 	const qbool spectator = saved->role == QCX_SAVE_ROLE_SPECTATOR;
+	if (!client->qcx_restore_has_original_identity) {
+		client->qcx_restore_has_original_identity = true;
+		client->qcx_restore_original_spectator = client->spectator != 0;
+		strlcpy(client->qcx_restore_original_team, client->team,
+			sizeof(client->qcx_restore_original_team));
+	}
 	client->spectator = spectator;
 	if (spectator) {
 		(void)Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
@@ -97,6 +121,7 @@ static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
 		(void)Info_Set(&client->_userinfoshort_ctx_, "team", saved->team);
 	}
 	strlcpy(client->team, saved->team, sizeof(client->team));
+	memcpy(client->spawn_parms, saved->spawn_parms, sizeof(client->spawn_parms));
 	SV_ClientPrintf(client, PRINT_HIGH, "Restoring saved identity as %s%s%s.\n",
 		spectator ? "spectator" : "player", saved->team[0] == '\0' ? "" : " on team ",
 		saved->team[0] == '\0' ? "" : saved->team);
@@ -104,9 +129,41 @@ static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
 
 static void QCX_RestoreSessionQueueRestoredNew(client_t *client)
 {
+	/* The usual map path normally does this in SV_SaveSpawnparms.  Keep the
+	 * requirement local to the restore handoff as well, so Cmd_New_f cannot
+	 * discard the client's new signon while it is still marked spawned. */
+	if (client->state == cs_spawned) client->state = cs_connected;
 	SV_ClearReliable(client);
-	ClientReliableWrite_Begin(client, svc_stufftext, 10);
-	ClientReliableWrite_String(client, "cmd new\n");
+	/* An active QW client must first leave its old signon state.  FTE (and
+	 * ordinary QW clients) implements this pair as a same-netchannel fresh
+	 * handshake: changing makes it connected, reconnect sends `new` without a
+	 * new direct-connect or ClientConnect callback. */
+	ClientReliableWrite_Begin(client, svc_stufftext, 20);
+	ClientReliableWrite_String(client, "changing\nreconnect\n");
+}
+
+static void QCX_RestoreSessionRestoreOriginalIdentity(client_t *client)
+{
+	if (!client->qcx_restore_has_original_identity) return;
+	client->spectator = client->qcx_restore_original_spectator;
+	if (client->spectator) {
+		(void)Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
+		(void)Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
+	} else {
+		(void)Info_Remove(&client->_userinfo_ctx_, "*spectator");
+		(void)Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
+	}
+	if (client->qcx_restore_original_team[0] == '\0') {
+		(void)Info_Remove(&client->_userinfo_ctx_, "team");
+		(void)Info_Remove(&client->_userinfoshort_ctx_, "team");
+	} else {
+		(void)Info_Set(&client->_userinfo_ctx_, "team",
+			client->qcx_restore_original_team);
+		(void)Info_Set(&client->_userinfoshort_ctx_, "team",
+			client->qcx_restore_original_team);
+	}
+	strlcpy(client->team, client->qcx_restore_original_team, sizeof(client->team));
+	QCX_RestoreSessionClearClientOriginalIdentity(client);
 }
 
 static void QCX_RestoreSessionSwapClients(uint32_t left_slot, uint32_t right_slot)
@@ -271,32 +328,82 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 {
 	qcx_restore_roster_t roster;
 	uint32_t slot;
+	float timeout;
 	(void)monotonic_now;
 	if (!QCX_RestoreSessionImageIsValid(image)
 		|| !QCX_RestoreRosterInit(&roster, image->roster, image->roster_count)) {
 		return false;
 	}
-	QCX_RestoreSessionCancel();
+	QCX_RestoreSessionReset(false);
 	qcx_restore_session.roster = roster;
 	qcx_restore_session.slot_capacity = image->metadata.client_slot_capacity;
 	qcx_restore_session.state = image->roster_count == 0U
 		? QCX_RESTORE_SESSION_COMPLETE : QCX_RESTORE_SESSION_WAITING;
 	qcx_restore_session.dirty = image->roster_count != 0U;
+	timeout = qcx_restore_wait_timeout.value;
+	if (timeout < 0.0f) {
+		Cvar_SetValue(&qcx_restore_wait_timeout, 0.0f);
+		timeout = 0.0f;
+	}
+	qcx_restore_session.deadline = timeout > 0.0f ? monotonic_now + timeout : 0.0;
+	qcx_restore_session.initial_handshake_pending = image->roster_count != 0U;
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		QCX_RestoreSessionClearClientFlags(&svs.clients[slot]);
+		QCX_RestoreSessionClearClientOriginalIdentity(&svs.clients[slot]);
+		if (image->roster_count != 0U
+			&& QCX_RestoreSessionClientIsLive(&svs.clients[slot])) {
+			svs.clients[slot].qcx_restore_waiting = true;
+		}
 	}
+	SV_SetPauseReason(SV_PAUSE_RESTORE, image->roster_count != 0U, NULL, false);
 	return true;
+}
+
+static void QCX_RestoreSessionContinueCommand(void)
+{
+	if (!QCX_RestoreSessionWaiting()) {
+		Con_Printf("No QCX restore session is waiting.\n");
+		return;
+	}
+	qcx_restore_session.continue_requested = true;
+}
+
+void QCX_RestoreSessionInit(void)
+{
+	Cvar_Register(&qcx_restore_wait_timeout);
+	Cmd_AddCommand("qcx_restore_continue", QCX_RestoreSessionContinueCommand);
+}
+
+void QCX_RestoreSessionContinue(void)
+{
+	if (QCX_RestoreSessionWaiting()) qcx_restore_session.continue_requested = true;
+}
+
+static void QCX_RestoreSessionReset(qbool notify_clients)
+{
+	uint32_t slot;
+	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
+		client_t *const client = &svs.clients[slot];
+		QCX_RESTORE_SESSION_VISIT_SLOT();
+		/* A bound identity has not reached Cmd_Begin yet.  A replacement map
+		 * must not carry its saved spectator/team choice into an unrelated
+		 * session.  Active identities, on the other hand, have completed their
+		 * restore and keep the saved choice across an ordinary map change. */
+		if (client->qcx_restore_pending
+			&& QCX_RestoreSessionClientIsLive(client)) {
+			QCX_RestoreSessionRestoreOriginalIdentity(client);
+		}
+		QCX_RestoreSessionClearClientFlags(client);
+		QCX_RestoreSessionClearClientOriginalIdentity(client);
+	}
+	memset(&qcx_restore_session, 0, sizeof(qcx_restore_session));
+	SV_SetPauseReason(SV_PAUSE_RESTORE, false, NULL, notify_clients);
 }
 
 void QCX_RestoreSessionCancel(void)
 {
-	uint32_t slot;
-	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
-		QCX_RESTORE_SESSION_VISIT_SLOT();
-		QCX_RestoreSessionClearClientFlags(&svs.clients[slot]);
-	}
-	memset(&qcx_restore_session, 0, sizeof(qcx_restore_session));
+	QCX_RestoreSessionReset(true);
 }
 
 qbool QCX_RestoreSessionBlocksSave(void)
@@ -373,13 +480,84 @@ void QCX_RestoreSessionNameChanged(client_t *client)
 	if (QCX_RestoreSessionWaiting()) qcx_restore_session.dirty = true;
 }
 
+static void QCX_RestoreSessionFinish(qbool abandon)
+{
+	uint32_t index;
+	uint32_t slot;
+	client_t *const saved_client = sv_client;
+	edict_t *const saved_player = sv_player;
+	if (abandon) {
+		for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
+			const qcx_restore_roster_entry_t *const entry =
+				&qcx_restore_session.roster.entries[index];
+			edict_t *const edict = &sv.edicts[entry->saved.saved_slot + 1U];
+			if (entry->state == QCX_RESTORE_ENTRY_ACTIVE) continue;
+			sv_client = &svs.clients[entry->saved.saved_slot];
+			sv_player = edict;
+			if (entry->saved.spawned != 0U) {
+				PR_GameClientDisconnect(entry->saved.role == QCX_SAVE_ROLE_SPECTATOR);
+			}
+			ED_Free(edict);
+		}
+		QCX_RestoreRosterAbandonNonActive(&qcx_restore_session.roster);
+	}
+	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
+		client_t *const client = &svs.clients[slot];
+		if (!QCX_RestoreSessionClientIsLive(client)) {
+			QCX_RestoreSessionClearClientFlags(client);
+			QCX_RestoreSessionClearClientOriginalIdentity(client);
+			continue;
+		}
+		if (client->qcx_restore_pending) {
+			QCX_RestoreSessionRestoreOriginalIdentity(client);
+			QCX_RestoreSessionClearClientFlags(client);
+			QCX_RestoreSessionQueueRestoredNew(client);
+		} else if (client->qcx_restore_waiting) {
+			QCX_RestoreSessionClearClientFlags(client);
+			QCX_RestoreSessionQueueRestoredNew(client);
+		} else {
+			QCX_RestoreSessionClearClientFlags(client);
+			QCX_RestoreSessionClearClientOriginalIdentity(client);
+		}
+	}
+	sv_client = saved_client;
+	sv_player = saved_player;
+	memset(&qcx_restore_session.roster, 0, sizeof(qcx_restore_session.roster));
+	qcx_restore_session.deadline = 0.0;
+	qcx_restore_session.continue_requested = false;
+	qcx_restore_session.initial_handshake_pending = false;
+	qcx_restore_session.dirty = false;
+	qcx_restore_session.state = QCX_RESTORE_SESSION_COMPLETE;
+	SV_SetPauseReason(SV_PAUSE_RESTORE, false, NULL, true);
+	if (!abandon) {
+#if defined(QCX_TESTS)
+		QCX_TestObserverRestoreReplicationBegin();
+#endif
+		QCX_RefreshClientReplication();
+#if defined(QCX_TESTS)
+		QCX_TestObserverRestoreReplicationComplete();
+#endif
+	}
+}
+
 void QCX_RestoreSessionFrame(double monotonic_now)
 {
 	uint32_t index;
 	uint32_t slot;
 	qbool was_waiting[MAX_CLIENTS];
 	(void)monotonic_now;
-	if (!QCX_RestoreSessionWaiting() || !qcx_restore_session.dirty) return;
+	if (!QCX_RestoreSessionWaiting()) return;
+	if (QCX_RestoreRosterAllActive(&qcx_restore_session.roster)) {
+		QCX_RestoreSessionFinish(false);
+		return;
+	}
+	if (qcx_restore_session.continue_requested
+		|| (qcx_restore_session.deadline > 0.0
+			&& monotonic_now >= qcx_restore_session.deadline)) {
+		QCX_RestoreSessionFinish(true);
+		return;
+	}
+	if (!qcx_restore_session.dirty) return;
 	qcx_restore_session.dirty = false;
 
 	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
@@ -388,6 +566,10 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			(void)QCX_RestoreRosterRelease(&qcx_restore_session.roster,
 				entry->saved.saved_slot);
 		}
+	}
+	if (QCX_RestoreRosterAllActive(&qcx_restore_session.roster)) {
+		QCX_RestoreSessionFinish(false);
+		return;
 	}
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
@@ -413,7 +595,10 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			client->qcx_restore_roster_index = (int)index;
 			QCX_RestoreSessionApplySavedIdentity(client,
 				&qcx_restore_session.roster.entries[index].saved);
-			if (was_waiting[client_slot]) QCX_RestoreSessionQueueRestoredNew(client);
+			if (was_waiting[client_slot]
+				&& !qcx_restore_session.initial_handshake_pending) {
+				QCX_RestoreSessionQueueRestoredNew(client);
+			}
 		}
 	}
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
@@ -434,6 +619,16 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			QCX_RestoreSessionSwapClients((uint32_t)client_slot,
 				entry->saved.saved_slot);
 		}
+	}
+	if (qcx_restore_session.initial_handshake_pending) {
+		for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
+			client_t *const client = &svs.clients[slot];
+			QCX_RESTORE_SESSION_VISIT_SLOT();
+			if (QCX_RestoreSessionClientIsLive(client)) {
+				QCX_RestoreSessionQueueRestoredNew(client);
+			}
+		}
+		qcx_restore_session.initial_handshake_pending = false;
 	}
 }
 
@@ -486,6 +681,15 @@ void QCX_RestoreSessionPrintRoster(client_t *client)
 	}
 	SV_ClientPrintf(client, PRINT_HIGH,
 		"Change your name to restore a saved player. Use \"cmd qcx_restore_list\" to show this list again.\n");
+	if (qcx_restore_session.deadline > 0.0) {
+		const double remaining = qcx_restore_session.deadline - Sys_DoubleTime();
+		SV_ClientPrintf(client, PRINT_HIGH,
+			"Otherwise you will join as a new player in %d seconds.\n",
+			(int)(remaining > 0.0 ? remaining : 0.0));
+	} else {
+		SV_ClientPrintf(client, PRINT_HIGH,
+			"Manual continuation is required before unmatched clients can join.\n");
+	}
 }
 
 qbool QCX_RestoreSessionPrepareSpawn(client_t *client)
@@ -514,6 +718,7 @@ qbool QCX_RestoreSessionBegin(client_t *client)
 	}
 	client->qcx_restore_pending = false;
 	client->qcx_restore_waiting = false;
+	qcx_restore_session.dirty = true;
 	return true;
 }
 
@@ -527,6 +732,7 @@ qbool QCX_RestoreSessionClientDropped(client_t *client)
 		return false;
 	}
 	QCX_RestoreSessionClearClientFlags(client);
+	QCX_RestoreSessionClearClientOriginalIdentity(client);
 	qcx_restore_session.dirty = true;
 	return true;
 }

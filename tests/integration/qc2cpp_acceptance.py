@@ -468,8 +468,12 @@ def run_save_suite(server, artifacts, assets, output, mode):
             raise ProcessFailure(
                 f"qc2cpp load replaced published globals: {saved_snapshot} -> {after_load}")
         events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
-        if events.get("init_count") != 1:
-            raise ProcessFailure(f"qc2cpp load replayed game initialization: {events}")
+        # A same-process QCMS load deliberately builds a new QCX/map session.
+        # It must do exactly one orderly unpublish and one replacement init;
+        # gameplay hooks remain covered by the observer's init invariants.
+        if (events.get("init_count") != 2
+                or events.get("normal_unpublish_count") != 1):
+            raise ProcessFailure(f"qc2cpp load did not use one fresh game session: {events}")
         restored_game_state = process.observe(
             "qc2cpp_test_save_state read", "qc2cpp_test_save_state", timeout=8)
         assert_saved_game_state(restored_game_state, saved_game_state["probe_think"])
@@ -548,7 +552,7 @@ def run_cross_save_suite(server, source_artifacts, destination_artifacts, assets
 
 
 def run_connected_save_suite(server, artifacts, assets, output, mode, client):
-    """A connected snapshot restores only while its original QW client remains live."""
+    """A connected snapshot fresh-restores while its original QW client remains live."""
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qcc-{mode}-", dir="/tmp"))
     basedir = prepare_game_directory(run_root, assets, artifacts, mode)
@@ -596,14 +600,26 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
             if after_load.get("globals_address") != saved.get("globals_address"):
                 raise ProcessFailure(
                     f"connected QCMS replaced published globals: {saved} -> {after_load}")
-            events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+            # Fresh signon is asynchronous: the retained QW client must run
+            # new/soundlist/modellist/prespawn/spawn/begin before the roster
+            # can release restore-pause and rebuild replication.
+            deadline = time.monotonic() + 8
+            while True:
+                events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=1)
+                if (events.get("restore_replication_begin_count") == 1
+                        and events.get("restore_replication_complete_count") == 1):
+                    break
+                if time.monotonic() >= deadline:
+                    raise ProcessFailure(f"connected QCMS did not complete fresh client signon: {events}")
+                time.sleep(0.05)
+            # The client is reconciled to its saved player entity and uses the
+            # restored signon path, so no second ClientConnect/PutClientInServer
+            # is allowed; the game itself is freshly initialized exactly once.
             if (events.get("client_connect_count", 0) != 1
                     or events.get("put_client_in_server_count", 0) != 1
-                    or events.get("init_count") != 1):
-                raise ProcessFailure(f"connected QCMS replayed player or game startup: {events}")
-            if (events.get("restore_replication_begin_count") != 1
-                    or events.get("restore_replication_complete_count") != 1):
-                raise ProcessFailure(f"connected QCMS did not rebuild replication: {events}")
+                    or events.get("init_count") != 2
+                    or events.get("normal_unpublish_count") != 1):
+                raise ProcessFailure(f"connected QCMS did not preserve fresh restore invariants: {events}")
             require_log_marker(
                 client_log, "[qc2cpp-save-connected] replication", timeout=4)
             post_restore_prethink_count = events.get("client_prethink_count", 0)
@@ -624,60 +640,19 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
         process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
         if not client_free_path.is_file() or client_free_path.read_bytes()[:4] != b"QCMS":
             raise ProcessFailure("client-free QCMS replacement save was not created")
-        before_rejected_load = process.observe(
+        # Connected QCMS files are no longer authorized by an in-memory save
+        # token.  With no matching client present, an older file fresh-loads
+        # into the restore wait; the operator can then abandon its roster.
+        before_waiting_load = process.observe(
             "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
         process.send("load qc2cpp-connected")
-        after_rejected_load = process.observe(
+        after_waiting_load = process.observe(
             "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
-        if after_rejected_load.get("time", 0) < before_rejected_load.get("time", 0):
+        if after_waiting_load.get("time", 0) >= before_waiting_load.get("time", 0):
             raise ProcessFailure(
-                "a client-free replacement save re-authorized an old connected QCMS snapshot")
-
-        # The authorization is snapshot-local, not a client identity token: a
-        # new real client may occupy the same server slot but must not recover
-        # the old client's image.
-        reused_userid = process.observe(
-            f"qc2cpp_test_reuse_userid {first_userid}",
-            "qc2cpp_test_userid", timeout=8)
-        if reused_userid.get("userid") != first_userid:
-            raise ProcessFailure(f"server rejected userid reuse setup: {reused_userid}")
-        second_client_log = run_root / "client-reconnect.log"
-        with second_client_log.open("w", encoding="utf-8") as output_file:
-            client_process = subprocess.Popen(
-                connected_save_client_command(client, client_basedir, port),
-                stdout=output_file, stderr=subprocess.STDOUT, text=True)
-        deadline = time.monotonic() + 12
-        while True:
-            if client_process.poll() is not None:
-                raise ProcessFailure("replacement FTE client exited before becoming active")
-            if time.monotonic() >= deadline:
-                raise ProcessFailure("replacement FTE client did not become active")
-            events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=1)
-            if (events.get("client_connect_count", 0) == 2
-                    and events.get("put_client_in_server_count", 0) == 2):
-                break
-            time.sleep(0.05)
-        if events.get("last_client_userid") != first_userid:
-            raise ProcessFailure(
-                f"replacement client did not reuse the saved userid: {events}")
-        before_reconnect_rejection = process.observe(
-            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
-        process.send("load qc2cpp-connected")
-        after_reconnect_rejection = process.observe(
-            "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
-        if after_reconnect_rejection.get("time", 0) < before_reconnect_rejection.get("time", 0):
-            raise ProcessFailure(
-                "a replacement client re-authorized an old connected QCMS snapshot")
-        released = process.observe(
-            "qc2cpp_test_release_connected_client",
-            "qc2cpp_test_release_connected_client", timeout=8)
-        if released.get("released") is not True:
-            raise ProcessFailure("server did not release replacement connected-save client")
-        if client_process.wait(timeout=15) != 0:
-            raise ProcessFailure("replacement connected-save FTE client failed")
-        events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
-        if events.get("client_disconnect_count", 0) != 2:
-            raise ProcessFailure(f"replacement client disconnect was not observed: {events}")
+                "a client-free restore did not load the older connected QCMS snapshot")
+        process.send("qcx_restore_continue")
+        process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
     finally:
         if client_process is not None and client_process.poll() is None:
             client_process.terminate()
