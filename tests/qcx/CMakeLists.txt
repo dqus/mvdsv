@@ -532,7 +532,7 @@ set_target_properties(qcx_save_format_test PROPERTIES
 	C_STANDARD_REQUIRED YES
 	C_EXTENSIONS OFF)
 target_include_directories(qcx_save_format_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
-target_compile_options(qcx_save_format_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_save_format_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_link_libraries(qcx_save_format_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_save_format COMMAND qcx_save_format_test)
 
@@ -546,7 +546,7 @@ set_target_properties(qcx_restore_test PROPERTIES
 target_include_directories(qcx_restore_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
-target_compile_options(qcx_restore_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_restore_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_restore_test PRIVATE
 	QCX_ENABLED=1
 	QCX_NATIVE=1
