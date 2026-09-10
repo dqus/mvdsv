@@ -62,6 +62,7 @@ static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
 static void QCX_TestModelPresence_f(void);
 static void QCX_TestQwspMonster_f(void);
+static void QCX_TestQwspSave_f(void);
 static void QCX_TestRestoreSession_f(void);
 static void QCX_TestStuffClient_f(void);
 static void QCX_TestReleaseClient_f(void);
@@ -272,6 +273,7 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
 	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_monster", QCX_TestQwspMonster_f);
+	Cmd_AddCommand("qc2cpp_test_qwsp_save", QCX_TestQwspSave_f);
 	Cmd_AddCommand("qc2cpp_test_restore_session", QCX_TestRestoreSession_f);
 	Cmd_AddCommand("qc2cpp_test_stuff_client", QCX_TestStuffClient_f);
 	Cmd_AddCommand("qc2cpp_test_release_client", QCX_TestReleaseClient_f);
@@ -634,10 +636,35 @@ static int QCX_TestFindQwspMonster(void)
 	return -1;
 }
 
+static void QCX_TestCaptureQwspMonster(void)
+{
+	const int slot = QCX_TestFindQwspMonster();
+	if (slot > 0) {
+		observer.qwsp_monster_slot = (uint32_t)slot;
+		observer.qwsp_monster_think_dispatches = 0U;
+		observer.qwsp_monster_last_think_time = 0.0f;
+	}
+}
+
+static client_t *QCX_TestFindQwspPlayer(void)
+{
+	int slot;
+	for (slot = 0; slot < MAX_CLIENTS; ++slot) {
+		client_t *const client = &svs.clients[slot];
+		if (client->state == cs_spawned && !client->spectator
+			&& client->edict != NULL && !client->edict->e.free
+			&& client->edict->v != NULL) {
+			return client;
+		}
+	}
+	return NULL;
+}
+
 static void QCX_TestReportQwspMonster(void)
 {
 	const uint32_t slot = observer.qwsp_monster_slot;
 	char classname[64];
+	client_t *const player = QCX_TestFindQwspPlayer();
 	if (slot == 0U || slot >= (uint32_t)sv.num_edicts || sv.edicts[slot].e.free
 		|| sv.edicts[slot].v == NULL
 		|| QCX_CopyEntityString(&sv.edicts[slot], "classname", classname,
@@ -645,13 +672,35 @@ static void QCX_TestReportQwspMonster(void)
 		Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":false}}\n");
 		return;
 	}
+	if (player == NULL) {
+		Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":true,\"slot\":%u,"
+			"\"classname\":\"%s\",\"health\":%.6f,\"think\":%d,"
+			"\"nextthink\":%.6f,\"server_time\":%.6f,\"think_dispatches\":%u,"
+			"\"last_think_time\":%.6f,\"player\":{\"ready\":false},"
+			"\"killed_monsters\":%.6f}}\n",
+			slot, classname, sv.edicts[slot].v->health, sv.edicts[slot].v->think,
+			sv.edicts[slot].v->nextthink, sv.time,
+			observer.qwsp_monster_think_dispatches, observer.qwsp_monster_last_think_time,
+			PR_GLOBAL(killed_monsters));
+		return;
+	}
 	Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":true,\"slot\":%u,"
 		"\"classname\":\"%s\",\"health\":%.6f,\"think\":%d,"
 		"\"nextthink\":%.6f,\"server_time\":%.6f,\"think_dispatches\":%u,"
-		"\"last_think_time\":%.6f}}\n",
+		"\"last_think_time\":%.6f,\"player\":{\"ready\":true,\"slot\":%d,"
+		"\"edict_slot\":%d,\"origin\":[%.6f,%.6f,%.6f],\"health\":%.6f,"
+		"\"items\":%.6f,\"ammo_shells\":%.6f,\"ammo_nails\":%.6f,"
+		"\"ammo_rockets\":%.6f,\"ammo_cells\":%.6f},"
+		"\"killed_monsters\":%.6f}}\n",
 		slot, classname, sv.edicts[slot].v->health, sv.edicts[slot].v->think,
 		sv.edicts[slot].v->nextthink, sv.time,
-		observer.qwsp_monster_think_dispatches, observer.qwsp_monster_last_think_time);
+		observer.qwsp_monster_think_dispatches, observer.qwsp_monster_last_think_time,
+		(int)(player - svs.clients), NUM_FOR_EDICT(player->edict),
+		player->edict->v->origin[0], player->edict->v->origin[1],
+		player->edict->v->origin[2], player->edict->v->health,
+		player->edict->v->items, player->edict->v->ammo_shells,
+		player->edict->v->ammo_nails, player->edict->v->ammo_rockets,
+		player->edict->v->ammo_cells, PR_GLOBAL(killed_monsters));
 }
 
 static void QCX_TestQwspMonster_f(void)
@@ -663,16 +712,21 @@ static void QCX_TestQwspMonster_f(void)
 	}
 	mode = Cmd_Argv(1);
 	if (!strcmp(mode, "capture")) {
-		const int slot = QCX_TestFindQwspMonster();
-		if (slot > 0) {
-			observer.qwsp_monster_slot = (uint32_t)slot;
-			observer.qwsp_monster_think_dispatches = 0U;
-			observer.qwsp_monster_last_think_time = 0.0f;
-		}
+		QCX_TestCaptureQwspMonster();
 	} else if (strcmp(mode, "read")) {
 		Con_Printf("Usage: qc2cpp_test_qwsp_monster <capture|read>\n");
 		return;
 	}
+	QCX_TestReportQwspMonster();
+}
+
+static void QCX_TestQwspSave_f(void)
+{
+	if (Cmd_Argc() != 2 || PR2_SaveGame(Cmd_Argv(1)) != PR2_SAVE_COMPLETE) {
+		Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":false}}\n");
+		return;
+	}
+	QCX_TestCaptureQwspMonster();
 	QCX_TestReportQwspMonster();
 }
 

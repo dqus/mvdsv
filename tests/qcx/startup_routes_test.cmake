@@ -12,8 +12,6 @@ math(EXPR length "${end} - ${begin}")
 string(SUBSTRING "${source}" ${begin} ${length} spawn_server)
 
 foreach(forbidden IN ITEMS
-	"QCX_"
-	"QCX_ENABLED"
 	"qcx/"
 	"ED_FindFieldOffset"
 	"sv.game_edicts"
@@ -22,6 +20,20 @@ foreach(forbidden IN ITEMS
 	string(FIND "${spawn_server}" "${forbidden}" position)
 	if(NOT position EQUAL -1)
 		message(FATAL_ERROR "SV_SpawnServer must delegate ${forbidden} to PR2")
+	endif()
+endforeach()
+
+# Fresh QCMS restores deliberately coordinate lifecycle only here: the actual
+# game/backend work remains delegated through PR2, but an abandoned wait must
+# never survive into another world and a failed saved-map spawn must discard
+# the prepared image.
+foreach(required IN ITEMS
+	"QCX_RestoreSessionCancel();"
+	"if (!restoring_qc2cpp) QCX_DiscardPreparedLoadGame();"
+	"qc2cpp restore could not load saved map")
+	string(FIND "${spawn_server}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "SV_SpawnServer is missing fresh QCX restore lifecycle: ${required}")
 	endif()
 endforeach()
 
