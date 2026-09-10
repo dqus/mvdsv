@@ -570,6 +570,31 @@ target_compile_options(qcx_restore_roster_test PRIVATE
 target_link_libraries(qcx_restore_roster_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_restore_roster COMMAND qcx_restore_roster_test)
 
+add_executable(qcx_restore_session_test
+	restore_session_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/restore_session.c
+	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c
+	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
+set_target_properties(qcx_restore_session_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_restore_session_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_restore_session_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
+target_compile_definitions(qcx_restore_session_test PRIVATE
+	QCX_ENABLED=1
+	QCX_NATIVE=1
+	QCX_RESTORE_SESSION_TEST=1
+	WWW_INTEGRATION=1
+	SERVERONLY
+	USE_PR2
+	__LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_restore_session_test PRIVATE Qc2cppHost::native)
+add_test(NAME qcx_restore_session COMMAND qcx_restore_session_test)
+
 if(QC2CPP_COMPILER)
 	add_custom_target(qc2cpp_optional_fields_native_assets
 		COMMAND ${CMAKE_COMMAND}
@@ -649,7 +674,8 @@ foreach(test_name IN ITEMS
 	qcx_legacy_optional_fields_pr2
 	qcx_save_format
 	qcx_restore
-	qcx_restore_roster)
+	qcx_restore_roster
+	qcx_restore_session)
 	qcx_set_test_labels(${test_name} "qcx;fast")
 endforeach()
 

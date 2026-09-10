@@ -206,6 +206,9 @@ typedef struct client_s
 	int				userid;				// identifying number
 	ctxinfo_t		_userinfo_ctx_;			// infostring
 	ctxinfo_t		_userinfoshort_ctx_;	// infostring
+	qbool			qcx_restore_waiting;
+	qbool			qcx_restore_pending;
+	int				qcx_restore_roster_index;
 
 	antilag_position_t	antilag_positions[MAX_ANTILAG_POSITIONS];
 	int				antilag_position_next;
@@ -747,6 +750,7 @@ extern	demo_t		demo;	// server demo struct
 
 extern	client_t	*sv_client;
 extern	edict_t		*sv_player;
+extern	client_t	*WatcherId;
 
 #define	MODEL_NAME_LEN	5
 extern	char		localmodels[MAX_MODELS][MODEL_NAME_LEN]; // inline model names for precache
