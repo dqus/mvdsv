@@ -15,6 +15,8 @@ set(QC2CPP_CHECKER "" CACHE FILEPATH
 	"Optional qc2cpp topology checker used by external acceptance tests")
 set(QC2CPP_QW_MANIFEST "" CACHE FILEPATH
 	"Optional QW progs.src manifest used by external acceptance tests")
+set(QC2CPP_QWSP_MANIFEST "" CACHE FILEPATH
+	"Optional QW single-player manifest used by external acceptance tests")
 set(QC2CPP_WASI_SDK_ROOT "" CACHE PATH
 	"WASI SDK root used to build the qc2cpp Wasm acceptance game")
 set(QC2CPP_ASSET_DIR "" CACHE PATH
