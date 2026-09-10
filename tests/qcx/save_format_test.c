@@ -7,23 +7,39 @@
 #include <string.h>
 
 enum {
+	qcms_version_v1 = 1,
+	qcms_version_v2 = 2,
 	metadata_section = 1,
 	engine_section = 2,
-	guest_section = 3,
-	metadata_capacity_offset = 36,
-	engine_offset = 52,
-	engine_time_offset = engine_offset + 4,
-	engine_precache_count_offset = engine_offset + 20,
-	engine_slot_count_offset = engine_offset + 60,
-	second_section_id_offset = 44,
-	guest_section_length_offset = 120,
-	fixture_capacity = 4
+	roster_section = 3,
+	guest_section = 4,
+	engine_version_v1 = 1,
+	engine_version_v2 = 2,
+	roster_version_v1 = 1,
+	fixture_entity_capacity = 4,
+	fixture_client_slot_capacity = 3
 };
 
 typedef struct save_bytes_s {
 	uint8_t bytes[65536];
 	uint32_t size;
 } save_bytes_t;
+
+typedef struct v2_offsets_s {
+	uint32_t client_slot_capacity;
+	uint32_t player_entity_flags;
+	uint32_t saved_slot;
+	uint32_t spawned;
+	uint32_t role;
+	uint32_t name_length;
+	uint32_t name_bytes;
+	uint32_t team_length;
+	uint32_t spawn_parm;
+	uint32_t second_section_id;
+	uint32_t roster_section_id;
+	uint32_t roster_payload_size;
+	uint32_t second_player_entity_flags;
+} v2_offsets_t;
 
 static void append_bytes(save_bytes_t *out, const void *bytes, uint32_t size)
 {
@@ -42,11 +58,11 @@ static void append_u32(save_bytes_t *out, uint32_t value)
 
 static void overwrite_u32(save_bytes_t *out, uint32_t offset, uint32_t value)
 {
-	assert(offset + 4 <= out->size);
+	assert(offset + 4U <= out->size);
 	out->bytes[offset] = (uint8_t)value;
-	out->bytes[offset + 1] = (uint8_t)(value >> 8);
-	out->bytes[offset + 2] = (uint8_t)(value >> 16);
-	out->bytes[offset + 3] = (uint8_t)(value >> 24);
+	out->bytes[offset + 1U] = (uint8_t)(value >> 8);
+	out->bytes[offset + 2U] = (uint8_t)(value >> 16);
+	out->bytes[offset + 3U] = (uint8_t)(value >> 24);
 }
 
 static void append_f32(save_bytes_t *out, float value)
@@ -66,47 +82,160 @@ static void append_string(save_bytes_t *out, const char *value)
 	append_bytes(out, value, size);
 }
 
-static void append_section(save_bytes_t *out, uint32_t id, const save_bytes_t *section)
+static void append_section(save_bytes_t *out, uint32_t id, const save_bytes_t *section,
+	uint32_t *payload_offset)
 {
 	append_u32(out, id);
 	append_u32(out, section->size);
+	if (payload_offset != NULL) *payload_offset = out->size;
 	append_bytes(out, section->bytes, section->size);
 }
 
-static save_bytes_t make_valid_save(void)
+static void append_metadata_v2(save_bytes_t *metadata, v2_offsets_t *offsets)
+{
+	append_string(metadata, "game");
+	append_string(metadata, "e1m1");
+	append_u32(metadata, UINT32_C(0x11223344));
+	append_u32(metadata, fixture_entity_capacity);
+	offsets->client_slot_capacity = metadata->size;
+	append_u32(metadata, fixture_client_slot_capacity);
+}
+
+static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets)
+{
+	uint32_t entity;
+	append_u32(engine, engine_version_v2);
+	append_f64(engine, 1.25);
+	append_u32(engine, 7);
+	append_u32(engine, 0);
+	append_u32(engine, 0);
+	append_u32(engine, fixture_entity_capacity);
+	for (entity = 0U; entity < fixture_entity_capacity; ++entity) {
+		if (entity == 1U) offsets->player_entity_flags = engine->size;
+		if (entity == 2U) offsets->second_player_entity_flags = engine->size;
+		append_u32(engine, entity < 2U ? 1U : 0U);
+		append_f32(engine, 0.0f);
+	}
+}
+
+static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
+	const char *team)
+{
+	uint32_t parm;
+	append_u32(roster, roster_version_v1);
+	append_u32(roster, 1);
+	offsets->saved_slot = roster->size;
+	append_u32(roster, 0);
+	offsets->spawned = roster->size;
+	append_u32(roster, 1);
+	offsets->role = roster->size;
+	append_u32(roster, 0);
+	offsets->name_length = roster->size;
+	append_string(roster, "Alice");
+	offsets->name_bytes = offsets->name_length + 4U;
+	offsets->team_length = roster->size;
+	append_string(roster, team);
+	for (parm = 0U; parm < 16U; ++parm) {
+		if (parm == 0U) offsets->spawn_parm = roster->size;
+		append_f32(roster, (float)parm + 0.5f);
+	}
+}
+
+static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
+{
+	save_bytes_t out = {0};
+	save_bytes_t metadata = {0};
+	save_bytes_t engine = {0};
+	save_bytes_t roster = {0};
+	save_bytes_t guest = {0};
+	uint32_t metadata_payload;
+	uint32_t engine_payload;
+	uint32_t roster_payload;
+	memset(offsets, 0, sizeof(*offsets));
+	append_metadata_v2(&metadata, offsets);
+	append_engine_v2(&engine, offsets);
+	append_roster_v1(&roster, offsets, team);
+	append_bytes(&guest, "QC", 2);
+	append_bytes(&out, "QCMS", 4);
+	append_u32(&out, qcms_version_v2);
+	append_section(&out, metadata_section, &metadata, &metadata_payload);
+	offsets->second_section_id = out.size;
+	append_section(&out, engine_section, &engine, &engine_payload);
+	offsets->roster_section_id = out.size;
+	append_section(&out, roster_section, &roster, &roster_payload);
+	append_section(&out, guest_section, &guest, NULL);
+	offsets->client_slot_capacity += metadata_payload;
+	offsets->player_entity_flags += engine_payload;
+	offsets->saved_slot += roster_payload;
+	offsets->spawned += roster_payload;
+	offsets->role += roster_payload;
+	offsets->name_length += roster_payload;
+	offsets->name_bytes += roster_payload;
+	offsets->team_length += roster_payload;
+	offsets->spawn_parm += roster_payload;
+	offsets->roster_payload_size = roster.size;
+	offsets->second_player_entity_flags += engine_payload;
+	return out;
+}
+
+static void append_roster_record(save_bytes_t *record, uint32_t saved_slot,
+	const char *name)
+{
+	uint32_t parm;
+	append_u32(record, saved_slot);
+	append_u32(record, 1U);
+	append_u32(record, 0U);
+	append_string(record, name);
+	append_string(record, "red");
+	for (parm = 0U; parm < 16U; ++parm) append_f32(record, (float)parm);
+}
+
+static void append_second_roster_record(save_bytes_t *save, const v2_offsets_t *offsets,
+	uint32_t saved_slot, const char *name)
+{
+	save_bytes_t record = {0};
+	const uint32_t insert_offset = offsets->roster_section_id + 8U
+		+ offsets->roster_payload_size;
+	append_roster_record(&record, saved_slot, name);
+	assert(save->size + record.size <= sizeof(save->bytes));
+	memmove(save->bytes + insert_offset + record.size, save->bytes + insert_offset,
+		save->size - insert_offset);
+	memcpy(save->bytes + insert_offset, record.bytes, record.size);
+	save->size += record.size;
+	overwrite_u32(save, offsets->roster_section_id + 4U,
+		offsets->roster_payload_size + record.size);
+	overwrite_u32(save, offsets->roster_section_id + 8U + 4U, 2U);
+}
+
+static save_bytes_t make_valid_v1(void)
 {
 	save_bytes_t out = {0};
 	save_bytes_t metadata = {0};
 	save_bytes_t engine = {0};
 	save_bytes_t guest = {0};
-	uint32_t slot;
-
+	uint32_t entity;
 	append_string(&metadata, "game");
 	append_string(&metadata, "e1m1");
 	append_u32(&metadata, UINT32_C(0x11223344));
-	append_u32(&metadata, fixture_capacity);
+	append_u32(&metadata, fixture_entity_capacity);
 	append_u32(&metadata, 0);
-
-	append_u32(&engine, 1);
+	append_u32(&engine, engine_version_v1);
 	append_f64(&engine, 1.25);
 	append_u32(&engine, 7);
 	append_u32(&engine, 0);
 	append_u32(&engine, 0);
-	append_u32(&engine, fixture_capacity);
-	for (slot = 0; slot < fixture_capacity; ++slot) {
+	append_u32(&engine, fixture_entity_capacity);
+	for (entity = 0U; entity < fixture_entity_capacity; ++entity) {
 		append_u32(&engine, 0);
 		append_f32(&engine, 0.0f);
 	}
 	append_u32(&engine, 0);
-
 	append_bytes(&guest, "QC", 2);
 	append_bytes(&out, "QCMS", 4);
-	append_u32(&out, 1);
-	append_section(&out, metadata_section, &metadata);
-	append_section(&out, engine_section, &engine);
-	append_section(&out, guest_section, &guest);
-	assert(engine_offset == 52);
-	assert(engine_slot_count_offset == 112);
+	append_u32(&out, qcms_version_v1);
+	append_section(&out, metadata_section, &metadata, NULL);
+	append_section(&out, engine_section, &engine, NULL);
+	append_section(&out, 3, &guest, NULL);
 	return out;
 }
 
@@ -117,229 +246,162 @@ static void require_rejected(const uint8_t *bytes, uint32_t size)
 	assert(image == NULL);
 }
 
-static void test_parses_and_reencodes_a_transport_independent_image(void)
+static void test_parses_and_reencodes_v2_with_a_roster(void)
 {
-	const save_bytes_t input = make_valid_save();
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *round_trip = NULL;
 	uint8_t *encoded = NULL;
-	uint32_t encoded_size = 0;
-
+	uint32_t encoded_size = 0U;
 	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
 	assert(strcmp(image->metadata.logical_game, "game") == 0);
 	assert(strcmp(image->metadata.map_name, "e1m1") == 0);
 	assert(image->metadata.map_bsp_checksum == UINT32_C(0x11223344));
-	assert(image->metadata.entity_capacity == fixture_capacity);
-	assert(image->engine_state.size == 64);
-	assert(image->guest_payload.size == 2);
+	assert(image->metadata.entity_capacity == fixture_entity_capacity);
+	assert(image->metadata.client_slot_capacity == fixture_client_slot_capacity);
+	assert(image->engine_state.size > 0U);
+	assert(image->roster_count == 1U);
+	assert(image->roster[0].saved_slot == 0U);
+	assert(image->roster[0].spawned == 1U);
+	assert(image->roster[0].role == QCX_SAVE_ROLE_PLAYER);
+	assert(strcmp(image->roster[0].name, "Alice") == 0);
+	assert(strcmp(image->roster[0].team, "red") == 0);
+	assert(image->roster[0].spawn_parms[15] == 15.5f);
+	assert(image->guest_payload.size == 2U);
 	assert(QCX_SaveEncode(image, &encoded, &encoded_size) == QCX_PLUGIN_OK);
 	assert(encoded_size == input.size);
 	assert(memcmp(encoded, input.bytes, input.size) == 0);
 	assert(QCX_SaveParse(encoded, encoded_size, &round_trip) == QCX_PLUGIN_OK);
-	assert(round_trip->metadata.entity_capacity == fixture_capacity);
 	QCX_SaveImageFree(round_trip);
 	free(encoded);
 	QCX_SaveImageFree(image);
 }
 
-static void test_reencodes_an_empty_guest_payload(void)
+static void test_accepts_an_empty_roster_team(void)
 {
-	save_bytes_t input = make_valid_save();
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("", &offsets);
 	qcx_save_image_t *image = NULL;
-	uint8_t *encoded = NULL;
-	uint32_t encoded_size = 0;
-
-	overwrite_u32(&input, guest_section_length_offset, 0);
-	input.size -= 2;
 	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
-	assert(image->guest_payload.data == NULL);
-	assert(image->guest_payload.size == 0);
-	assert(QCX_SaveEncode(image, &encoded, &encoded_size) == QCX_PLUGIN_OK);
-	assert(encoded_size == input.size);
-	assert(memcmp(encoded, input.bytes, input.size) == 0);
-	free(encoded);
 	QCX_SaveImageFree(image);
 }
 
-static void test_rejects_an_incomplete_header(void)
+static void test_rejects_a_complete_v1_container(void)
 {
-	const uint8_t bytes[] = {'Q', 'C', 'M', 'S', 1, 0, 0, 0, 255, 255, 255, 255};
-	require_rejected(bytes, sizeof(bytes));
-}
-
-static void test_rejects_an_unknown_version(void)
-{
-	save_bytes_t input = make_valid_save();
-	input.bytes[4] = 2;
+	const save_bytes_t input = make_valid_v1();
 	require_rejected(input.bytes, input.size);
 }
 
-static void test_rejects_a_duplicate_section(void)
+static void test_rejects_wrong_section_order(void)
 {
-	save_bytes_t input = make_valid_save();
-	input.bytes[second_section_id_offset] = metadata_section;
-	input.bytes[second_section_id_offset + 1] = 0;
-	input.bytes[second_section_id_offset + 2] = 0;
-	input.bytes[second_section_id_offset + 3] = 0;
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.second_section_id, roster_section);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_rejects_invalid_client_slot_capacity(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.client_slot_capacity, 0U);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.client_slot_capacity, fixture_entity_capacity);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.client_slot_capacity, QCX_SAVE_MAX_CLIENTS + 1U);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_rejects_duplicate_slots_and_canonical_names(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	append_second_roster_record(&input, &offsets, 0U, "Bob");
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.second_player_entity_flags, 1U);
+	append_second_roster_record(&input, &offsets, 1U, "alice");
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.second_player_entity_flags, 1U);
+	append_second_roster_record(&input, &offsets, 1U, "alice");
+	input.bytes[offsets.name_bytes] |= 0x80U;
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_compares_names_like_quake(void)
+{
+	const char colored_alice[] = {(char)0xc1, 'l', 'i', 'c', 'e', '\0'};
+	assert(QCX_SaveClientNameEqual("Alice", "alice"));
+	assert(QCX_SaveClientNameEqual(colored_alice, "alice"));
+	assert(!QCX_SaveClientNameEqual("Alice", "Bob"));
+}
+
+static void test_rejects_a_roster_slot_outside_its_bounds(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.saved_slot, fixture_client_slot_capacity);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_rejects_a_roster_player_without_an_active_entity(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.player_entity_flags, 2U);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_rejects_invalid_roster_record_values(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.spawned, 2U);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.role, 2U);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.name_length, 0U);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	{
+		const float nan_value = NAN;
+		memcpy(input.bytes + offsets.spawn_parm, &nan_value, sizeof(nan_value));
+	}
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	input.bytes[offsets.name_bytes] = 0x80U;
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	input.bytes[offsets.name_bytes + 1U] = '\t';
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_trailing_bytes(void)
 {
-	save_bytes_t input = make_valid_save();
-	input.bytes[input.size++] = 0;
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	input.bytes[input.size++] = 0U;
 	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_a_section_length_past_input_end(void)
-{
-	save_bytes_t input = make_valid_save();
-	overwrite_u32(&input, guest_section_length_offset, 3);
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_an_invalid_logical_game_name(void)
-{
-	save_bytes_t input = make_valid_save();
-	input.bytes[20] = '/';
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_an_invalid_capacity(void)
-{
-	save_bytes_t input = make_valid_save();
-	overwrite_u32(&input, metadata_capacity_offset, 0);
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_nonfinite_server_time(void)
-{
-	save_bytes_t input = make_valid_save();
-	const double nan_time = NAN;
-	memcpy(input.bytes + engine_time_offset, &nan_time, sizeof(nan_time));
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_an_overlong_precache_list(void)
-{
-	save_bytes_t input = make_valid_save();
-	overwrite_u32(&input, engine_precache_count_offset, 4353);
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_accepts_model_and_sound_precache_capacity(void)
-{
-	save_bytes_t input = make_valid_save();
-	qcx_save_image_t *image = NULL;
-	uint32_t index;
-	const uint32_t count = 4352;
-	const uint32_t resources_size = count * 5U;
-	assert(input.size + resources_size <= sizeof(input.bytes));
-	memmove(input.bytes + engine_precache_count_offset + 4U + resources_size,
-		input.bytes + engine_precache_count_offset + 4U,
-		input.size - (engine_precache_count_offset + 4U));
-	input.size += resources_size;
-	overwrite_u32(&input, engine_precache_count_offset, count);
-	for (index = 0U; index < count; ++index) {
-		const uint32_t offset = engine_precache_count_offset + 4U + index * 5U;
-		overwrite_u32(&input, offset, 1U);
-		input.bytes[offset + 4U] = 'x';
-	}
-	overwrite_u32(&input, 48U, 64U + resources_size);
-	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
-	QCX_SaveImageFree(image);
-}
-
-static save_bytes_t make_save_with_duplicate_client_slots(void)
-{
-	save_bytes_t input = make_valid_save();
-	uint32_t i;
-	assert(input.size == 126);
-	overwrite_u32(&input, engine_slot_count_offset, 2);
-	assert(input.size + 144 <= sizeof(input.bytes));
-	memmove(input.bytes + 112 + 4 + 144, input.bytes + 112 + 4,
-		input.size - (112 + 4));
-	input.size += 144;
-	for (i = 0; i < 2; ++i) {
-		uint32_t parm;
-		overwrite_u32(&input, 116 + i * 72, 1);
-		overwrite_u32(&input, 120 + i * 72, 0);
-		for (parm = 0; parm < 16; ++parm) {
-			const float zero = 0.0f;
-			memcpy(input.bytes + 124 + i * 72 + parm * 4, &zero, sizeof(zero));
-		}
-	}
-	overwrite_u32(&input, 48, 64 + 144);
-	return input;
-}
-
-static save_bytes_t make_save_with_one_client_slot(uint32_t slot)
-{
-	save_bytes_t input = make_valid_save();
-	uint32_t parm;
-	assert(input.size == 126);
-	overwrite_u32(&input, engine_slot_count_offset, 1);
-	assert(input.size + 72 <= sizeof(input.bytes));
-	memmove(input.bytes + 112 + 4 + 72, input.bytes + 112 + 4,
-		input.size - (112 + 4));
-	input.size += 72;
-	overwrite_u32(&input, 116, slot);
-	overwrite_u32(&input, 120, 0);
-	for (parm = 0; parm < 16; ++parm) {
-		const float zero = 0.0f;
-		memcpy(input.bytes + 124 + parm * 4, &zero, sizeof(zero));
-	}
-	overwrite_u32(&input, 48, 64 + 72);
-	return input;
-}
-
-static void test_rejects_duplicate_client_slots(void)
-{
-	const save_bytes_t input = make_save_with_duplicate_client_slots();
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_a_client_slot_outside_entity_capacity(void)
-{
-	const save_bytes_t input = make_save_with_one_client_slot(fixture_capacity);
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_rejects_a_client_slot_without_a_player_entity(void)
-{
-	const save_bytes_t input = make_save_with_one_client_slot(fixture_capacity - 1U);
-	require_rejected(input.bytes, input.size);
-}
-
-static void test_accepts_connected_spawned_client_flags(void)
-{
-	save_bytes_t input = make_save_with_one_client_slot(1U);
-	qcx_save_image_t *image = NULL;
-
-	overwrite_u32(&input, 40U, 1U);
-	overwrite_u32(&input, 120U, 3U);
-	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
-	assert(image->metadata.contains_connected_clients == 1U);
-	QCX_SaveImageFree(image);
 }
 
 int main(void)
 {
-	test_parses_and_reencodes_a_transport_independent_image();
-	test_reencodes_an_empty_guest_payload();
-	test_rejects_an_incomplete_header();
-	test_rejects_an_unknown_version();
-	test_rejects_a_duplicate_section();
+	test_parses_and_reencodes_v2_with_a_roster();
+	test_accepts_an_empty_roster_team();
+	test_rejects_a_complete_v1_container();
+	test_rejects_wrong_section_order();
+	test_rejects_invalid_client_slot_capacity();
+	test_rejects_a_roster_slot_outside_its_bounds();
+	test_rejects_a_roster_player_without_an_active_entity();
+	test_rejects_invalid_roster_record_values();
+	test_rejects_duplicate_slots_and_canonical_names();
+	test_compares_names_like_quake();
 	test_rejects_trailing_bytes();
-	test_rejects_a_section_length_past_input_end();
-	test_rejects_an_invalid_logical_game_name();
-	test_rejects_an_invalid_capacity();
-	test_rejects_nonfinite_server_time();
-	test_rejects_an_overlong_precache_list();
-	test_accepts_model_and_sound_precache_capacity();
-	test_rejects_duplicate_client_slots();
-	test_rejects_a_client_slot_outside_entity_capacity();
-	test_rejects_a_client_slot_without_a_player_entity();
-	test_accepts_connected_spawned_client_flags();
 	return 0;
 }

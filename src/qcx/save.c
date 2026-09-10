@@ -15,14 +15,11 @@
 #include <string.h>
 
 enum {
-	QCX_SAVE_ENGINE_VERSION = 1U,
+	QCX_SAVE_ENGINE_VERSION = 2U,
 	QCX_SAVE_MAX_GUEST_BYTES = 8U * 1024U * 1024U,
 	QCX_SAVE_MAX_RESOURCE_BYTES = 255U,
 	QCX_SAVE_ACTIVE_EDICT = 1U,
-	QCX_SAVE_FREE_EDICT = 2U,
-	QCX_SAVE_CLIENT_CONNECTED = 1U,
-	QCX_SAVE_CLIENT_SPAWNED = 2U,
-	QCX_SAVE_CLIENT_SPECTATOR = 4U
+	QCX_SAVE_FREE_EDICT = 2U
 };
 
 typedef struct qcx_save_writer_s {
@@ -60,12 +57,6 @@ typedef struct qcx_save_reader_s {
 	const uint8_t *end;
 } qcx_save_reader_t;
 
-typedef struct qcx_restore_client_s {
-	uint32_t slot;
-	uint32_t flags;
-	float spawn_parms[NUM_SPAWN_PARMS];
-} qcx_restore_client_t;
-
 typedef struct qcx_restore_plan_s {
 	const qcx_save_image_t *image;
 	double time;
@@ -75,12 +66,13 @@ typedef struct qcx_restore_plan_s {
 	uint32_t edict_flags[QCX_SAVE_MAX_ENTITY_CAPACITY];
 	float freetimes[QCX_SAVE_MAX_ENTITY_CAPACITY];
 	char lightstyles[MAX_LIGHTSTYLES][QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
-	qcx_restore_client_t clients[MAX_CLIENTS];
-	uint32_t client_count;
 } qcx_restore_plan_t;
 
 static qcx_restore_plan_t qcx_restore_plan;
 static char qcx_restored_lightstyles[MAX_LIGHTSTYLES][QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
+
+_Static_assert(NUM_SPAWN_PARMS == QCX_SAVE_SPAWN_PARM_COUNT,
+	"QCMS spawn parameter count");
 
 static qbool QCX_SaveRead(qcx_save_reader_t *reader, void *out, uint32_t size)
 {
@@ -229,11 +221,10 @@ static qbool QCX_SaveAppendSize(uint32_t *size, uint32_t add)
 }
 
 static qbool QCX_SaveEngineSize(uint32_t entity_capacity, uint32_t *out_size,
-	uint32_t *out_precache_count, uint32_t *out_client_count)
+	uint32_t *out_precache_count)
 {
 	uint32_t size = 4U + 8U + 4U + 4U;
 	uint32_t precache_count = 0U;
-	uint32_t client_count = 0U;
 	int index;
 	for (index = 0; index < MAX_LIGHTSTYLES; ++index) {
 		const uint32_t length = QCX_SaveBoundedStringLength(sv.lightstyles[index] == NULL ? "m" : sv.lightstyles[index], QCX_SAVE_MAX_RESOURCE_BYTES);
@@ -253,31 +244,19 @@ static qbool QCX_SaveEngineSize(uint32_t entity_capacity, uint32_t *out_size,
 		++precache_count;
 	}
 	if (precache_count > MAX_MODELS + MAX_SOUNDS || !QCX_SaveAppendSize(&size, 4U)
-		|| !QCX_SaveAppendSize(&size, entity_capacity * 8U) || !QCX_SaveAppendSize(&size, 4U)) return false;
-	for (index = 0; index < MAX_CLIENTS; ++index) if (svs.clients[index].state == cs_connected || svs.clients[index].state == cs_spawned) {
-		if (!QCX_SaveAppendSize(&size, 8U + NUM_SPAWN_PARMS * 4U)) return false;
-		++client_count;
-	}
-	*out_size = size; *out_precache_count = precache_count; *out_client_count = client_count;
+		|| !QCX_SaveAppendSize(&size, entity_capacity * 8U)) return false;
+	*out_size = size; *out_precache_count = precache_count;
 	return true;
-}
-
-static uint32_t QCX_SaveClientFlags(const client_t *client)
-{
-	uint32_t flags = QCX_SAVE_CLIENT_CONNECTED;
-	if (client->state == cs_spawned) flags |= QCX_SAVE_CLIENT_SPAWNED;
-	if (client->spectator != 0) flags |= QCX_SAVE_CLIENT_SPECTATOR;
-	return flags;
 }
 
 static qbool QCX_SaveBuildEngine(uint32_t entity_capacity, qcx_save_bytes_t *out)
 {
-	uint32_t size, precache_count, client_count, written_clients = 0U;
+	uint32_t size, precache_count;
 	qcx_save_writer_t writer;
 	int index;
 	if (sv.max_edicts <= 0 || entity_capacity == 0U || entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY
 		|| (uint32_t)sv.max_edicts > entity_capacity
-		|| !QCX_SaveEngineSize(entity_capacity, &size, &precache_count, &client_count)) return false;
+		|| !QCX_SaveEngineSize(entity_capacity, &size, &precache_count)) return false;
 	out->data = malloc(size); out->size = 0U;
 	if (out->data == NULL) return false;
 	writer = (qcx_save_writer_t){out->data, out->data + size};
@@ -296,19 +275,41 @@ static qbool QCX_SaveBuildEngine(uint32_t entity_capacity, qcx_save_bytes_t *out
 		const uint32_t flags = index >= sv.num_edicts ? 0U : sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
 		if (!QCX_SaveWriteU32(&writer, flags) || !QCX_SaveWriteF32(&writer, sv.edicts[index].e.freetime)) goto fail;
 	}
-	if (!QCX_SaveWriteU32(&writer, client_count)) goto fail;
-	for (index = 0; index < MAX_CLIENTS; ++index) {
-		client_t *const client = &svs.clients[index]; int parm;
-		if (client->state != cs_connected && client->state != cs_spawned) continue;
-		if (!QCX_SaveWriteU32(&writer, (uint32_t)index)
-			|| !QCX_SaveWriteU32(&writer, QCX_SaveClientFlags(client))) goto fail;
-		for (parm = 0; parm < NUM_SPAWN_PARMS; ++parm) if (!QCX_SaveWriteF32(&writer, client->spawn_parms[parm])) goto fail;
-		++written_clients;
-	}
-	if (writer.cursor != writer.end || written_clients != client_count) goto fail;
+	if (writer.cursor != writer.end) goto fail;
 	out->size = size; return true;
 fail:
 	free(out->data); out->data = NULL; return false;
+}
+
+static qbool QCX_SaveBuildRoster(qcx_save_image_t *image)
+{
+	uint32_t slot;
+	image->roster_count = 0U;
+	for (slot = 0U; slot < MAX_CLIENTS; ++slot) {
+		const client_t *const client = &svs.clients[slot];
+		qcx_save_roster_entry_t *entry;
+		uint32_t name_size;
+		uint32_t team_size;
+		if (client->state != cs_connected && client->state != cs_spawned) continue;
+		if (image->roster_count == QCX_SAVE_MAX_CLIENTS) return false;
+		name_size = QCX_SaveBoundedStringLength(client->name,
+			QCX_SAVE_CLIENT_STRING_CAPACITY - 1U);
+		team_size = QCX_SaveBoundedStringLength(client->team,
+			QCX_SAVE_CLIENT_STRING_CAPACITY - 1U);
+		if (name_size == 0U || name_size >= QCX_SAVE_CLIENT_STRING_CAPACITY
+			|| team_size >= QCX_SAVE_CLIENT_STRING_CAPACITY) {
+			return false;
+		}
+		entry = &image->roster[image->roster_count++];
+		entry->saved_slot = slot;
+		entry->spawned = client->state == cs_spawned;
+		entry->role = client->spectator != 0 ? QCX_SAVE_ROLE_SPECTATOR
+			: QCX_SAVE_ROLE_PLAYER;
+		memcpy(entry->name, client->name, name_size + 1U);
+		memcpy(entry->team, client->team, team_size + 1U);
+		memcpy(entry->spawn_parms, client->spawn_parms, sizeof(entry->spawn_parms));
+	}
+	return true;
 }
 
 static void QCX_SaveSelection(uint8_t *bitmap, uint32_t size)
@@ -387,7 +388,6 @@ static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
 	qcx_save_reader_t reader;
 	uint8_t models[MAX_MODELS] = {0};
 	uint8_t sounds[MAX_SOUNDS] = {0};
-	uint8_t clients[MAX_CLIENTS] = {0};
 	uint32_t version;
 	uint32_t count;
 	uint32_t index;
@@ -396,6 +396,9 @@ static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
 
 	if (image == NULL || image->engine_state.data == NULL || image->engine_state.size == 0U
 		|| image->metadata.entity_capacity != QCX_EntityCapacity()
+		|| image->metadata.client_slot_capacity == 0U
+		|| image->metadata.client_slot_capacity > MAX_CLIENTS
+		|| image->metadata.client_slot_capacity >= image->metadata.entity_capacity
 		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| strcmp(image->metadata.map_name, sv.mapname) != 0
 		|| image->metadata.map_bsp_checksum != sv.map_checksum) {
@@ -466,32 +469,54 @@ static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
 			if (qcx_restore_plan.edict_flags[index] == QCX_SAVE_ACTIVE_EDICT) qcx_restore_plan.selection[index / 8U] |= (uint8_t)(1U << (index % 8U));
 		}
 	}
-	if (!QCX_SaveReadU32(&reader, &count) || count > MAX_CLIENTS) return QCX_RESTORE_MALFORMED_CHUNK;
-	qcx_restore_plan.client_count = count;
-	for (index = 0U; index < count; ++index) {
-		qcx_restore_client_t *const client = &qcx_restore_plan.clients[index];
-		uint32_t parm;
-		if (!QCX_SaveReadU32(&reader, &client->slot) || client->slot >= MAX_CLIENTS
-			|| clients[client->slot] != 0U || !QCX_SaveReadU32(&reader, &client->flags)
-			|| (client->flags & ~(QCX_SAVE_CLIENT_CONNECTED | QCX_SAVE_CLIENT_SPAWNED | QCX_SAVE_CLIENT_SPECTATOR)) != 0U
-			|| (client->flags & QCX_SAVE_CLIENT_CONNECTED) == 0U) return QCX_RESTORE_MALFORMED_CHUNK;
-		clients[client->slot] = 1U;
-		for (parm = 0U; parm < NUM_SPAWN_PARMS; ++parm) if (!QCX_SaveReadF32(&reader, &client->spawn_parms[parm])) return QCX_RESTORE_MALFORMED_CHUNK;
+	if (reader.cursor != reader.end || image->roster_count > QCX_SAVE_MAX_CLIENTS
+		|| image->roster_count > image->metadata.client_slot_capacity) {
+		return QCX_RESTORE_MALFORMED_CHUNK;
 	}
-	if (reader.cursor != reader.end
-		|| (image->metadata.contains_connected_clients != 0U) != (count != 0U)) return QCX_RESTORE_MALFORMED_CHUNK;
-	for (index = 0U; index < MAX_CLIENTS; ++index) {
-		const qbool currently_connected = svs.clients[index].state == cs_connected || svs.clients[index].state == cs_spawned;
-		if (currently_connected != (clients[index] != 0U)) return QCX_RESTORE_ENTITY_SET_MISMATCH;
-		if (clients[index] != 0U) {
-			uint32_t client_index;
-			for (client_index = 0U; client_index < qcx_restore_plan.client_count; ++client_index) {
-				if (qcx_restore_plan.clients[client_index].slot == index
-					&& qcx_restore_plan.clients[client_index].flags
-						!= QCX_SaveClientFlags(&svs.clients[index])) {
-					return QCX_RESTORE_ENTITY_SET_MISMATCH;
-				}
+	for (index = 0U; index < image->roster_count; ++index) {
+		const qcx_save_roster_entry_t *const entry = &image->roster[index];
+		uint32_t prior;
+		uint32_t parm;
+		if (entry->saved_slot >= image->metadata.client_slot_capacity
+			|| entry->saved_slot >= MAX_CLIENTS
+			|| entry->saved_slot + 1U >= image->metadata.entity_capacity
+			|| qcx_restore_plan.edict_flags[entry->saved_slot + 1U]
+				!= QCX_SAVE_ACTIVE_EDICT
+			|| entry->spawned > 1U
+			|| (entry->role != QCX_SAVE_ROLE_PLAYER
+				&& entry->role != QCX_SAVE_ROLE_SPECTATOR)
+			|| entry->name[0] == '\0') {
+			return QCX_RESTORE_MALFORMED_CHUNK;
+		}
+		for (parm = 0U; parm < QCX_SAVE_SPAWN_PARM_COUNT; ++parm) {
+			if (!isfinite(entry->spawn_parms[parm])) return QCX_RESTORE_MALFORMED_CHUNK;
+		}
+		for (prior = 0U; prior < index; ++prior) {
+			if (entry->saved_slot == image->roster[prior].saved_slot
+				|| QCX_SaveClientNameEqual(entry->name, image->roster[prior].name)) {
+				return QCX_RESTORE_MALFORMED_CHUNK;
 			}
+		}
+	}
+	for (index = 0U; index < MAX_CLIENTS; ++index) {
+		const client_t *const client = &svs.clients[index];
+		const qcx_save_roster_entry_t *saved = NULL;
+		uint32_t roster_index;
+		for (roster_index = 0U; roster_index < image->roster_count; ++roster_index) {
+			if (image->roster[roster_index].saved_slot == index) {
+				saved = &image->roster[roster_index];
+				break;
+			}
+		}
+		if ((client->state == cs_connected || client->state == cs_spawned)
+			!= (saved != NULL)) {
+			return QCX_RESTORE_ENTITY_SET_MISMATCH;
+		}
+		if (saved != NULL
+			&& ((client->state == cs_spawned) != (saved->spawned != 0U)
+				|| (client->spectator != 0)
+					!= (saved->role == QCX_SAVE_ROLE_SPECTATOR))) {
+			return QCX_RESTORE_ENTITY_SET_MISMATCH;
 		}
 	}
 	return QCX_RESTORE_OK;
@@ -549,13 +574,13 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 		sv.edicts[index].e.freetime = qcx_restore_plan.freetimes[index];
 	}
 	/* Player edicts are reserved engine slots, not ordinary game objects.  A
-	 * client-free QCMS image therefore must not make them visible merely because
+	 * roster-free player slot therefore must not become visible merely because
 	 * the guest's fixed entity storage contains a value at that index. */
-	for (index = 0U; index < MAX_CLIENTS; ++index) {
+	for (index = 0U; index < image->metadata.client_slot_capacity; ++index) {
 		qbool restored_client = false;
 		uint32_t client_index;
-		for (client_index = 0U; client_index < qcx_restore_plan.client_count; ++client_index) {
-			if (qcx_restore_plan.clients[client_index].slot == index) {
+		for (client_index = 0U; client_index < image->roster_count; ++client_index) {
+			if (image->roster[client_index].saved_slot == index) {
 				restored_client = true;
 				break;
 			}
@@ -571,10 +596,12 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 	for (index = 0U; index < qcx_restore_plan.num_edicts; ++index) {
 		if (!sv.edicts[index].e.free) SV_LinkEdict(&sv.edicts[index], false);
 	}
-	for (index = 0U; index < qcx_restore_plan.client_count; ++index) {
-		qcx_restore_client_t *const client = &qcx_restore_plan.clients[index];
-		memcpy(svs.clients[client->slot].spawn_parms, client->spawn_parms,
-			sizeof(client->spawn_parms));
+	for (index = 0U; index < image->roster_count; ++index) {
+		const qcx_save_roster_entry_t *const entry = &image->roster[index];
+		client_t *const client = &svs.clients[entry->saved_slot];
+		if (client->state == cs_connected || client->state == cs_spawned) {
+			memcpy(client->spawn_parms, entry->spawn_parms, sizeof(entry->spawn_parms));
+		}
 	}
 #if defined(QCX_TESTS)
 	QCX_TestObserverRestoreReplicationBegin();
@@ -623,11 +650,15 @@ qbool QCX_SaveGame(const char *name)
 		failure = "could not serialize server state";
 		goto done;
 	}
+	if (!QCX_SaveBuildRoster(&image)) {
+		failure = "could not serialize restored player roster";
+		goto done;
+	}
 	strlcpy(image.metadata.logical_game, sv_progsname.string, sizeof(image.metadata.logical_game));
 	strlcpy(image.metadata.map_name, sv.mapname, sizeof(image.metadata.map_name));
 	image.metadata.map_bsp_checksum = sv.map_checksum;
 	image.metadata.entity_capacity = entity_capacity;
-	for (int client = 0; client < MAX_CLIENTS; ++client) if (svs.clients[client].state == cs_connected || svs.clients[client].state == cs_spawned) { image.metadata.contains_connected_clients = 1U; break; }
+	image.metadata.client_slot_capacity = MAX_CLIENTS;
 	image.engine_state = engine; image.guest_payload = guest;
 	if (QCX_SaveEncode(&image, &encoded, &encoded_size) != QCX_PLUGIN_OK) {
 		failure = "could not encode QCMS image";
@@ -635,7 +666,7 @@ qbool QCX_SaveGame(const char *name)
 	}
 	result = QCX_SaveWriteFile(name, encoded, encoded_size);
 	if (!result) failure = "could not write save file";
-	if (result && image.metadata.contains_connected_clients != 0U) {
+	if (result && image.roster_count != 0U) {
 		qcx_connected_snapshot = (qcx_connected_snapshot_t){
 			.hash = QCX_SaveFingerprint(encoded, encoded_size), .size = encoded_size, .valid = true};
 	} else if (result) {
@@ -703,13 +734,13 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 		free(bytes);
 		return false;
 	}
-	if (image->metadata.contains_connected_clients != 0U
+	if (image->roster_count != 0U
 		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| QCX_SaveBoundedStringLength(image->metadata.map_name, map_name_size - 1U)
 		>= map_name_size) {
-		Con_Printf("qc2cpp fresh restore rejected: saved game=%s, selected game=%s, map=%s, connected=%u.\n",
+		Con_Printf("qc2cpp fresh restore rejected: saved game=%s, selected game=%s, map=%s, roster=%u.\n",
 			image->metadata.logical_game, sv_progsname.string, image->metadata.map_name,
-			(unsigned)image->metadata.contains_connected_clients);
+			(unsigned)image->roster_count);
 		QCX_SaveImageFree(image);
 		free(bytes);
 		return false;
@@ -792,7 +823,7 @@ qbool QCX_LoadGame(const char *name)
 	if (!QCX_Active() || !QCX_SaveNameIsSafe(name) || !QCX_SaveReadFile(name, &bytes, &size)
 		|| QCX_SaveParse(bytes, size, &image) != QCX_PLUGIN_OK
 		|| QCX_ValidateSaveGame(image) != QCX_RESTORE_OK
-		|| (image->metadata.contains_connected_clients != 0U
+		|| (image->roster_count != 0U
 			&& (!qcx_connected_snapshot.valid || qcx_connected_snapshot.size != size
 				|| qcx_connected_snapshot.hash != QCX_SaveFingerprint(bytes, size)))) goto done;
 	QCX_ApplySaveGame(image);
