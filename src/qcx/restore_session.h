@@ -8,6 +8,8 @@
 
 qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image,
 	double monotonic_now);
+void QCX_RestoreSessionInit(void);
+void QCX_RestoreSessionContinue(void);
 void QCX_RestoreSessionCancel(void);
 qbool QCX_RestoreSessionBlocksSave(void);
 qbool QCX_RestoreSessionWaiting(void);

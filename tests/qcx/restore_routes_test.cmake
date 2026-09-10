@@ -21,6 +21,11 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
+string(FIND "${sv_user}" "if (sv.paused && !restoring_qcx_client)" position)
+if(position EQUAL -1)
+	message(FATAL_ERROR "Cmd_Spawn must defer pause notification for a QCX restore handshake")
+endif()
+
 string(FIND "${sv_user}" "{\"qcx_restore_list\", Cmd_RestoreList_f, false}" position)
 if(position EQUAL -1)
 	message(FATAL_ERROR "qcx_restore_list must be a non-overrideable engine command")
@@ -81,5 +86,108 @@ foreach(required IN ITEMS
 	string(FIND "${sv_main}" "${required}" position)
 	if(position EQUAL -1)
 		message(FATAL_ERROR "SVC_DirectConnect is missing saved-role authentication edge case ${required}")
+	endif()
+endforeach()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/pr2_exec.c" pr2_exec)
+string(FIND "${pr2_exec}" "pr2_save_result_t PR2_LoadGame(" load_begin)
+if(load_begin EQUAL -1)
+	message(FATAL_ERROR "could not locate PR2_LoadGame")
+endif()
+string(SUBSTRING "${pr2_exec}" ${load_begin} -1 load_tail)
+string(FIND "${load_tail}" "\n}\n" load_end)
+if(load_end EQUAL -1)
+	message(FATAL_ERROR "could not isolate PR2_LoadGame")
+endif()
+string(SUBSTRING "${load_tail}" 0 ${load_end} pr2_load)
+foreach(forbidden IN ITEMS "QCX_LoadGame(" "PR2_SAVE_COMPLETE")
+	string(FIND "${pr2_load}" "${forbidden}" position)
+	if(NOT position EQUAL -1)
+		message(FATAL_ERROR "PR2_LoadGame must not retain the in-place QCX route: ${forbidden}")
+	endif()
+endforeach()
+string(FIND "${pr2_load}" "QCX_Active()" position)
+if(NOT position EQUAL -1)
+	message(FATAL_ERROR "PR2_LoadGame must prepare a QCMS load before QCX is active")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/qcx/save.c" save_source)
+foreach(forbidden IN ITEMS
+	"qcx_connected_snapshot"
+	"QCX_SaveFingerprint"
+	"QCX_LoadGame(")
+	string(FIND "${save_source}" "${forbidden}" position)
+	if(NOT position EQUAL -1)
+		message(FATAL_ERROR "src/qcx/save.c must remove the connected-snapshot path: ${forbidden}")
+	endif()
+endforeach()
+foreach(required IN ITEMS
+	"QCX_RestoreSessionBlocksSave()"
+	"QCX_HasPreparedLoadGame()"
+	"QCX_RestoreSessionInstall(qcx_prepared_image, Sys_DoubleTime())")
+	string(FIND "${save_source}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "src/qcx/save.c missing fresh-restore route ${required}")
+	endif()
+endforeach()
+
+foreach(required IN ITEMS
+	"QCMS V1 saves are unsupported"
+	"QCX_SaveIsV1Image")
+	string(FIND "${save_source}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "src/qcx/save.c missing QCMS V1 diagnostic: ${required}")
+	endif()
+endforeach()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/sv_save.c" sv_save)
+string(FIND "${sv_save}" "SV_SpawnServer(mapname, false, NULL, false, true)" fresh_spawn)
+if(fresh_spawn EQUAL -1)
+	message(FATAL_ERROR "SV_LoadGame_f must fresh-spawn every prepared QCMS save")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/sv_init.c" sv_init)
+foreach(required IN ITEMS
+	"QCX_RestoreSessionCancel();"
+	"if (!restoring_qc2cpp) QCX_DiscardPreparedLoadGame();"
+	"preserved_pause_reasons"
+	"SV_PAUSE_MANUAL"
+	"qc2cpp restore could not load saved map")
+	string(FIND "${sv_init}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "SV_SpawnServer missing fresh-restore lifecycle route: ${required}")
+	endif()
+endforeach()
+string(FIND "${sv_init}" "memset (&sv, 0, sizeof(sv));" server_wipe)
+string(FIND "${sv_init}" "sv.paused = preserved_pause_reasons;" restored_manual_pause)
+if(server_wipe EQUAL -1 OR restored_manual_pause EQUAL -1
+	OR NOT server_wipe LESS restored_manual_pause)
+	message(FATAL_ERROR
+		"SV_SpawnServer must preserve manual pause after wiping the per-level server state")
+endif()
+
+string(FIND "${begin_source}" "QCX_RestoreSessionBegin(sv_client)" restored_begin)
+string(FIND "${begin_source}" "if (restoring_qcx_client && (sv.paused & SV_PAUSE_MANUAL))" restored_pause)
+if(restored_begin EQUAL -1 OR restored_pause EQUAL -1 OR NOT restored_begin LESS restored_pause)
+	message(FATAL_ERROR
+		"Cmd_Begin_f must send a surviving pause only after the restored client completes begin")
+endif()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/sv_main.c" sv_main_lifecycle)
+foreach(required IN ITEMS
+	"#include \"qcx/save.h\""
+	"QCX_DiscardPreparedLoadGame();"
+	"SV_PAUSE_MANUAL")
+	string(FIND "${sv_main_lifecycle}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "src/sv_main.c missing restore lifecycle or pause route: ${required}")
+	endif()
+endforeach()
+
+file(READ "${MVDSV_SOURCE_DIR}/src/sv_user.c" sv_user_pause)
+foreach(required IN ITEMS "void SV_SetPauseReason" "SV_PAUSE_MANUAL")
+	string(FIND "${sv_user_pause}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "src/sv_user.c missing pause-reason route: ${required}")
 	endif()
 endforeach()

@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#if defined(QCX_ENABLED)
+#include "qcx/restore_session.h"
+#endif
 
 cvar_t	sv_cheats = {"sv_cheats", "0"};
 qbool	sv_allow_cheats = false;
@@ -1818,6 +1821,9 @@ void SV_InitOperatorCommands (void)
 {
 	int i;
 
+#if defined(QCX_ENABLED)
+	QCX_RestoreSessionInit();
+#endif
 	Cvar_Register (&sv_cheats);
 
 	if (SV_CommandLineEnableCheats())
