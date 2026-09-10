@@ -412,6 +412,7 @@ or crashing.
 */
 void SV_DropClient(client_t* drop)
 {
+	qbool restoring_qcx_client = false;
 	SV_RD_ClearClient(drop);
 	//bliP: cuff, mute ->
 	SV_SavePenaltyFilter (drop, ft_mute, drop->lockedtill);
@@ -432,9 +433,13 @@ void SV_DropClient(client_t* drop)
 		return;
 	}
 #endif
+
+#if defined(QCX_ENABLED)
+	restoring_qcx_client = QCX_RestoreSessionClientDropped(drop);
+#endif
 	MSG_WriteByte (&drop->netchan.message, svc_disconnect);
 
-	if (drop->state == cs_spawned)
+	if (drop->state == cs_spawned && !restoring_qcx_client)
 	{
 		// call the prog function for removing a client
 		// this will set the body to a dead frame, among other things
@@ -461,8 +466,12 @@ void SV_DropClient(client_t* drop)
 
 	SV_Logout(drop);
 
-	drop->state = cs_zombie;		    // become free in a few seconds
-	SV_SetClientConnectionTime(drop);   // for zombie timeout
+	if (restoring_qcx_client) {
+		drop->state = cs_free;
+	} else {
+		drop->state = cs_zombie;		    // become free in a few seconds
+		SV_SetClientConnectionTime(drop);   // for zombie timeout
+	}
 
 // MD -->
 	if (drop == WatcherId)
@@ -470,7 +479,8 @@ void SV_DropClient(client_t* drop)
 // <-- MD
 
 	drop->old_frags = 0;
-	drop->edict->v->frags = 0.0;
+	if (!restoring_qcx_client)
+		drop->edict->v->frags = 0.0;
 	drop->name[0] = 0;
 
 #ifdef FTE_PEXT_CSQC
@@ -1145,7 +1155,7 @@ qbool CheckPasswords( char *userinfo, int userinfo_size, qbool *spass_ptr, qbool
 
 //==============================================
 
-qbool CheckReConnect( netadr_t adr, int qport )
+static client_t *SV_FindReconnectingClient(netadr_t adr, int qport)
 {
 	int i;
 	client_t *cl;
@@ -1157,36 +1167,39 @@ qbool CheckReConnect( netadr_t adr, int qport )
 
 		if (NET_CompareBaseAdr (adr, cl->netchan.remote_address) &&
 			(cl->netchan.qport == qport || adr.port == cl->netchan.remote_address.port))
-		{
-			if (SV_ClientConnectedTime(cl) < sv_reconnectlimit.value)
-			{
-				Con_Printf ("%s:reconnect rejected: too soon\n", NET_AdrToString (adr));
-				return false;
-			}
+			return cl;
+	}
+	return NULL;
+}
 
-			switch ( cl->state )
-			{
-				case cs_zombie: // zombie already dropped.
-					break;
-
-				case cs_preconnected:
-				case cs_connected:
-				case cs_spawned:
-
-					SV_DropClient (cl);
-					SV_ClearReliable (cl);	// don't send the disconnect
-					break;
-
-				default:
-					return false; // unknown state, should not be the case.
-			}
-
-			cl->state = cs_free;
-			Con_Printf ("%s:reconnect\n", NET_AdrToString (adr));
-			break;
-		}
+qbool CheckReConnect( netadr_t adr, int qport )
+{
+	client_t *const cl = SV_FindReconnectingClient(adr, qport);
+	if (cl == NULL) return true;
+	if (SV_ClientConnectedTime(cl) < sv_reconnectlimit.value)
+	{
+		Con_Printf ("%s:reconnect rejected: too soon\n", NET_AdrToString (adr));
+		return false;
 	}
 
+	switch (cl->state)
+	{
+		case cs_zombie: // zombie already dropped.
+			break;
+
+		case cs_preconnected:
+		case cs_connected:
+		case cs_spawned:
+			SV_DropClient(cl);
+			SV_ClearReliable(cl); // don't send the disconnect
+			break;
+
+		default:
+			return false; // unknown state, should not be the case.
+	}
+
+	cl->state = cs_free;
+	Con_Printf ("%s:reconnect\n", NET_AdrToString (adr));
 	return true;
 }
 
@@ -1275,7 +1288,10 @@ extern char *shortinfotbl[];
 static void SVC_DirectConnect (void)
 {
 	int spectator;
-	qbool spass, vip, rip_vip;
+	qbool spass, vip, rip_vip, qcx_restore_identity = false;
+#if defined(QCX_ENABLED)
+	qbool qcx_saved_spectator;
+#endif
 
 	int clients, spectators, vips;
 	int qport, i, edictnum;
@@ -1351,6 +1367,32 @@ static void SVC_DirectConnect (void)
 
 	spass = vip = rip_vip = spectator = false;
 
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionWaiting()) {
+		qcx_restore_identity = QCX_RestoreSessionAdmissionRole(
+			Info_ValueForKey(userinfo, "name"), &qcx_saved_spectator);
+		if (!qcx_restore_identity) {
+			client_t *const reconnect = SV_FindReconnectingClient(net_from, qport);
+			if (reconnect != NULL && QCX_RestoreSessionClientRoleLocked(reconnect)
+				&& Q_namecmp(reconnect->name, Info_ValueForKey(userinfo, "name")) == 0) {
+				qcx_restore_identity = true;
+				qcx_saved_spectator = reconnect->spectator != 0;
+			}
+		}
+		if (qcx_restore_identity) {
+			if (qcx_saved_spectator) {
+				const char *const requested_spectator =
+					Info_ValueForKey(userinfo, "spectator");
+				if (!*requested_spectator || !strcmp(requested_spectator, "0")) {
+					Info_SetValueForKey(userinfo, "spectator", "1", sizeof(userinfo));
+				}
+			} else {
+				Info_RemoveKey(userinfo, "spectator");
+			}
+		}
+	}
+#endif
+
 	// check for password or spectator_password
 	if ( !CheckPasswords( userinfo, sizeof(userinfo), &spass, &vip, &spectator) )
 		return; // pass was wrong
@@ -1366,6 +1408,7 @@ static void SVC_DirectConnect (void)
 
 #if defined(QCX_ENABLED)
 	if (QCX_RestoreSessionWaiting()) {
+		if (qcx_restore_identity) spectator = qcx_saved_spectator;
 		newcl = QCX_RestoreSessionAdmissionSlot(Info_ValueForKey(userinfo, "name"));
 		if (newcl == NULL) {
 			Netchan_OutOfBandPrint(NS_SERVER, adr,
@@ -1379,9 +1422,10 @@ static void SVC_DirectConnect (void)
 
 	// if at server limits, refuse connection
 
-	if ((spectator && !SpectatorCanConnect(vip, spass, spectators, vips)) || 
-	    (!spectator && !PlayerCanConnect(clients)) || 
-	    !newcl)
+	if ((!qcx_restore_identity
+		&& ((spectator && !SpectatorCanConnect(vip, spass, spectators, vips))
+			|| (!spectator && !PlayerCanConnect(clients))))
+		|| !newcl)
 	{
 		Sys_Printf ("%s:full connect\n", NET_AdrToString (adr));
 
