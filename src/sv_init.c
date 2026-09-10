@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#if defined(QCX_ENABLED)
+#include "qcx/restore_session.h"
+#include "qcx/save.h"
+#endif
 
 #ifndef SERVERONLY
 void CL_ClearState(void);
@@ -263,6 +267,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	int inline_models;
 	int skill_level = current_skill;
 	cm_vispolicy_t vispolicy;
+	const int preserved_pause_reasons = restoring_qc2cpp
+		? (sv.paused & SV_PAUSE_MANUAL) : 0;
 
 	extern cvar_t sv_loadentfiles, sv_loadentfiles_dir;
 	char *entitystring;
@@ -283,6 +289,14 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 
 	SV_SaveSpawnparms ();
 	SV_LoadAccounts();
+
+#if defined(QCX_ENABLED)
+	/* A failed QCMS preflight never reaches this point, so an old restore wait
+	 * remains intact.  Every actual map transition cancels the old wait before
+	 * it can mutate a different world. */
+	QCX_RestoreSessionCancel();
+	if (!restoring_qc2cpp) QCX_DiscardPreparedLoadGame();
+#endif
 
 #ifdef USE_PR2
 	// remove bot clients
@@ -312,8 +326,6 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	com_serveractive = false;
 #endif
 	sv.state = ss_dead;
-	sv.paused = false;
-	Cvar_SetROM(&sv_paused, "0");
 
 	Host_ClearMemory();
 
@@ -372,6 +384,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	// NOTE: this also set sv.mvdrecording to false, so calling SV_MVD_Record() at end of function
 	memset (&sv, 0, sizeof(sv));
 	sv.max_edicts = MAX_EDICTS_SAFE;
+	sv.paused = preserved_pause_reasons;
+	Cvar_SetROM(&sv_paused, va("%i", sv.paused));
 
 	sv.datagram.maxsize = sizeof(sv.datagram_buf);
 	sv.datagram.data = sv.datagram_buf;
@@ -388,6 +402,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	sv.num_signon_buffers = 1;
 
 	sv.time = 1.0;
+	if (sv.paused) sv.pausedsince = Sys_DoubleTime();
 
 #ifdef FTE_PEXT_CSQC
 	SV_LoadCSQC();
@@ -499,6 +514,13 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	vispolicy = SV_VisibilityPolicy();
 	if (!(sv.worldmodel = CM_LoadMap (sv.modelname, false, vispolicy, &sv.map_checksum, &sv.map_checksum2))) // true if bad map
 	{
+		if (restoring_qc2cpp) {
+#if defined(QCX_ENABLED)
+			QCX_RestoreSessionCancel();
+			QCX_DiscardPreparedLoadGame();
+#endif
+			SV_Error("qc2cpp restore could not load saved map %s", mapname);
+		}
 		Con_Printf ("Cant load map %s, falling back to %s\n", mapname, oldmap);
 
 		// fill mapname, sv.mapname and sv.modelname with old map name

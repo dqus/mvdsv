@@ -2,6 +2,7 @@
 
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
+#include "qcx/restore_session.h"
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #endif
@@ -27,30 +28,7 @@ typedef struct qcx_save_writer_s {
 	const uint8_t *end;
 } qcx_save_writer_t;
 
-typedef struct qcx_connected_snapshot_s {
-	uint64_t hash;
-	uint32_t size;
-	qbool valid;
-} qcx_connected_snapshot_t;
-
-static qcx_connected_snapshot_t qcx_connected_snapshot;
 static qcx_save_image_t *qcx_prepared_image;
-
-static uint64_t QCX_SaveFingerprint(const uint8_t *bytes, uint32_t size)
-{
-	uint64_t hash = UINT64_C(14695981039346656037);
-	uint32_t index;
-	for (index = 0U; index < size; ++index) {
-		hash ^= bytes[index];
-		hash *= UINT64_C(1099511628211);
-	}
-	return hash;
-}
-
-void QCX_SaveInvalidateConnectedSnapshot(void)
-{
-	qcx_connected_snapshot.valid = false;
-}
 
 typedef struct qcx_save_reader_s {
 	const uint8_t *cursor;
@@ -498,27 +476,6 @@ static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
 			}
 		}
 	}
-	for (index = 0U; index < MAX_CLIENTS; ++index) {
-		const client_t *const client = &svs.clients[index];
-		const qcx_save_roster_entry_t *saved = NULL;
-		uint32_t roster_index;
-		for (roster_index = 0U; roster_index < image->roster_count; ++roster_index) {
-			if (image->roster[roster_index].saved_slot == index) {
-				saved = &image->roster[roster_index];
-				break;
-			}
-		}
-		if ((client->state == cs_connected || client->state == cs_spawned)
-			!= (saved != NULL)) {
-			return QCX_RESTORE_ENTITY_SET_MISMATCH;
-		}
-		if (saved != NULL
-			&& ((client->state == cs_spawned) != (saved->spawned != 0U)
-				|| (client->spectator != 0)
-					!= (saved->role == QCX_SAVE_ROLE_SPECTATOR))) {
-			return QCX_RESTORE_ENTITY_SET_MISMATCH;
-		}
-	}
 	return QCX_RESTORE_OK;
 }
 
@@ -535,7 +492,7 @@ qcx_restore_status_t QCX_ValidateSaveGame(const qcx_save_image_t *image)
 	return QCX_RESTORE_OK;
 }
 
-static void QCX_RefreshClientReplication(void)
+void QCX_RefreshClientReplication(void)
 {
 	uint32_t source_index;
 	for (source_index = 0U; source_index < MAX_CLIENTS; ++source_index) {
@@ -596,20 +553,6 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 	for (index = 0U; index < qcx_restore_plan.num_edicts; ++index) {
 		if (!sv.edicts[index].e.free) SV_LinkEdict(&sv.edicts[index], false);
 	}
-	for (index = 0U; index < image->roster_count; ++index) {
-		const qcx_save_roster_entry_t *const entry = &image->roster[index];
-		client_t *const client = &svs.clients[entry->saved_slot];
-		if (client->state == cs_connected || client->state == cs_spawned) {
-			memcpy(client->spawn_parms, entry->spawn_parms, sizeof(entry->spawn_parms));
-		}
-	}
-#if defined(QCX_TESTS)
-	QCX_TestObserverRestoreReplicationBegin();
-#endif
-	QCX_RefreshClientReplication();
-#if defined(QCX_TESTS)
-	QCX_TestObserverRestoreReplicationComplete();
-#endif
 	qcx_restore_plan.image = NULL;
 }
 
@@ -622,6 +565,10 @@ qbool QCX_SaveGame(const char *name)
 	uint8_t *encoded = NULL; uint32_t encoded_size = 0U; qbool result = false;
 	const char *failure = "unknown error";
 	qcx_byte_count_t required;
+	if (QCX_RestoreSessionBlocksSave() || QCX_HasPreparedLoadGame()) {
+		Con_Printf("qc2cpp save rejected: restore is still in progress.\n");
+		return false;
+	}
 	if (!QCX_Active() || sv.state != ss_active || sv.max_edicts <= 0 || entity_capacity == 0U
 		|| entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY || (uint32_t)sv.max_edicts > entity_capacity
 		|| !QCX_SaveNameIsSafe(name)) {
@@ -666,12 +613,6 @@ qbool QCX_SaveGame(const char *name)
 	}
 	result = QCX_SaveWriteFile(name, encoded, encoded_size);
 	if (!result) failure = "could not write save file";
-	if (result && image.roster_count != 0U) {
-		qcx_connected_snapshot = (qcx_connected_snapshot_t){
-			.hash = QCX_SaveFingerprint(encoded, encoded_size), .size = encoded_size, .valid = true};
-	} else if (result) {
-		QCX_SaveInvalidateConnectedSnapshot();
-	}
 done:
 	if (!result) Con_Printf("qc2cpp save rejected: %s.\n", failure);
 	free(encoded); free(engine.data); free(guest.data); return result;
@@ -722,20 +663,32 @@ qbool QCX_HasPreparedLoadGame(void)
 	return qcx_prepared_image != NULL;
 }
 
+static qbool QCX_SaveIsV1Image(const uint8_t *bytes, uint32_t size)
+{
+	return bytes != NULL && size >= 8U && memcmp(bytes, "QCMS", 4U) == 0
+		&& bytes[4] == 1U && bytes[5] == 0U && bytes[6] == 0U && bytes[7] == 0U;
+}
+
 qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_size)
 {
 	uint8_t *bytes = NULL;
 	uint32_t size = 0U;
 	qcx_save_image_t *image = NULL;
+	qcx_plugin_status_t parse_status;
 	if (map_name == NULL || map_name_size == 0U || !QCX_SaveNameIsSafe(name)
-		|| !QCX_SaveReadFile(name, &bytes, &size)
-		|| QCX_SaveParse(bytes, size, &image) != QCX_PLUGIN_OK) {
+		|| !QCX_SaveReadFile(name, &bytes, &size)) {
+		return false;
+	}
+	parse_status = QCX_SaveParse(bytes, size, &image);
+	if (parse_status != QCX_PLUGIN_OK) {
+		if (QCX_SaveIsV1Image(bytes, size)) {
+			Con_Printf("qc2cpp restore rejected: QCMS V1 saves are unsupported; create a new save.\n");
+		}
 		QCX_SaveImageFree(image);
 		free(bytes);
 		return false;
 	}
-	if (image->roster_count != 0U
-		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
+	if (strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| QCX_SaveBoundedStringLength(image->metadata.map_name, map_name_size - 1U)
 		>= map_name_size) {
 		Con_Printf("qc2cpp fresh restore rejected: saved game=%s, selected game=%s, map=%s, roster=%u.\n",
@@ -810,26 +763,10 @@ qbool QCX_CommitPreparedLoadGame(void)
 		return false;
 	}
 	QCX_ApplySaveGame(qcx_prepared_image);
+	if (!QCX_RestoreSessionInstall(qcx_prepared_image, Sys_DoubleTime())) {
+		Con_Printf("qc2cpp prepared restore could not install player roster.\n");
+		return false;
+	}
 	QCX_DiscardPreparedLoadGame();
 	return true;
-}
-
-qbool QCX_LoadGame(const char *name)
-{
-	uint8_t *bytes = NULL;
-	uint32_t size = 0U;
-	qcx_save_image_t *image = NULL;
-	qbool result = false;
-	if (!QCX_Active() || !QCX_SaveNameIsSafe(name) || !QCX_SaveReadFile(name, &bytes, &size)
-		|| QCX_SaveParse(bytes, size, &image) != QCX_PLUGIN_OK
-		|| QCX_ValidateSaveGame(image) != QCX_RESTORE_OK
-		|| (image->roster_count != 0U
-			&& (!qcx_connected_snapshot.valid || qcx_connected_snapshot.size != size
-				|| qcx_connected_snapshot.hash != QCX_SaveFingerprint(bytes, size)))) goto done;
-	QCX_ApplySaveGame(image);
-	result = true;
-done:
-	QCX_SaveImageFree(image);
-	free(bytes);
-	return result;
 }

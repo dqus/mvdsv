@@ -25,6 +25,15 @@ static uint32_t client_replication_updates;
 static uint8_t saved_selection;
 static uint8_t expected_validation_selection;
 
+qbool QCX_RestoreSessionBlocksSave(void) { return false; }
+qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_now)
+{
+	(void)image;
+	(void)monotonic_now;
+	return true;
+}
+double Sys_DoubleTime(void) { return 100.0; }
+
 qbool QCX_Active(void) { return true; }
 qcx_shared_global_state_v1_t *QCX_Globals(void) { return &restore_shared_globals; }
 uint32_t QCX_EntityCapacity(void) { return test_entity_capacity; }
@@ -263,7 +272,7 @@ static void test_valid_image_validates_then_applies_in_place(void)
 	assert(sv.edicts[1].e.freetime == 3.0f);
 }
 
-static void test_roster_restore_refreshes_client_replication(void)
+static void test_roster_restore_defers_client_replication_until_session_completion(void)
 {
 	byte_writer_t engine = {0};
 	qcx_save_image_t image;
@@ -275,11 +284,8 @@ static void test_roster_restore_refreshes_client_replication(void)
 	image = make_valid_image(&engine, true, true);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	QCX_ApplySaveGame(&image);
-	assert(client_replication_updates == 1U);
-	assert(svs.clients[0].delta_sequence == -1);
-	for (uint32_t index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		assert(svs.clients[0].spawn_parms[index] == (float)index + 0.5f);
-	}
+	assert(client_replication_updates == 0U);
+	assert(svs.clients[0].delta_sequence == 23);
 }
 
 static void test_rejects_a_save_without_an_active_world_slot(void)
@@ -295,7 +301,7 @@ static void test_rejects_a_save_without_an_active_world_slot(void)
 	assert(sv.edicts[0].e.free == false);
 }
 
-static void test_rejects_a_roster_free_save_while_a_client_is_live(void)
+static void test_fresh_restore_does_not_require_current_client_lifecycle(void)
 {
 	byte_writer_t engine = {0};
 	qcx_save_image_t image;
@@ -303,12 +309,12 @@ static void test_rejects_a_roster_free_save_while_a_client_is_live(void)
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].edict = &sv.edicts[1];
 	image = make_valid_image(&engine, true, false);
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
-	assert(guest_validation_calls == 0U);
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
 
-static void test_rejects_a_roster_lifecycle_mismatch(void)
+static void test_fresh_restore_does_not_require_matching_current_slot_state(void)
 {
 	byte_writer_t engine = {0};
 	qcx_save_image_t image;
@@ -317,12 +323,12 @@ static void test_rejects_a_roster_lifecycle_mismatch(void)
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
 	image = make_valid_image(&engine, true, true);
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
-	assert(guest_validation_calls == 0U);
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
 
-static void test_rejects_a_roster_role_mismatch(void)
+static void test_fresh_restore_does_not_require_matching_current_role(void)
 {
 	byte_writer_t engine = {0};
 	qcx_save_image_t image;
@@ -332,8 +338,8 @@ static void test_rejects_a_roster_role_mismatch(void)
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
 	image = make_valid_image(&engine, true, true);
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
-	assert(guest_validation_calls == 0U);
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
 
@@ -354,11 +360,11 @@ int main(void)
 {
 	test_invalid_image_is_rejected_before_guest_or_host_mutation();
 	test_valid_image_validates_then_applies_in_place();
-	test_roster_restore_refreshes_client_replication();
+	test_roster_restore_defers_client_replication_until_session_completion();
 	test_rejects_a_save_without_an_active_world_slot();
-	test_rejects_a_roster_free_save_while_a_client_is_live();
-	test_rejects_a_roster_lifecycle_mismatch();
-	test_rejects_a_roster_role_mismatch();
+	test_fresh_restore_does_not_require_current_client_lifecycle();
+	test_fresh_restore_does_not_require_matching_current_slot_state();
+	test_fresh_restore_does_not_require_matching_current_role();
 	test_rejects_a_roster_client_without_an_active_player_entity();
 	return 0;
 }
