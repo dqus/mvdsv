@@ -595,6 +595,11 @@ target_compile_definitions(qcx_restore_session_test PRIVATE
 target_link_libraries(qcx_restore_session_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_restore_session COMMAND qcx_restore_session_test)
 
+add_test(NAME qcx_restore_routes
+	COMMAND ${CMAKE_COMMAND}
+		-DMVDSV_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+		-P ${CMAKE_CURRENT_SOURCE_DIR}/restore_routes_test.cmake)
+
 if(QC2CPP_COMPILER)
 	add_custom_target(qc2cpp_optional_fields_native_assets
 		COMMAND ${CMAKE_COMMAND}
@@ -675,7 +680,8 @@ foreach(test_name IN ITEMS
 	qcx_save_format
 	qcx_restore
 	qcx_restore_roster
-	qcx_restore_session)
+	qcx_restore_session
+	qcx_restore_routes)
 	qcx_set_test_labels(${test_name} "qcx;fast")
 endforeach()
 
