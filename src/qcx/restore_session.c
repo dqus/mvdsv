@@ -64,6 +64,51 @@ static void QCX_RestoreSessionClearMovementCaches(client_t *client)
 	memset(client->laggedents, 0, sizeof(client->laggedents));
 }
 
+static qcx_restore_roster_entry_t *QCX_RestoreSessionClientEntry(client_t *client)
+{
+	const int index = client == NULL ? -1 : client->qcx_restore_roster_index;
+	qcx_restore_roster_entry_t *entry;
+	if (!QCX_RestoreSessionWaiting() || index < 0
+		|| (uint32_t)index >= qcx_restore_session.roster.count) {
+		return NULL;
+	}
+	entry = &qcx_restore_session.roster.entries[index];
+	if (entry->saved.saved_slot != (uint32_t)(client - svs.clients)) return NULL;
+	return entry;
+}
+
+static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
+	const qcx_save_roster_entry_t *saved)
+{
+	const qbool spectator = saved->role == QCX_SAVE_ROLE_SPECTATOR;
+	client->spectator = spectator;
+	if (spectator) {
+		(void)Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
+		(void)Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
+	} else {
+		(void)Info_Remove(&client->_userinfo_ctx_, "*spectator");
+		(void)Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
+	}
+	if (saved->team[0] == '\0') {
+		(void)Info_Remove(&client->_userinfo_ctx_, "team");
+		(void)Info_Remove(&client->_userinfoshort_ctx_, "team");
+	} else {
+		(void)Info_Set(&client->_userinfo_ctx_, "team", saved->team);
+		(void)Info_Set(&client->_userinfoshort_ctx_, "team", saved->team);
+	}
+	strlcpy(client->team, saved->team, sizeof(client->team));
+	SV_ClientPrintf(client, PRINT_HIGH, "Restoring saved identity as %s%s%s.\n",
+		spectator ? "spectator" : "player", saved->team[0] == '\0' ? "" : " on team ",
+		saved->team[0] == '\0' ? "" : saved->team);
+}
+
+static void QCX_RestoreSessionQueueRestoredNew(client_t *client)
+{
+	SV_ClearReliable(client);
+	ClientReliableWrite_Begin(client, svc_stufftext, 10);
+	ClientReliableWrite_String(client, "cmd new\n");
+}
+
 static void QCX_RestoreSessionSwapClients(uint32_t left_slot, uint32_t right_slot)
 {
 	client_t *const left = &svs.clients[left_slot];
@@ -138,7 +183,7 @@ static int QCX_RestoreSessionFindLowestNamedClient(const char *name)
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		const client_t *const client = &svs.clients[slot];
 		if (!QCX_RestoreSessionClientIsLive(client)
-			|| client->qcx_restore_pending) {
+			|| client->qcx_restore_roster_index >= 0) {
 			continue;
 		}
 		if (Q_namecmp(client->name, name) == 0) return (int)slot;
@@ -154,7 +199,7 @@ static int QCX_RestoreSessionFindHighestUnmatchedUnreservedClient(void)
 		const client_t *const client = &svs.clients[candidate];
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		if (QCX_RestoreSessionClientIsLive(client)
-			&& !client->qcx_restore_pending
+			&& client->qcx_restore_roster_index < 0
 			&& !QCX_RestoreSessionSlotReserved(candidate)) {
 			return (int)candidate;
 		}
@@ -181,7 +226,7 @@ static void QCX_RestoreSessionEvacuateUnmatchedReservations(void)
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		if (!QCX_RestoreSessionSlotReserved(slot)
 			|| !QCX_RestoreSessionClientIsLive(&svs.clients[slot])
-			|| svs.clients[slot].qcx_restore_pending) {
+			|| svs.clients[slot].qcx_restore_roster_index >= 0) {
 			continue;
 		}
 		destination = QCX_RestoreSessionFindFreeUnreservedSlot();
@@ -281,20 +326,37 @@ qbool QCX_RestoreSessionSlotReserved(uint32_t slot)
 	return false;
 }
 
-client_t *QCX_RestoreSessionAdmissionSlot(const char *raw_name)
+static int QCX_RestoreSessionFindAdmissionEntry(const char *raw_name)
 {
 	uint32_t index;
-	int slot;
-	if (!QCX_RestoreSessionWaiting() || raw_name == NULL) return NULL;
+	if (!QCX_RestoreSessionWaiting() || raw_name == NULL) return -1;
 	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
 		const qcx_restore_roster_entry_t *const entry =
 			&qcx_restore_session.roster.entries[index];
 		if (entry->state == QCX_RESTORE_ENTRY_AVAILABLE
 			&& Q_namecmp(entry->saved.name, raw_name) == 0
 			&& svs.clients[entry->saved.saved_slot].state == cs_free) {
-			return &svs.clients[entry->saved.saved_slot];
+			return (int)index;
 		}
 	}
+	return -1;
+}
+
+qbool QCX_RestoreSessionAdmissionRole(const char *raw_name, qbool *spectator)
+{
+	const int index = QCX_RestoreSessionFindAdmissionEntry(raw_name);
+	if (index < 0 || spectator == NULL) return false;
+	*spectator = qcx_restore_session.roster.entries[index].saved.role
+		== QCX_SAVE_ROLE_SPECTATOR;
+	return true;
+}
+
+client_t *QCX_RestoreSessionAdmissionSlot(const char *raw_name)
+{
+	const int index = QCX_RestoreSessionFindAdmissionEntry(raw_name);
+	int slot;
+	if (!QCX_RestoreSessionWaiting() || raw_name == NULL) return NULL;
+	if (index >= 0) return &svs.clients[qcx_restore_session.roster.entries[index].saved.saved_slot];
 	slot = QCX_RestoreSessionFindFreeUnreservedSlot();
 	return slot < 0 ? NULL : &svs.clients[slot];
 }
@@ -315,6 +377,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 {
 	uint32_t index;
 	uint32_t slot;
+	qbool was_waiting[MAX_CLIENTS];
 	(void)monotonic_now;
 	if (!QCX_RestoreSessionWaiting() || !qcx_restore_session.dirty) return;
 	qcx_restore_session.dirty = false;
@@ -328,7 +391,17 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 	}
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
+		was_waiting[slot] = svs.clients[slot].qcx_restore_waiting;
 		QCX_RestoreSessionClearClientFlags(&svs.clients[slot]);
+	}
+	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
+		const qcx_restore_roster_entry_t *const entry =
+			&qcx_restore_session.roster.entries[index];
+		client_t *const client = &svs.clients[entry->saved.saved_slot];
+		if (entry->state == QCX_RESTORE_ENTRY_ACTIVE
+			&& QCX_RestoreSessionClientIsLive(client)) {
+			client->qcx_restore_roster_index = (int)index;
+		}
 	}
 	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
 		const int client_slot = QCX_RestoreSessionFindLowestNamedClient(
@@ -338,13 +411,16 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			client_t *const client = &svs.clients[client_slot];
 			client->qcx_restore_pending = true;
 			client->qcx_restore_roster_index = (int)index;
+			QCX_RestoreSessionApplySavedIdentity(client,
+				&qcx_restore_session.roster.entries[index].saved);
+			if (was_waiting[client_slot]) QCX_RestoreSessionQueueRestoredNew(client);
 		}
 	}
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		client_t *const client = &svs.clients[slot];
 		if (QCX_RestoreSessionClientIsLive(client)
-			&& !client->qcx_restore_pending) {
+			&& client->qcx_restore_roster_index < 0) {
 			client->qcx_restore_waiting = true;
 		}
 	}
@@ -369,4 +445,88 @@ qbool QCX_RestoreSessionClientWaiting(const client_t *client)
 qbool QCX_RestoreSessionClientPending(const client_t *client)
 {
 	return client != NULL && client->qcx_restore_pending;
+}
+
+qbool QCX_RestoreSessionClientRoleLocked(const client_t *client)
+{
+	qcx_restore_roster_entry_t *entry;
+	if (client == NULL) return false;
+	entry = QCX_RestoreSessionClientEntry((client_t *)client);
+	return entry != NULL && (entry->state == QCX_RESTORE_ENTRY_BOUND
+		|| entry->state == QCX_RESTORE_ENTRY_ACTIVE);
+}
+
+void QCX_RestoreSessionPrintRoster(client_t *client)
+{
+	uint32_t index;
+	qbool printed_entry = false;
+	if (client == NULL) return;
+	if (!QCX_RestoreSessionWaiting()) {
+		SV_ClientPrintf(client, PRINT_HIGH, "No QCX restore roster is waiting.\n");
+		return;
+	}
+	SV_ClientPrintf(client, PRINT_HIGH, "Saved players available for restore:\n");
+	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
+		const qcx_restore_roster_entry_t *const entry =
+			&qcx_restore_session.roster.entries[index];
+		const char *const role = entry->saved.role == QCX_SAVE_ROLE_SPECTATOR
+			? "spectator" : "player";
+		if (entry->state != QCX_RESTORE_ENTRY_AVAILABLE) continue;
+		printed_entry = true;
+		if (entry->saved.team[0] == '\0') {
+			SV_ClientPrintf(client, PRINT_HIGH, "%s [%s]\n", entry->saved.name, role);
+		} else {
+			SV_ClientPrintf(client, PRINT_HIGH, "%s [%s, team=%s]\n",
+				entry->saved.name, role, entry->saved.team);
+		}
+	}
+	if (!printed_entry) {
+		SV_ClientPrintf(client, PRINT_HIGH, "No saved identities are currently available.\n");
+		return;
+	}
+	SV_ClientPrintf(client, PRINT_HIGH,
+		"Change your name to restore a saved player. Use \"cmd qcx_restore_list\" to show this list again.\n");
+}
+
+qbool QCX_RestoreSessionPrepareSpawn(client_t *client)
+{
+	qcx_restore_roster_entry_t *const entry = QCX_RestoreSessionClientEntry(client);
+	edict_t *ent;
+	if (entry == NULL || entry->state != QCX_RESTORE_ENTRY_BOUND) return false;
+	ent = client->edict;
+	if (ent == NULL) return false;
+	client->entgravity = fofs_gravity ? EdictFieldFloat(ent, fofs_gravity) : 1.0f;
+	client->maxspeed = fofs_maxspeed ? EdictFieldFloat(ent, fofs_maxspeed) : sv_maxspeed.value;
+	memset(client->stats, 0, sizeof(client->stats));
+	memset(client->frames, 0, sizeof(client->frames));
+	client->delta_sequence = -1;
+	client->lastservertimeupdate = -99.0;
+	return true;
+}
+
+qbool QCX_RestoreSessionBegin(client_t *client)
+{
+	qcx_restore_roster_entry_t *const entry = QCX_RestoreSessionClientEntry(client);
+	if (entry == NULL || entry->state != QCX_RESTORE_ENTRY_BOUND
+		|| !QCX_RestoreRosterActivate(&qcx_restore_session.roster,
+			(uint32_t)client->qcx_restore_roster_index)) {
+		return false;
+	}
+	client->qcx_restore_pending = false;
+	client->qcx_restore_waiting = false;
+	return true;
+}
+
+qbool QCX_RestoreSessionClientDropped(client_t *client)
+{
+	qcx_restore_roster_entry_t *const entry = QCX_RestoreSessionClientEntry(client);
+	if (entry == NULL || (entry->state != QCX_RESTORE_ENTRY_BOUND
+		&& entry->state != QCX_RESTORE_ENTRY_ACTIVE)
+		|| !QCX_RestoreRosterRelease(&qcx_restore_session.roster,
+			entry->saved.saved_slot)) {
+		return false;
+	}
+	QCX_RestoreSessionClearClientFlags(client);
+	qcx_restore_session.dirty = true;
+	return true;
 }

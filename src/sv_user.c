@@ -22,6 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#if defined(QCX_ENABLED)
+#include "qcx/restore_session.h"
+#endif
 
 static void SV_ClientDownloadComplete(client_t* cl);
 
@@ -315,6 +318,15 @@ static void Cmd_New_f (void)
 	//	SV_FullClientUpdate (sv_client, &sv.reliable_datagram);
 	//	sv_client->sendinfo = true;
 
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionClientWaiting(sv_client)) {
+		QCX_RestoreSessionPrintRoster(sv_client);
+		SV_ClientPrintf(sv_client, PRINT_HIGH,
+			"Waiting for a saved QCX identity before serverdata.\n");
+		return;
+	}
+#endif
+
 	gamedir = Info_ValueForKey (svs.info, "*gamedir");
 	if (!gamedir[0])
 		gamedir = "qw";
@@ -457,7 +469,11 @@ static void Cmd_New_f (void)
 	MSG_WriteFloat(&sv_client->netchan.message, movevars.waterfriction);
 	MSG_WriteFloat(&sv_client->netchan.message, /* sv_client->entgravity */ movevars.entgravity); // FIXME: this does't work, Tonik?
 
-	if (!sv_client->spectator) {
+	if (!sv_client->spectator
+#if defined(QCX_ENABLED)
+		&& !QCX_RestoreSessionClientPending(sv_client)
+#endif
+	) {
 		if (!PlayerCheckPing()) {
 			sv_client->old_frags = 0;
 			SV_SetClientConnectionTime(sv_client);
@@ -826,6 +842,7 @@ static void Cmd_Spawn_f (void)
 	int         i;
 	client_t    *client;
 	unsigned    n;
+	qbool       restoring_qcx_client = false;
 
 	if (sv_client->state != cs_connected)
 	{
@@ -878,7 +895,14 @@ static void Cmd_Spawn_f (void)
 		ClientReliableWrite_String (sv_client, sv.lightstyles[i]);
 	}
 
-	if (sv.loadgame)
+#if defined(QCX_ENABLED)
+	restoring_qcx_client = QCX_RestoreSessionPrepareSpawn(sv_client);
+#endif
+	if (restoring_qcx_client)
+	{
+		// The saved player edict already contains the restored world state.
+	}
+	else if (sv.loadgame)
 	{
 		// loaded games are already fully initialized 
 		// if this is the last client to be connected, unpause
@@ -961,6 +985,7 @@ static void Cmd_Begin_f (void)
 {
 	unsigned pmodel = 0, emodel = 0;
 	int i;
+	qbool restoring_qcx_client = false;
 
 	if (sv_client->state == cs_spawned)
 		return; // don't begin again
@@ -976,7 +1001,10 @@ static void Cmd_Begin_f (void)
 
 	sv_client->state = cs_spawned;
 
-	if (!sv.loadgame)
+#if defined(QCX_ENABLED)
+	restoring_qcx_client = QCX_RestoreSessionClientPending(sv_client);
+#endif
+	if (!restoring_qcx_client && !sv.loadgame)
 	{
 		if (sv_client->spectator)
 			SV_SpawnSpectator ();
@@ -1027,7 +1055,7 @@ static void Cmd_Begin_f (void)
 		SV_ClientPrintf(sv_client, PRINT_HIGH, "Server is paused.\n");
 	}
 
-	if (sv.loadgame)
+	if (sv.loadgame || restoring_qcx_client)
 	{
 		// send a fixangle over the reliable channel to make sure it gets there
 		// Never send a roll angle, because savegames can catch the server
@@ -1042,6 +1070,13 @@ static void Cmd_Begin_f (void)
 			MSG_WriteAngle (&sv_client->netchan.message, ent->v->v_angle[i]);
 		MSG_WriteAngle (&sv_client->netchan.message, 0);
 	}
+
+#if defined(QCX_ENABLED)
+	if (restoring_qcx_client && !QCX_RestoreSessionBegin(sv_client)) {
+		SV_DropClient(sv_client);
+		return;
+	}
+#endif
 
 	sv_client->lastservertimeupdate = -99; // update immediately
 }
@@ -2376,6 +2411,15 @@ static void Cmd_SetInfo_f (void)
 	if (strstr(Cmd_Argv(1), "&c") || strstr(Cmd_Argv(1), "&r") || strstr(Cmd_Argv(2), "&c") || strstr(Cmd_Argv(2), "&r"))
 		return;
 
+#if defined(QCX_ENABLED)
+	if ((!strcmp(Cmd_Argv(1), "name") || !strcmp(Cmd_Argv(1), "team"))
+		&& QCX_RestoreSessionClientRoleLocked(sv_client)) {
+		SV_ClientPrintf(sv_client, PRINT_HIGH,
+			"Saved restore identity is locked until the restore wait completes.\n");
+		return;
+	}
+#endif
+
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
 
 	pr_global_struct->time = sv.time;
@@ -2461,6 +2505,10 @@ void ProcessUserInfoChange (client_t* sv_client, const char* key, const char* ol
 	// process any changed values
 	SV_ExtractFromUserinfo (sv_client, !strcmp(key, "name"));
 
+#if defined(QCX_ENABLED)
+	if (!strcmp(key, "name")) QCX_RestoreSessionNameChanged(sv_client);
+#endif
+
 	if (mod_UserInfo_Changed)
 	{
 		pr_global_struct->time = sv.time;
@@ -2504,6 +2552,15 @@ Dumps the serverinfo info string
 static void Cmd_ShowServerinfo_f (void)
 {
 	Info_Print (svs.info);
+}
+
+static void Cmd_RestoreList_f(void)
+{
+#if defined(QCX_ENABLED)
+	QCX_RestoreSessionPrintRoster(sv_client);
+#else
+	SV_ClientPrintf(sv_client, PRINT_HIGH, "No QCX restore roster is waiting.\n");
+#endif
 }
 
 static void Cmd_NoSnap_f(void)
@@ -2674,6 +2731,14 @@ static void Cmd_Join_f (void)
 	if (sv_client->state != cs_spawned)
 		return;
 
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionClientRoleLocked(sv_client)) {
+		SV_ClientPrintf(sv_client, PRINT_HIGH,
+			"Saved restore role is locked until the restore wait completes.\n");
+		return;
+	}
+#endif
+
 	if (!sv_client->spectator)
 		return; // already a player
 
@@ -2765,6 +2830,14 @@ static void Cmd_Observe_f (void)
 
 	if (sv_client->state != cs_spawned)
 		return;
+
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionClientRoleLocked(sv_client)) {
+		SV_ClientPrintf(sv_client, PRINT_HIGH,
+			"Saved restore role is locked until the restore wait completes.\n");
+		return;
+	}
+#endif
 	if (sv_client->spectator)
 		return; // already a spectator
 
@@ -3328,6 +3401,7 @@ static ucmd_t ucmds[] =
 	{"say_team", Cmd_Say_Team_f, true},
 
 	{"setinfo", Cmd_SetInfo_f, false},
+	{"qcx_restore_list", Cmd_RestoreList_f, false},
 
 	{"serverinfo", Cmd_ShowServerinfo_f, false},
 

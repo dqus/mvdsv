@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,6 +14,9 @@ server_static_t svs;
 client_t *sv_client;
 edict_t *sv_player;
 client_t *WatcherId;
+cvar_t sv_maxspeed;
+int fofs_gravity;
+int fofs_maxspeed;
 
 static uint32_t name_comparisons;
 static uint32_t slot_visits;
@@ -23,6 +27,10 @@ static client_t *central_swap_left;
 static client_t *central_swap_right;
 static uint32_t drop_calls;
 static int drop_slots[32];
+static uint32_t client_print_calls;
+static char client_print_text[256];
+static uint32_t clear_reliable_calls;
+static uint32_t reliable_stufftext_calls;
 static info_t *allocated_info[MAX_CLIENTS * 2];
 static uint32_t allocated_info_count;
 
@@ -53,10 +61,83 @@ char *Info_Get(ctxinfo_t *context, const char *name)
 	return "";
 }
 
+qbool Info_Set(ctxinfo_t *context, const char *name, const char *value)
+{
+	info_t *item;
+	assert(context != NULL && name != NULL && value != NULL);
+	for (item = context->info_list; item != NULL; item = item->next) {
+		if (strcmp(item->name, name) == 0) {
+			free(item->value);
+			item->value = strdup(value);
+			assert(item->value != NULL);
+			return true;
+		}
+	}
+	item = calloc(1U, sizeof(*item));
+	assert(item != NULL);
+	item->name = strdup(name);
+	item->value = strdup(value);
+	assert(item->name != NULL && item->value != NULL);
+	assert(allocated_info_count < sizeof(allocated_info) / sizeof(allocated_info[0]));
+	allocated_info[allocated_info_count++] = item;
+	item->next = context->info_list;
+	context->info_list = item;
+	return true;
+}
+
+qbool Info_SetStar(ctxinfo_t *context, const char *name, const char *value)
+{
+	return Info_Set(context, name, value);
+}
+
+qbool Info_Remove(ctxinfo_t *context, const char *name)
+{
+	info_t **item;
+	assert(context != NULL && name != NULL);
+	for (item = &context->info_list; *item != NULL; item = &(*item)->next) {
+		if (strcmp((*item)->name, name) == 0) {
+			*item = (*item)->next;
+			return true;
+		}
+	}
+	return false;
+}
+
 void MVD_PlayerReset(int slot)
 {
 	assert(reset_calls < sizeof(reset_slots) / sizeof(reset_slots[0]));
 	reset_slots[reset_calls++] = slot;
+}
+
+void SV_ClientPrintf(client_t *client, int level, char *format, ...)
+{
+	va_list arguments;
+	(void)client;
+	(void)level;
+	++client_print_calls;
+	va_start(arguments, format);
+	vsnprintf(client_print_text, sizeof(client_print_text), format, arguments);
+	va_end(arguments);
+}
+
+void SV_ClearReliable(client_t *client)
+{
+	++clear_reliable_calls;
+	client->netchan.message.cursize = 0;
+	client->num_backbuf = 0;
+}
+
+void ClientReliableWrite_Begin(client_t *client, int command, int maxsize)
+{
+	(void)client;
+	(void)maxsize;
+	if (command == svc_stufftext) ++reliable_stufftext_calls;
+}
+
+void ClientReliableWrite_String(client_t *client, char *value)
+{
+	(void)client;
+	assert(strcmp(value, "cmd new\n") == 0);
 }
 
 void Central_SwapClientPointers(client_t *left, client_t *right)
@@ -75,11 +156,11 @@ void SV_DropClient(client_t *client)
 	client->state = cs_free;
 }
 
-static info_t *make_info(const char *value)
+static info_t *make_info(const char *name, const char *value)
 {
 	info_t *const item = calloc(1U, sizeof(*item));
 	assert(item != NULL);
-	item->name = strdup("name");
+	item->name = strdup(name);
 	item->value = strdup(value);
 	assert(item->name != NULL && item->value != NULL);
 	assert(allocated_info_count < sizeof(allocated_info) / sizeof(allocated_info[0]));
@@ -109,6 +190,11 @@ static void reset_fixture(void)
 	central_swap_left = NULL;
 	central_swap_right = NULL;
 	drop_calls = 0U;
+	client_print_calls = 0U;
+	client_print_text[0] = '\0';
+	clear_reliable_calls = 0U;
+	reliable_stufftext_calls = 0U;
+	sv_maxspeed.value = 320.0f;
 }
 
 static client_t *connect_client(uint32_t slot, const char *name, int userid)
@@ -120,9 +206,9 @@ static client_t *connect_client(uint32_t slot, const char *name, int userid)
 	client->userid = userid;
 	strcpy(client->name, name);
 	client->_userinfo_ctx_.max = MAX_CLIENT_INFOS;
-	client->_userinfo_ctx_.info_list = make_info(name);
+	client->_userinfo_ctx_.info_list = make_info("name", name);
 	client->_userinfoshort_ctx_.max = MAX_CLIENT_INFOS;
-	client->_userinfoshort_ctx_.info_list = make_info(name);
+	client->_userinfoshort_ctx_.info_list = make_info("name", name);
 	client->netchan.message.data = client->netchan.message_buf;
 	client->netchan.message.maxsize = (int)sizeof(client->netchan.message_buf);
 	client->datagram.data = client->datagram_buf;
@@ -287,6 +373,197 @@ static void test_admission_does_not_consume_reserved_slots(void)
 	assert(QCX_RestoreSessionSlotReserved(1U));
 }
 
+static void test_admission_uses_the_saved_identity_role(void)
+{
+	qcx_save_roster_entry_t player = saved(1U, "Alice");
+	qcx_save_roster_entry_t spectator = saved(2U, "Bob");
+	qcx_save_image_t image;
+	qbool role = true;
+	reset_fixture();
+	player.role = QCX_SAVE_ROLE_PLAYER;
+	spectator.role = QCX_SAVE_ROLE_SPECTATOR;
+	image = make_image(&player, 1U);
+	assert(QCX_RestoreSessionInstall(&image, 100.0));
+	assert(QCX_RestoreSessionAdmissionRole("aLiCe", &role));
+	assert(!role);
+	assert(!QCX_RestoreSessionAdmissionRole("Una", &role));
+
+	reset_fixture();
+	image = make_image(&spectator, 1U);
+	assert(QCX_RestoreSessionInstall(&image, 100.0));
+	assert(QCX_RestoreSessionAdmissionRole("Bob", &role));
+	assert(role);
+}
+
+static void set_client_role_and_team(client_t *client, qbool spectator, const char *team)
+{
+	client->spectator = spectator;
+	strcpy(client->team, team);
+	if (spectator) {
+		assert(Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1"));
+		assert(Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1"));
+	} else {
+		(void)Info_Remove(&client->_userinfo_ctx_, "*spectator");
+		(void)Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
+	}
+	assert(Info_Set(&client->_userinfo_ctx_, "team", team));
+	assert(Info_Set(&client->_userinfoshort_ctx_, "team", team));
+}
+
+static void test_binding_forces_saved_role_and_team(void)
+{
+	qcx_save_roster_entry_t player = saved(1U, "Alice");
+	qcx_save_roster_entry_t spectator = saved(2U, "Bob");
+	reset_fixture();
+	strcpy(player.team, "red");
+	player.role = QCX_SAVE_ROLE_PLAYER;
+	connect_client(3U, "aLiCe", 3);
+	set_client_role_and_team(&svs.clients[3], true, "blue");
+	install_and_reconcile(&player, 1U);
+	assert(!svs.clients[1].spectator);
+	assert(strcmp(svs.clients[1].name, "aLiCe") == 0);
+	assert(strcmp(svs.clients[1].team, "red") == 0);
+	assert(*Info_Get(&svs.clients[1]._userinfo_ctx_, "*spectator") == '\0');
+	assert(*Info_Get(&svs.clients[1]._userinfoshort_ctx_, "*spectator") == '\0');
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfo_ctx_, "team"), "red") == 0);
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfoshort_ctx_, "team"), "red") == 0);
+	assert(client_print_calls == 1U);
+
+	reset_fixture();
+	strcpy(spectator.team, "blue");
+	spectator.role = QCX_SAVE_ROLE_SPECTATOR;
+	connect_client(2U, "Bob", 2);
+	set_client_role_and_team(&svs.clients[2], false, "red");
+	install_and_reconcile(&spectator, 1U);
+	assert(svs.clients[2].spectator);
+	assert(strcmp(svs.clients[2].team, "blue") == 0);
+	assert(strcmp(Info_Get(&svs.clients[2]._userinfo_ctx_, "*spectator"), "1") == 0);
+	assert(strcmp(Info_Get(&svs.clients[2]._userinfoshort_ctx_, "*spectator"), "1") == 0);
+	assert(strcmp(Info_Get(&svs.clients[2]._userinfo_ctx_, "team"), "blue") == 0);
+	assert(strcmp(Info_Get(&svs.clients[2]._userinfoshort_ctx_, "team"), "blue") == 0);
+}
+
+static void test_binding_removes_an_empty_saved_team(void)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	entry.role = QCX_SAVE_ROLE_PLAYER;
+	connect_client(1U, "Alice", 1);
+	set_client_role_and_team(&svs.clients[1], true, "blue");
+	install_and_reconcile(&entry, 1U);
+	assert(!svs.clients[1].spectator);
+	assert(svs.clients[1].team[0] == '\0');
+	assert(*Info_Get(&svs.clients[1]._userinfo_ctx_, "team") == '\0');
+	assert(*Info_Get(&svs.clients[1]._userinfoshort_ctx_, "team") == '\0');
+}
+
+static void test_roster_list_prints_only_available_saved_identities(void)
+{
+	qcx_save_roster_entry_t entries[2] = { saved(1U, "Alice"), saved(2U, "Bob") };
+	reset_fixture();
+	entries[0].role = QCX_SAVE_ROLE_PLAYER;
+	entries[1].role = QCX_SAVE_ROLE_SPECTATOR;
+	strcpy(entries[1].team, "blue");
+	connect_client(0U, "Una", 0);
+	install_and_reconcile(entries, 2U);
+	client_print_calls = 0U;
+	QCX_RestoreSessionPrintRoster(&svs.clients[0]);
+	assert(client_print_calls == 4U);
+	assert(strstr(client_print_text, "qcx_restore_list") != NULL);
+
+	strcpy(svs.clients[0].name, "Alice");
+	QCX_RestoreSessionNameChanged(&svs.clients[0]);
+	QCX_RestoreSessionFrame(102.0);
+	client_print_calls = 0U;
+	client_print_text[0] = '\0';
+	QCX_RestoreSessionPrintRoster(&svs.clients[1]);
+	assert(client_print_calls == 3U);
+	assert(strcmp(client_print_text, "Change your name to restore a saved player. Use \"cmd qcx_restore_list\" to show this list again.\n") == 0);
+}
+
+static void test_bound_client_preserves_its_edict_through_begin_and_drop(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	edict_t before;
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	sv.edicts[2].e.free = false;
+	sv.edicts[2].e.freetime = 9.0f;
+	install_and_reconcile(&entry, 1U);
+	before = sv.edicts[2];
+	assert(QCX_RestoreSessionPrepareSpawn(&svs.clients[1]));
+	assert(memcmp(&before, &sv.edicts[2], sizeof(before)) == 0);
+	assert(svs.clients[1].entgravity == 1.0f);
+	assert(svs.clients[1].maxspeed == 320.0f);
+	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	assert(QCX_RestoreSessionClientRoleLocked(&svs.clients[1]));
+	assert(!QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(QCX_RestoreSessionClientDropped(&svs.clients[1]));
+	assert(!QCX_RestoreSessionClientRoleLocked(&svs.clients[1]));
+	svs.clients[1].state = cs_free;
+	assert(QCX_RestoreSessionAdmissionSlot("Alice") == &svs.clients[1]);
+	assert(memcmp(&before, &sv.edicts[2], sizeof(before)) == 0);
+}
+
+static void test_active_identity_cannot_claim_another_saved_slot(void)
+{
+	qcx_save_roster_entry_t entries[2] = { saved(1U, "Alice"), saved(2U, "Bob") };
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	install_and_reconcile(entries, 2U);
+	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	connect_client(0U, "Una", 0);
+	QCX_RestoreSessionObserveClient(&svs.clients[0]);
+	QCX_RestoreSessionFrame(102.0);
+	assert(svs.clients[1].qcx_restore_roster_index == 0);
+	assert(!QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(!QCX_RestoreSessionClientWaiting(&svs.clients[1]));
+	assert(QCX_RestoreSessionClientWaiting(&svs.clients[0]));
+
+	strcpy(svs.clients[1].name, "Bob");
+	QCX_RestoreSessionNameChanged(&svs.clients[1]);
+	QCX_RestoreSessionFrame(103.0);
+	assert(svs.clients[1].qcx_restore_roster_index == 0);
+	assert(!QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(!QCX_RestoreSessionClientWaiting(&svs.clients[1]));
+	assert(QCX_RestoreSessionAdmissionSlot("Bob") == &svs.clients[2]);
+}
+
+static void test_bound_drop_reopens_the_saved_identity(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	edict_t before;
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	sv.edicts[2].e.free = false;
+	sv.edicts[2].e.freetime = 9.0f;
+	install_and_reconcile(&entry, 1U);
+	before = sv.edicts[2];
+	assert(QCX_RestoreSessionClientDropped(&svs.clients[1]));
+	svs.clients[1].state = cs_free;
+	assert(QCX_RestoreSessionAdmissionSlot("Alice") == &svs.clients[1]);
+	assert(memcmp(&before, &sv.edicts[2], sizeof(before)) == 0);
+}
+
+static void test_late_name_claim_restarts_signon_at_the_safe_frame(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	client_t *client;
+	reset_fixture();
+	connect_client(0U, "Una", 0);
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionClientWaiting(&svs.clients[0]));
+	client = &svs.clients[0];
+	strcpy(client->name, "Alice");
+	strcpy(Info_Get(&client->_userinfo_ctx_, "name"), "Alice");
+	QCX_RestoreSessionNameChanged(client);
+	QCX_RestoreSessionFrame(102.0);
+	assert(svs.clients[1].userid == 0);
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(clear_reliable_calls == 1U);
+	assert(reliable_stufftext_calls == 1U);
+}
+
 static void test_name_change_is_reconciled_only_at_the_safe_frame(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
@@ -344,6 +621,14 @@ int main(void)
 	test_reverse_reconnect_order_is_a_permutation();
 	test_duplicate_waiting_names_claim_the_lowest_slot();
 	test_admission_does_not_consume_reserved_slots();
+	test_admission_uses_the_saved_identity_role();
+	test_binding_forces_saved_role_and_team();
+	test_binding_removes_an_empty_saved_team();
+	test_roster_list_prints_only_available_saved_identities();
+	test_bound_client_preserves_its_edict_through_begin_and_drop();
+	test_active_identity_cannot_claim_another_saved_slot();
+	test_bound_drop_reopens_the_saved_identity();
+	test_late_name_claim_restarts_signon_at_the_safe_frame();
 	test_name_change_is_reconciled_only_at_the_safe_frame();
 	test_excess_unmatched_client_is_dropped_from_highest_slot();
 	test_inactive_and_complete_frames_do_not_compare_names();
