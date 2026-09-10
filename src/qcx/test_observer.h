@@ -15,6 +15,7 @@ void QCX_TestObserverLegacyGameEntry(void);
 void QCX_TestObserverClientConnect(uint32_t self);
 void QCX_TestObserverPutClientInServer(uint32_t self, uint32_t spectator);
 void QCX_TestObserverClientDisconnect(void);
+void QCX_TestObserverClientUserInfoChanged(uint32_t after);
 void QCX_TestObserverClientCommand(void);
 void QCX_TestObserverClientKill(uint32_t self);
 void QCX_TestObserverClientPreThink(void);
