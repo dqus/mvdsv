@@ -32,6 +32,8 @@ static uint32_t client_print_calls;
 static char client_print_text[256];
 static uint32_t clear_reliable_calls;
 static uint32_t reliable_stufftext_calls;
+static uint32_t reliable_reconnect_requests;
+static uint32_t qcx_signon_starts;
 static uint32_t pause_reason_calls;
 static int last_pause_reason;
 static qbool last_pause_active;
@@ -146,6 +148,13 @@ void ClientReliableWrite_String(client_t *client, char *value)
 {
 	(void)client;
 	assert(strcmp(value, "changing\nreconnect\n") == 0);
+	++reliable_reconnect_requests;
+}
+
+void SV_QCXStartClientSignon(client_t *client)
+{
+	(void)client;
+	++qcx_signon_starts;
 }
 
 void SV_SetPauseReason(int bit, qbool active, const char *message, qbool notify_clients)
@@ -238,6 +247,8 @@ static void reset_fixture(void)
 	client_print_text[0] = '\0';
 	clear_reliable_calls = 0U;
 	reliable_stufftext_calls = 0U;
+	reliable_reconnect_requests = 0U;
+	qcx_signon_starts = 0U;
 	pause_reason_calls = 0U;
 	last_pause_reason = 0;
 	last_pause_active = false;
@@ -331,6 +342,7 @@ static void test_initial_reconciliation_queues_fresh_signon_after_matching(void)
 	assert(QCX_RestoreSessionClientWaiting(&svs.clients[0]));
 	assert(clear_reliable_calls == 2U);
 	assert(reliable_stufftext_calls == 2U);
+	assert(reliable_reconnect_requests == 2U);
 	assert(svs.clients[1].state == cs_connected);
 }
 
@@ -636,10 +648,12 @@ static void test_late_name_claim_restarts_signon_at_the_safe_frame(void)
 	QCX_RestoreSessionFrame(102.0);
 	assert(svs.clients[1].userid == 0);
 	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
-	/* One new-sign-on is queued after the initial reconciliation and another
-	 * when Una claims Alice at a later safe frame. */
+	/* The initial client receives a normal map-change handshake.  A late
+	 * claimant instead enters Cmd_New_f directly after its safe-frame swap. */
 	assert(clear_reliable_calls == 2U);
-	assert(reliable_stufftext_calls == 2U);
+	assert(reliable_stufftext_calls == 1U);
+	assert(reliable_reconnect_requests == 1U);
+	assert(qcx_signon_starts == 1U);
 }
 
 static void test_name_change_is_reconciled_only_at_the_safe_frame(void)
