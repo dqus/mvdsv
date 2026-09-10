@@ -68,6 +68,19 @@ static int utf8Encode(char in, char* out1, char* out2) {
 
 static web_request_data_t* web_requests;
 
+void Central_SwapClientPointers(client_t* left, client_t* right)
+{
+	web_request_data_t* request;
+	if (left == NULL || right == NULL || left == right) return;
+	for (request = web_requests; request != NULL; request = request->next) {
+		if (request->internal_data == left) {
+			request->internal_data = right;
+		} else if (request->internal_data == right) {
+			request->internal_data = left;
+		}
+	}
+}
+
 static qbool CheckFileExists(const char* path)
 {
 	FILE* f;
