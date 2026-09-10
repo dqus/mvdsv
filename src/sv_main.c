@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#if defined(QCX_ENABLED)
+#include "qcx/restore_session.h"
+#endif
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #endif
@@ -1330,6 +1333,17 @@ static void SVC_DirectConnect (void)
 	// count up the clients and spectators
 	CountPlayersSpecsVips(&clients, &spectators, &vips, &newcl);
 
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionWaiting()) {
+		newcl = QCX_RestoreSessionAdmissionSlot(Info_ValueForKey(userinfo, "name"));
+		if (newcl == NULL) {
+			Netchan_OutOfBandPrint(NS_SERVER, adr,
+				"%c\nserver restore slots are reserved\n\n", A2C_PRINT);
+			return;
+		}
+	}
+#endif
+
 	FixMaxClientsCvars();
 
 	// if at server limits, refuse connection
@@ -1445,6 +1459,10 @@ static void SVC_DirectConnect (void)
 
 	// parse some info from the info strings
 	SV_ExtractFromUserinfo (newcl, true);
+
+#if defined(QCX_ENABLED)
+	QCX_RestoreSessionObserveClient(newcl);
+#endif
 
 	for (i = 0; shortinfotbl[i] != NULL; i++)
 	{
@@ -3334,6 +3352,10 @@ void SV_Frame (double time1)
 
 	// get packets
 	SV_ReadPackets ();
+
+#if defined(QCX_ENABLED)
+	QCX_RestoreSessionFrame(Sys_DoubleTime());
+#endif
 
 	// move autonomous things around if enough time has passed
 	if (!sv.paused) {

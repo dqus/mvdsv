@@ -137,6 +137,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qcx/services_world.c"
 		"${DIR_SRC}/qcx/save_format.c"
 		"${DIR_SRC}/qcx/restore_roster.c"
+		"${DIR_SRC}/qcx/restore_session.c"
 		"${DIR_SRC}/qcx/save.c"
 	)
 	if(MVDSV_QC2CPP_TESTS)
