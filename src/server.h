@@ -72,7 +72,7 @@ typedef struct
 	int			lastcheck;			// used by PF_checkclient
 	double		lastchecktime;			// for monster ai
 
-	int			paused;				// pause bits: 1=normal, 2=auto (single player), 3=both
+	int			paused;				// SV_PAUSE_* reason bits
 	double		pausedsince;		// Sys_DoubleTime() when pause started
 
 	qbool		loadgame;			// handle connections specially
@@ -209,6 +209,9 @@ typedef struct client_s
 	qbool			qcx_restore_waiting;
 	qbool			qcx_restore_pending;
 	int				qcx_restore_roster_index;
+	qbool			qcx_restore_has_original_identity;
+	qbool			qcx_restore_original_spectator;
+	char				qcx_restore_original_team[CLIENT_NAME_LEN];
 
 	antilag_position_t	antilag_positions[MAX_ANTILAG_POSITIONS];
 	int				antilag_position_next;
@@ -913,6 +916,11 @@ void SV_FindModelNumbers (void);
 //
 void SV_ExecuteClientMessage (client_t *cl);
 void SV_UserInit (void);
+#define SV_PAUSE_MANUAL 1
+#define SV_PAUSE_AUTO 2
+#define SV_PAUSE_RESTORE 4
+void SV_SetPauseReason(int bit, qbool active, const char *message,
+	qbool notify_clients);
 void SV_TogglePause (const char *msg, int bit);
 void ProcessUserInfoChange (client_t* sv_client, const char* key, const char* old_value);
 void SV_RotateCmd(client_t* cl, usercmd_t* cmd);

@@ -27,6 +27,7 @@
 #ifdef QCX_ENABLED
 #include "qcx/entities.h"
 #include "qcx/globals.h"
+#include "qcx/restore_session.h"
 #include "qcx/save.h"
 #include "qcx/strings.h"
 #endif
@@ -543,6 +544,8 @@ void PR2_ValidatePreparedRestore(qbool restoring_qcx)
 {
 #ifdef QCX_ENABLED
 	if (restoring_qcx && (!QCX_Active() || !QCX_HasPreparedLoadGame())) {
+		QCX_RestoreSessionCancel();
+		QCX_DiscardPreparedLoadGame();
 		SV_Error("qc2cpp restore lost its prepared image");
 	}
 #else
@@ -556,6 +559,8 @@ void PR2_CommitPreparedRestore(qbool restoring_qcx)
 {
 #ifdef QCX_ENABLED
 	if (restoring_qcx && !QCX_CommitPreparedLoadGame()) {
+		QCX_RestoreSessionCancel();
+		QCX_DiscardPreparedLoadGame();
 		SV_Error("qc2cpp restore validation failed after map setup");
 	}
 #else
@@ -581,9 +586,6 @@ pr2_save_result_t PR2_LoadGame(const char *name, char *map_name,
 	unsigned int map_name_size)
 {
 #ifdef QCX_ENABLED
-	if (QCX_Active() && QCX_LoadGame(name)) {
-		return PR2_SAVE_COMPLETE;
-	}
 	if (QCX_PrepareLoadGame(name, map_name, map_name_size)) {
 		return PR2_SAVE_PREPARED;
 	}

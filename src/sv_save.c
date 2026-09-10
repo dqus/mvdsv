@@ -207,7 +207,6 @@ void SV_LoadGame_f(void)
 			fclose(f);
 			const pr2_save_result_t result = PR2_LoadGame(Cmd_Argv(1), mapname,
 				sizeof(mapname));
-			if (result == PR2_SAVE_COMPLETE) return;
 			if (result != PR2_SAVE_PREPARED) {
 				Con_Printf("Error restoring qc2cpp save state\n");
 				return;

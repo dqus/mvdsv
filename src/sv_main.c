@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qwsvdef.h"
 #if defined(QCX_ENABLED)
 #include "qcx/restore_session.h"
+#include "qcx/save.h"
 #endif
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
@@ -244,6 +245,11 @@ void SV_Shutdown (char *finalmsg)
 
 	if (!sv.state)
 		return; // already shutdown. FIXME: what about error during SV_SpawnServer() ?
+
+#if defined(QCX_ENABLED)
+	QCX_RestoreSessionCancel();
+	QCX_DiscardPreparedLoadGame();
+#endif
 
 	SV_FinalMessage(finalmsg);
 
@@ -3178,7 +3184,7 @@ static void SV_CheckTimeouts (void)
 			cl->state = cs_free;	// can now be reused
 		}
 	}
-	if ((sv.paused & 1) && !nclients)
+	if ((sv.paused & SV_PAUSE_MANUAL) && !nclients)
 	{
 		// nobody left, unpause the server
 		if (GE_ShouldPause) {
@@ -3189,7 +3195,7 @@ static void SV_CheckTimeouts (void)
 			if (!G_FLOAT(OFS_RETURN))
 				return;		// progs said don't unpause
 		}
-		SV_TogglePause("Pause released since no players are left.\n", 1);
+		SV_TogglePause("Pause released since no players are left.\n", SV_PAUSE_MANUAL);
 	}
 }
 

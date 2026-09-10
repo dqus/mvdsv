@@ -1047,8 +1047,11 @@ static void Cmd_Begin_f (void)
 		}
 	}
 
-	// if we are paused, tell the client
-	if (sv.paused)
+	/* A roster-bound client still has to send `begin` before it can complete
+	 * the restore.  FTE stops that signon after svc_setpause, so defer this
+	 * particular notification until QCX_RestoreSessionBegin clears the
+	 * restore reason.  The server remains paused throughout the handshake. */
+	if (sv.paused && !restoring_qcx_client)
 	{
 		ClientReliableWrite_Begin (sv_client, svc_setpause, 2);
 		ClientReliableWrite_Byte (sv_client, sv.paused);
@@ -1075,6 +1078,15 @@ static void Cmd_Begin_f (void)
 	if (restoring_qcx_client && !QCX_RestoreSessionBegin(sv_client)) {
 		SV_DropClient(sv_client);
 		return;
+	}
+	/* This is the first safe point to tell a restored client about a pause:
+	 * FTE aborts a fresh signon if svc_setpause arrives before `begin`, while
+	 * normal waiting/handoff clients will receive the usual notification on
+	 * their later non-restored begin. */
+	if (restoring_qcx_client && (sv.paused & SV_PAUSE_MANUAL)) {
+		ClientReliableWrite_Begin(sv_client, svc_setpause, 2);
+		ClientReliableWrite_Byte(sv_client, sv.paused);
+		SV_ClientPrintf(sv_client, PRINT_HIGH, "Server is paused.\n");
 	}
 #endif
 
@@ -2066,21 +2078,29 @@ static void SV_NotifyStreamsOfPause(void)
 SV_TogglePause
 ==================
 */
-void SV_TogglePause (const char *msg, int bit)
+void SV_SetPauseReason(int bit, qbool active, const char *msg,
+	qbool notify_clients)
 {
 	int i;
 	client_t *cl;
 	extern cvar_t sv_paused;
+	const qbool was_paused = sv.paused != 0;
 
-	sv.paused ^= bit;
+	if (active) {
+		sv.paused |= bit;
+	} else {
+		sv.paused &= ~bit;
+	}
 	
 	Cvar_SetROM (&sv_paused, va("%i", sv.paused));
 
-	if (sv.paused)
+	if (!was_paused && sv.paused)
 		sv.pausedsince = Sys_DoubleTime();
 
 	if (msg)
 		SV_BroadcastPrintf (PRINT_HIGH, "%s", msg);
+
+	if (!notify_clients || was_paused == (sv.paused != 0)) return;
 
 	// send notification to all clients
 	for (i=0, cl = svs.clients ; i<MAX_CLIENTS ; i++, cl++)
@@ -2095,6 +2115,11 @@ void SV_TogglePause (const char *msg, int bit)
 
 	// send notification to all streams
 	SV_NotifyStreamsOfPause();
+}
+
+void SV_TogglePause (const char *msg, int bit)
+{
+	SV_SetPauseReason(bit, (sv.paused & bit) == 0, msg, true);
 }
 
 
@@ -2136,7 +2161,7 @@ static void Cmd_Pause_f (void)
 	else
 		snprintf (st, sizeof(st), "%s unpaused the game\n", sv_client->name);
 
-	SV_TogglePause(st, 1);
+	SV_TogglePause(st, SV_PAUSE_MANUAL);
 }
 
 

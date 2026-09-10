@@ -17,6 +17,7 @@ client_t *WatcherId;
 cvar_t sv_maxspeed;
 int fofs_gravity;
 int fofs_maxspeed;
+extern cvar_t qcx_restore_wait_timeout;
 
 static uint32_t name_comparisons;
 static uint32_t slot_visits;
@@ -31,6 +32,13 @@ static uint32_t client_print_calls;
 static char client_print_text[256];
 static uint32_t clear_reliable_calls;
 static uint32_t reliable_stufftext_calls;
+static uint32_t pause_reason_calls;
+static int last_pause_reason;
+static qbool last_pause_active;
+static qbool last_pause_notify;
+static uint32_t game_disconnect_calls;
+static qbool game_disconnect_spectator;
+static double test_monotonic_now;
 static info_t *allocated_info[MAX_CLIENTS * 2];
 static uint32_t allocated_info_count;
 
@@ -137,7 +145,43 @@ void ClientReliableWrite_Begin(client_t *client, int command, int maxsize)
 void ClientReliableWrite_String(client_t *client, char *value)
 {
 	(void)client;
-	assert(strcmp(value, "cmd new\n") == 0);
+	assert(strcmp(value, "changing\nreconnect\n") == 0);
+}
+
+void SV_SetPauseReason(int bit, qbool active, const char *message, qbool notify_clients)
+{
+	(void)message;
+	++pause_reason_calls;
+	last_pause_reason = bit;
+	last_pause_active = active;
+	last_pause_notify = notify_clients;
+	if (active) sv.paused |= bit;
+	else sv.paused &= ~bit;
+}
+
+void Cvar_Register(cvar_t *variable) { (void)variable; }
+void Cvar_SetValue(cvar_t *variable, const float value) { variable->value = value; }
+void Cmd_AddCommand(const char *name, xcommand_t command)
+{
+	(void)name;
+	(void)command;
+}
+void Con_Printf(char *format, ...) { (void)format; }
+double Sys_DoubleTime(void) { return test_monotonic_now; }
+
+void PR_GameClientDisconnect(int spectator)
+{
+	++game_disconnect_calls;
+	game_disconnect_spectator = spectator != 0;
+}
+
+void ED_Free(edict_t *edict)
+{
+	edict->e.free = true;
+}
+
+void QCX_RefreshClientReplication(void)
+{
 }
 
 void Central_SwapClientPointers(client_t *left, client_t *right)
@@ -194,7 +238,15 @@ static void reset_fixture(void)
 	client_print_text[0] = '\0';
 	clear_reliable_calls = 0U;
 	reliable_stufftext_calls = 0U;
+	pause_reason_calls = 0U;
+	last_pause_reason = 0;
+	last_pause_active = false;
+	last_pause_notify = false;
+	game_disconnect_calls = 0U;
+	game_disconnect_spectator = false;
+	test_monotonic_now = 100.0;
 	sv_maxspeed.value = 320.0f;
+	qcx_restore_wait_timeout.value = 60.0f;
 }
 
 static client_t *connect_client(uint32_t slot, const char *name, int userid)
@@ -262,6 +314,24 @@ static void install_and_reconcile(const qcx_save_roster_entry_t *entries, uint32
 	assert(QCX_RestoreSessionInstall(&image, 100.0));
 	assert(QCX_RestoreSessionWaiting() == (count != 0U));
 	QCX_RestoreSessionFrame(101.0);
+}
+
+static void test_initial_reconciliation_queues_fresh_signon_after_matching(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	const qcx_save_image_t image = make_image(&entry, 1U);
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	connect_client(0U, "Una", 0);
+	assert(QCX_RestoreSessionInstall(&image, 100.0));
+	assert(clear_reliable_calls == 0U);
+	assert(QCX_RestoreSessionClientWaiting(&svs.clients[1]));
+	QCX_RestoreSessionFrame(101.0);
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(QCX_RestoreSessionClientWaiting(&svs.clients[0]));
+	assert(clear_reliable_calls == 2U);
+	assert(reliable_stufftext_calls == 2U);
+	assert(svs.clients[1].state == cs_connected);
 }
 
 static void test_moves_to_a_free_saved_slot_and_repairs_globals(void)
@@ -417,12 +487,18 @@ static void test_binding_forces_saved_role_and_team(void)
 	reset_fixture();
 	strcpy(player.team, "red");
 	player.role = QCX_SAVE_ROLE_PLAYER;
+	for (uint32_t index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		player.spawn_parms[index] = (float)index + 0.5f;
+	}
 	connect_client(3U, "aLiCe", 3);
 	set_client_role_and_team(&svs.clients[3], true, "blue");
 	install_and_reconcile(&player, 1U);
 	assert(!svs.clients[1].spectator);
 	assert(strcmp(svs.clients[1].name, "aLiCe") == 0);
 	assert(strcmp(svs.clients[1].team, "red") == 0);
+	for (uint32_t index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		assert(svs.clients[1].spawn_parms[index] == (float)index + 0.5f);
+	}
 	assert(*Info_Get(&svs.clients[1]._userinfo_ctx_, "*spectator") == '\0');
 	assert(*Info_Get(&svs.clients[1]._userinfoshort_ctx_, "*spectator") == '\0');
 	assert(strcmp(Info_Get(&svs.clients[1]._userinfo_ctx_, "team"), "red") == 0);
@@ -468,8 +544,8 @@ static void test_roster_list_prints_only_available_saved_identities(void)
 	install_and_reconcile(entries, 2U);
 	client_print_calls = 0U;
 	QCX_RestoreSessionPrintRoster(&svs.clients[0]);
-	assert(client_print_calls == 4U);
-	assert(strstr(client_print_text, "qcx_restore_list") != NULL);
+	assert(client_print_calls == 5U);
+	assert(strstr(client_print_text, "Otherwise you will join") != NULL);
 
 	strcpy(svs.clients[0].name, "Alice");
 	QCX_RestoreSessionNameChanged(&svs.clients[0]);
@@ -477,8 +553,8 @@ static void test_roster_list_prints_only_available_saved_identities(void)
 	client_print_calls = 0U;
 	client_print_text[0] = '\0';
 	QCX_RestoreSessionPrintRoster(&svs.clients[1]);
-	assert(client_print_calls == 3U);
-	assert(strcmp(client_print_text, "Change your name to restore a saved player. Use \"cmd qcx_restore_list\" to show this list again.\n") == 0);
+	assert(client_print_calls == 4U);
+	assert(strstr(client_print_text, "Otherwise you will join") != NULL);
 }
 
 static void test_bound_client_preserves_its_edict_through_begin_and_drop(void)
@@ -560,8 +636,10 @@ static void test_late_name_claim_restarts_signon_at_the_safe_frame(void)
 	QCX_RestoreSessionFrame(102.0);
 	assert(svs.clients[1].userid == 0);
 	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
-	assert(clear_reliable_calls == 1U);
-	assert(reliable_stufftext_calls == 1U);
+	/* One new-sign-on is queued after the initial reconciliation and another
+	 * when Una claims Alice at a later safe frame. */
+	assert(clear_reliable_calls == 2U);
+	assert(reliable_stufftext_calls == 2U);
 }
 
 static void test_name_change_is_reconciled_only_at_the_safe_frame(void)
@@ -612,8 +690,103 @@ static void test_inactive_and_complete_frames_do_not_compare_names(void)
 	assert(!QCX_RestoreSessionWaiting());
 }
 
+static void test_timeout_abandons_bound_and_waiting_clients(void)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	connect_client(0U, "Una", 0);
+	set_client_role_and_team(&svs.clients[1], true, "blue");
+	sv.edicts[2].e.free = false;
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionWaiting());
+	assert((sv.paused & SV_PAUSE_RESTORE) != 0);
+	QCX_RestoreSessionFrame(159.9);
+	assert(QCX_RestoreSessionWaiting());
+	assert(game_disconnect_calls == 0U);
+	QCX_RestoreSessionFrame(160.0);
+	assert(!QCX_RestoreSessionWaiting());
+	assert(game_disconnect_calls == 1U);
+	assert(!game_disconnect_spectator);
+	assert(sv.edicts[2].e.free);
+	assert(clear_reliable_calls == 4U);
+	assert(!QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(!QCX_RestoreSessionClientWaiting(&svs.clients[0]));
+	assert(svs.clients[1].spectator);
+	assert(strcmp(svs.clients[1].team, "blue") == 0);
+	assert((sv.paused & SV_PAUSE_RESTORE) == 0);
+	assert(last_pause_reason == SV_PAUSE_RESTORE && !last_pause_active && last_pause_notify);
+}
+
+static void test_zero_and_negative_timeout_wait_for_manual_continuation(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	qcx_restore_wait_timeout.value = 0.0f;
+	connect_client(0U, "Una", 0);
+	install_and_reconcile(&entry, 1U);
+	QCX_RestoreSessionFrame(10000.0);
+	assert(QCX_RestoreSessionWaiting());
+	QCX_RestoreSessionContinue();
+	QCX_RestoreSessionFrame(10001.0);
+	assert(!QCX_RestoreSessionWaiting());
+	assert(clear_reliable_calls == 2U);
+
+	reset_fixture();
+	qcx_restore_wait_timeout.value = -1.0f;
+	connect_client(0U, "Una", 0);
+	install_and_reconcile(&entry, 1U);
+	QCX_RestoreSessionFrame(10000.0);
+	assert(QCX_RestoreSessionWaiting());
+	assert(qcx_restore_wait_timeout.value == 0.0f);
+}
+
+static void test_all_active_completes_without_abandonment(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	QCX_RestoreSessionFrame(102.0);
+	assert(!QCX_RestoreSessionWaiting());
+	assert(game_disconnect_calls == 0U);
+	assert((sv.paused & SV_PAUSE_RESTORE) == 0);
+}
+
+static void test_manual_pause_survives_restore_completion(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	SV_SetPauseReason(SV_PAUSE_MANUAL, true, NULL, false);
+	connect_client(0U, "Una", 0);
+	install_and_reconcile(&entry, 1U);
+	assert((sv.paused & (SV_PAUSE_MANUAL | SV_PAUSE_RESTORE))
+		== (SV_PAUSE_MANUAL | SV_PAUSE_RESTORE));
+	QCX_RestoreSessionContinue();
+	QCX_RestoreSessionFrame(102.0);
+	assert(sv.paused == SV_PAUSE_MANUAL);
+}
+
+static void test_cancelling_a_bound_identity_restores_its_original_role(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	connect_client(1U, "Alice", 1);
+	set_client_role_and_team(&svs.clients[1], true, "blue");
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert(!svs.clients[1].spectator);
+	QCX_RestoreSessionCancel();
+	assert(!QCX_RestoreSessionWaiting());
+	assert(svs.clients[1].spectator);
+	assert(strcmp(svs.clients[1].team, "blue") == 0);
+	assert((sv.paused & SV_PAUSE_RESTORE) == 0);
+}
+
 int main(void)
 {
+	test_initial_reconciliation_queues_fresh_signon_after_matching();
 	test_moves_to_a_free_saved_slot_and_repairs_globals();
 	test_two_saved_clients_can_cycle();
 	test_matched_client_displaces_an_unmatched_client();
@@ -632,6 +805,11 @@ int main(void)
 	test_name_change_is_reconciled_only_at_the_safe_frame();
 	test_excess_unmatched_client_is_dropped_from_highest_slot();
 	test_inactive_and_complete_frames_do_not_compare_names();
+	test_timeout_abandons_bound_and_waiting_clients();
+	test_zero_and_negative_timeout_wait_for_manual_continuation();
+	test_all_active_completes_without_abandonment();
+	test_manual_pause_survives_restore_completion();
+	test_cancelling_a_bound_identity_restores_its_original_role();
 	reset_fixture();
 	return 0;
 }
