@@ -145,9 +145,31 @@ is rejected during startup; there is no compatibility copy fallback.
 
 ## Saves, failures, and verification
 
-QCMS saves are backend-neutral: native and Wasm restore each other's saves when
-logical game, map, entity capacity, and engine-state identity match. QCMS does
-not convert legacy QuakeC saves.
+QCMS V2 saves are backend-neutral: native and Wasm restore each other's saves
+when logical game, map, entity capacity, and engine-state identity match.
+QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
+rejected: create a new save after upgrading.
+
+A QCMS load always creates a fresh map session before restoring its logical
+state. It can therefore load an e1m2 save after a single-player death/restart,
+after changing to another map, or at server startup with +load; it is not
+restricted to an already-running map instance.
+
+Connected QCMS saves also persist a roster. The server temporarily reserves
+each saved player entity and matches joining clients by their name. The saved
+role and team are authoritative: *spectator and team are set from the save,
+rather than trusting the joining client's corresponding userinfo. A client
+whose name does not match remains network-connected but is not put into
+gameplay yet; it receives the available saved names and can request them again
+with cmd qcx_restore_list, then change its name to claim one.
+
+While roster entries remain, the independent restore-pause bit is set.
+qcx_restore_wait_timeout defaults to 60 seconds; a value of 0 waits
+indefinitely. All saved players joining releases the pause automatically, and
+an operator may release it immediately with qcx_restore_continue. Manual
+pause remains independent. A timeout or manual continuation abandons missing
+roster entries and frees their player entities; a later client then joins as a
+new player rather than appearing at an obsolete saved state.
 
 Normal map changes cleanly unpublish and release the old instance. A
 post-publication guest fatal, Wasm trap, or post-commit restore failure clears

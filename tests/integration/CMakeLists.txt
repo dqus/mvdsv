@@ -277,6 +277,14 @@ if(NOT "${QC2CPP_FTE_CLIENT}" STREQUAL "")
                 --artifacts "${qc2cpp_qwsp_native_build}" --assets "${qc2cpp_assets}"
                 --output "${qc2cpp_acceptance_root}/runs/qwsp-command-route-native"
                 --client "${qc2cpp_fte_client}")
+        add_test(NAME qc2cpp_qwsp_restore_native
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qwsp_restore_acceptance.py"
+                --source-mode native --destination-mode native --server $<TARGET_FILE:mvdsv>
+                --source-artifacts "${qc2cpp_qwsp_native_build}"
+                --destination-artifacts "${qc2cpp_qwsp_native_build}"
+                --assets "${qc2cpp_assets}"
+                --output "${qc2cpp_acceptance_root}/runs/qwsp-restore-native"
+                --client "${qc2cpp_fte_client}")
     endif()
     add_test(NAME qc2cpp_spectator_native
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
@@ -466,6 +474,30 @@ if(MVDSV_QC2CPP_WASM)
                     --artifacts "${qc2cpp_qwsp_wasm_build}" --assets "${qc2cpp_assets}"
                     --output "${qc2cpp_acceptance_root}/runs/qwsp-command-route-wasm"
                     --client "${qc2cpp_fte_client}")
+            add_test(NAME qc2cpp_qwsp_restore_wasm
+                COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qwsp_restore_acceptance.py"
+                    --source-mode wasm --destination-mode wasm --server $<TARGET_FILE:mvdsv>
+                    --source-artifacts "${qc2cpp_qwsp_wasm_build}"
+                    --destination-artifacts "${qc2cpp_qwsp_wasm_build}"
+                    --assets "${qc2cpp_assets}"
+                    --output "${qc2cpp_acceptance_root}/runs/qwsp-restore-wasm"
+                    --client "${qc2cpp_fte_client}")
+            add_test(NAME qc2cpp_qwsp_restore_native_wasm
+                COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qwsp_restore_acceptance.py"
+                    --source-mode native --destination-mode wasm --server $<TARGET_FILE:mvdsv>
+                    --source-artifacts "${qc2cpp_qwsp_native_build}"
+                    --destination-artifacts "${qc2cpp_qwsp_wasm_build}"
+                    --assets "${qc2cpp_assets}"
+                    --output "${qc2cpp_acceptance_root}/runs/qwsp-restore-native-wasm"
+                    --client "${qc2cpp_fte_client}")
+            add_test(NAME qc2cpp_qwsp_restore_wasm_native
+                COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qwsp_restore_acceptance.py"
+                    --source-mode wasm --destination-mode native --server $<TARGET_FILE:mvdsv>
+                    --source-artifacts "${qc2cpp_qwsp_wasm_build}"
+                    --destination-artifacts "${qc2cpp_qwsp_native_build}"
+                    --assets "${qc2cpp_assets}"
+                    --output "${qc2cpp_acceptance_root}/runs/qwsp-restore-wasm-native"
+                    --client "${qc2cpp_fte_client}")
         endif()
         add_test(NAME qc2cpp_spectator_wasm
             COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qc2cpp_acceptance.py"
@@ -503,6 +535,7 @@ foreach(test_name IN ITEMS
 	qc2cpp_roster_restore_native
 	qc2cpp_qwsp_monsters_native
 	qc2cpp_qwsp_command_route_native
+	qc2cpp_qwsp_restore_native
 	qc2cpp_server_map_wasm
 	qc2cpp_legacy_strings_wasm
 	qc2cpp_optional_fields_wasm
@@ -516,7 +549,10 @@ foreach(test_name IN ITEMS
 	qc2cpp_save_connected_wasm
 	qc2cpp_roster_restore_wasm
 	qc2cpp_qwsp_monsters_wasm
-	qc2cpp_qwsp_command_route_wasm)
+	qc2cpp_qwsp_command_route_wasm
+	qc2cpp_qwsp_restore_wasm
+	qc2cpp_qwsp_restore_native_wasm
+	qc2cpp_qwsp_restore_wasm_native)
 	if(TEST ${test_name})
 		set_tests_properties(${test_name} PROPERTIES LABELS "qcx;integration;external")
 	endif()
