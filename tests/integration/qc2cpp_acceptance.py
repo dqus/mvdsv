@@ -381,6 +381,29 @@ def run_network_suite(server, artifacts, assets, output, mode, client):
         process.close()
 
 
+def run_command_route_suite(server, artifacts, assets, output, mode, client):
+    """Prove that one live FTE command enters QWSP's GE_ClientCommand ABI."""
+    output.mkdir(parents=True, exist_ok=True)
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-command-{mode}-"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode)
+    client_basedir = prepare_client_directory(run_root, assets)
+    port = available_udp_port()
+    process = RunningProcess(server_command(
+        server, basedir, mode, port, start_map=False, startup_command=("map", "e1m2")),
+        run_root / "server.log")
+    try:
+        snapshot = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        assert_map_snapshot(snapshot, "e1m2")
+        run_client_network_acceptance(
+            network_client_command(client, client_basedir, port), run_root / "client.log", timeout=20)
+        events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if events.get("client_command_count", 0) == 0:
+            raise ProcessFailure(
+                f"FTE kill did not reach the QCX GE_ClientCommand ABI: {events}")
+    finally:
+        process.close()
+
+
 def run_spectator_suite(server, artifacts, assets, output, mode, client):
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qc2cpp-spectator-{mode}-"))
@@ -664,7 +687,7 @@ def run_connected_save_suite(server, artifacts, assets, output, mode, client):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", choices=("map", "fatal", "restore-oom", "client", "network", "spectator", "save", "cross-save", "save-connected"), required=True)
+    parser.add_argument("--suite", choices=("map", "fatal", "restore-oom", "client", "network", "command-route", "spectator", "save", "cross-save", "save-connected"), required=True)
     parser.add_argument("--mode", choices=("native", "wasm"), required=True)
     parser.add_argument("--server", type=pathlib.Path, required=True)
     parser.add_argument("--artifacts", type=pathlib.Path, required=True)
@@ -713,6 +736,9 @@ def main():
                     args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
             elif args.suite == "network":
                 run_network_suite(
+                    args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
+            elif args.suite == "command-route":
+                run_command_route_suite(
                     args.server, args.artifacts, args.assets, args.output, args.mode, args.client)
             else:
                 run_spectator_suite(

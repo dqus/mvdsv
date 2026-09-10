@@ -24,6 +24,7 @@ typedef struct qcx_test_observer_s {
 	uint32_t put_client_in_server_count;
 	uint32_t spectator_put_client_in_server_count;
 	uint32_t client_disconnect_count;
+	uint32_t client_command_count;
 	uint32_t client_kill_count;
 	int32_t player_health_after_kill;
 	int32_t player_frags_after_kill;
@@ -39,6 +40,9 @@ typedef struct qcx_test_observer_s {
 	uint32_t restore_replication_complete_count;
 	uint32_t save_probe_slot;
 	uint32_t save_probe_trigger_dispatches;
+	uint32_t qwsp_monster_slot;
+	uint32_t qwsp_monster_think_dispatches;
+	float qwsp_monster_last_think_time;
 } qcx_test_observer_t;
 
 static qcx_test_observer_t observer;
@@ -53,6 +57,7 @@ static void QCX_TestEntityReferences_f(void);
 static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
 static void QCX_TestModelPresence_f(void);
+static void QCX_TestQwspMonster_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
 
 static void QCX_TestSnapshot_f(void)
@@ -69,7 +74,8 @@ static void QCX_TestEvents_f(void)
 		"\"client_connect_count\":%u,\"put_client_in_server_count\":%u,"
 		"\"last_client_userid\":%d,"
 		"\"spectator_put_client_in_server_count\":%u,"
-		"\"client_disconnect_count\":%u,\"client_kill_count\":%u,"
+		"\"client_disconnect_count\":%u,\"client_command_count\":%u,"
+		"\"client_kill_count\":%u,"
 		"\"player_health_after_kill\":%d,"
 		"\"player_frags_after_kill\":%d,"
 		"\"player_moved_after_spawn\":%u,"
@@ -86,6 +92,7 @@ static void QCX_TestEvents_f(void)
 		observer.put_client_in_server_count, observer.last_client_userid,
 		observer.spectator_put_client_in_server_count,
 		observer.client_disconnect_count,
+		observer.client_command_count,
 		observer.client_kill_count, observer.player_health_after_kill,
 		observer.player_frags_after_kill,
 		observer.player_moved_after_spawn,
@@ -111,6 +118,7 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_optional_fields", QCX_TestOptionalFields_f);
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
 	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
+	Cmd_AddCommand("qc2cpp_test_qwsp_monster", QCX_TestQwspMonster_f);
 }
 
 void QCX_TestObserverInitBegin(void)
@@ -451,6 +459,67 @@ done:
 		static_model ? "true" : "false");
 }
 
+static int QCX_TestFindQwspMonster(void)
+{
+	int slot;
+	for (slot = 1; slot < sv.num_edicts; ++slot) {
+		edict_t *const candidate = &sv.edicts[slot];
+		char classname[64];
+		if (candidate->e.free || candidate->v == NULL || candidate->v->health <= 0.0f
+			|| candidate->v->think == 0 || candidate->v->nextthink <= (float)sv.time) {
+			continue;
+		}
+		if (QCX_CopyEntityString(candidate, "classname", classname, sizeof(classname), NULL)
+			!= QCX_PLUGIN_OK || strncmp(classname, "monster_", 8U) != 0) {
+			continue;
+		}
+		return slot;
+	}
+	return -1;
+}
+
+static void QCX_TestReportQwspMonster(void)
+{
+	const uint32_t slot = observer.qwsp_monster_slot;
+	char classname[64];
+	if (slot == 0U || slot >= (uint32_t)sv.num_edicts || sv.edicts[slot].e.free
+		|| sv.edicts[slot].v == NULL
+		|| QCX_CopyEntityString(&sv.edicts[slot], "classname", classname,
+			sizeof(classname), NULL) != QCX_PLUGIN_OK) {
+		Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":false}}\n");
+		return;
+	}
+	Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":true,\"slot\":%u,"
+		"\"classname\":\"%s\",\"health\":%.6f,\"think\":%d,"
+		"\"nextthink\":%.6f,\"server_time\":%.6f,\"think_dispatches\":%u,"
+		"\"last_think_time\":%.6f}}\n",
+		slot, classname, sv.edicts[slot].v->health, sv.edicts[slot].v->think,
+		sv.edicts[slot].v->nextthink, sv.time,
+		observer.qwsp_monster_think_dispatches, observer.qwsp_monster_last_think_time);
+}
+
+static void QCX_TestQwspMonster_f(void)
+{
+	const char *mode;
+	if (Cmd_Argc() != 2) {
+		Con_Printf("Usage: qc2cpp_test_qwsp_monster <capture|read>\n");
+		return;
+	}
+	mode = Cmd_Argv(1);
+	if (!strcmp(mode, "capture")) {
+		const int slot = QCX_TestFindQwspMonster();
+		if (slot > 0) {
+			observer.qwsp_monster_slot = (uint32_t)slot;
+			observer.qwsp_monster_think_dispatches = 0U;
+			observer.qwsp_monster_last_think_time = 0.0f;
+		}
+	} else if (strcmp(mode, "read")) {
+		Con_Printf("Usage: qc2cpp_test_qwsp_monster <capture|read>\n");
+		return;
+	}
+	QCX_TestReportQwspMonster();
+}
+
 void QCX_TestObserverClientConnect(uint32_t self)
 {
 	++observer.client_connect_count;
@@ -477,6 +546,7 @@ void QCX_TestObserverPutClientInServer(uint32_t self, uint32_t spectator)
 	}
 }
 void QCX_TestObserverClientDisconnect(void) { ++observer.client_disconnect_count; }
+void QCX_TestObserverClientCommand(void) { ++observer.client_command_count; }
 static void QCX_TestObserverSendRestoreMarker(const char *marker)
 {
 	int index;
@@ -530,6 +600,10 @@ void QCX_TestObserverEdictThink(edict_t *thinking)
 {
 	if (thinking == EDICT_NUM((int)observer.save_probe_slot)) {
 		++observer.save_probe_trigger_dispatches;
+	}
+	if (thinking == EDICT_NUM((int)observer.qwsp_monster_slot)) {
+		++observer.qwsp_monster_think_dispatches;
+		observer.qwsp_monster_last_think_time = (float)sv.time;
 	}
 }
 

@@ -243,6 +243,9 @@ uint32_t QCX_ClientCommand(qcx_entity_id_t self, const uint8_t *payload,
 	QCX_AdapterStateEnter(&qcx_state);
 	const uint32_t result = game->client_command(game->context, self, payload, payload_size);
 	QCX_AdapterStateLeave(&qcx_state);
+#if defined(QCX_TESTS)
+	QCX_TestObserverClientCommand();
+#endif
 	return result;
 }
 
