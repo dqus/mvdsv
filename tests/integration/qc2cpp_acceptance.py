@@ -819,6 +819,22 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             lambda session: session.get("waiting") is True and session.get("available", 0) > 0,
             timeout=8, description=f"{name} did not begin a roster wait")
 
+    def require_dropped(launched, name):
+        # The acceptance client exits automatically only after its own release
+        # handshake. A server-initiated drop is observed at the server boundary.
+        dropped = wait_restore_session(process,
+            lambda session: not session.get("waiting") and roster_client(session, name) is None,
+            timeout=8, description=f"{name} retained an unauthorized fallback connection")
+        if dropped.get("paused", 0) & 4:
+            raise ProcessFailure(f"restore pause survived abandonment: {dropped}")
+        require_log_marker(launched[2], "Server disconnected", timeout=8)
+        if launched[1].poll() is None:
+            launched[1].terminate()
+            launched[1].wait(timeout=3)
+        # Preserve ordinary SV_DropClient's zombie lifetime before reusing the
+        # same saved slot in the next password scenario.
+        time.sleep(3)
+
     try:
         assert_map_snapshot(
             process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8), "e1m1")
@@ -890,15 +906,15 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         callbacks_before_claim = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "name Alice"',
             "qc2cpp_test_stuff_client", timeout=8)
-        alice_pending = require_live("Alice", spectator=False, team="red", slot=0,
+        alice_pending = require_live("Alice", spectator=True, team="blue", slot=0,
             waiting=False, pending=True)
         alice_pending_record = roster_client(alice_pending, "Alice")
-        if (alice_pending_record.get("userinfo_spectator") != ""
-                or alice_pending_record.get("userinfo_team") != "red"
-                or alice_pending_record.get("wire_spectator") != ""
-                or alice_pending_record.get("wire_team") != "red"):
+        if (alice_pending_record.get("userinfo_spectator") != "1"
+                or alice_pending_record.get("userinfo_team") != "blue"
+                or alice_pending_record.get("wire_spectator") != "1"
+                or alice_pending_record.get("wire_team") != "blue"):
             raise ProcessFailure(
-                f"Alice did not receive saved player/red userinfo before begin: {alice_pending_record}")
+                f"Alice's binding changed requested spectator/blue userinfo: {alice_pending_record}")
         role_events_after_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         if (role_events_after_alice.get("client_userinfo_before_count")
                 != callbacks_before_claim.get("client_userinfo_before_count") + 1
@@ -1027,20 +1043,52 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             raise ProcessFailure(f"reclaim replayed restored callbacks: {reclaim_complete_events}")
         release_roster_clients(process, [reclaim_alice_again, reclaim_bob])
 
+        # Map cancellation after one begin must preserve the committed role and
+        # team. Alice requested spectator/blue but owns saved player/red now;
+        # Bob remains AVAILABLE, keeping the restore session open.
+        load_roster("qcx-roster-two", 0)
+        map_alice = start_client("map-active-alice", "Alice", "blue", spectator=True)
+        partial = require_live("Alice", spectator=False, team="red",
+            waiting=False, pending=False, state=4)
+        if partial.get("active") != 1 or partial.get("available") != 1:
+            raise ProcessFailure(f"map transition did not start with a partial restore: {partial}")
+        map_identity = client_restore_identity(roster_client(partial, "Alice"))
+        # Changelevel computes new spawn parameters; they are not transport
+        # identity and must be allowed to differ from the restored parameters.
+        map_identity.pop("spawn_parms")
+        process.send("map e1m2")
+        process.observe_until("qc2cpp_test_snapshot", "qc2cpp_test_snapshot",
+            lambda snapshot: snapshot.get("map") == "e1m2", timeout=8)
+        after_map = require_live("Alice", spectator=False, team="red",
+            waiting=False, pending=False, state=4)
+        map_record = roster_client(after_map, "Alice")
+        after_map_identity = client_restore_identity(map_record)
+        after_map_identity.pop("spawn_parms")
+        if (after_map.get("waiting") or after_map.get("paused", 0) & 4
+                or after_map_identity != map_identity
+                or map_record.get("userinfo_spectator") != ""
+                or map_record.get("wire_spectator") != ""
+                or map_record.get("userinfo_team") != "red"
+                or map_record.get("wire_team") != "red"):
+            raise ProcessFailure(f"map cancellation rolled back Alice's committed identity: {after_map}")
+        release_roster_clients(process, [map_alice])
+
         # Re-load the same two-entry roster, but invert arrival order this time
         # to prove that final physical slots are a saved-slot permutation.
+        callbacks_before_two_restore = process.observe(
+            "qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         load_roster("qcx-roster-two", 60)
         target_bob = start_client("two-target-bob", "Bob", "red")
         role_events_before_bob = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
-        bob_pending = require_live("Bob", spectator=True, team="blue", slot=source_bob_slot,
+        bob_pending = require_live("Bob", spectator=False, team="red", slot=source_bob_slot,
             waiting=False, pending=True)
         bob_pending_record = roster_client(bob_pending, "Bob")
-        if (bob_pending_record.get("userinfo_spectator") != "1"
-                or bob_pending_record.get("userinfo_team") != "blue"
-                or bob_pending_record.get("wire_spectator") != "1"
-                or bob_pending_record.get("wire_team") != "blue"):
+        if (bob_pending_record.get("userinfo_spectator") != ""
+                or bob_pending_record.get("userinfo_team") != "red"
+                or bob_pending_record.get("wire_spectator") != ""
+                or bob_pending_record.get("wire_team") != "red"):
             raise ProcessFailure(
-                f"Bob did not receive saved userinfo before begin: {bob_pending_record}")
+                f"Bob's binding changed requested player/red userinfo: {bob_pending_record}")
         role_events_after_bob = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         if (role_events_after_bob.get("client_userinfo_before_count")
                 != role_events_before_bob.get("client_userinfo_before_count")
@@ -1050,15 +1098,15 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         bob_transport_identity = client_restore_identity(bob_pending_record)
         target_alice = start_client("two-target-alice", "Alice", "blue", spectator=True)
         role_events_before_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
-        alice_pending = require_live("Alice", spectator=False, team="red", slot=source_alice_slot,
+        alice_pending = require_live("Alice", spectator=True, team="blue", slot=source_alice_slot,
             waiting=False, pending=True)
         alice_pending_record = roster_client(alice_pending, "Alice")
-        if (alice_pending_record.get("userinfo_spectator") != ""
-                or alice_pending_record.get("userinfo_team") != "red"
-                or alice_pending_record.get("wire_spectator") != ""
-                or alice_pending_record.get("wire_team") != "red"):
+        if (alice_pending_record.get("userinfo_spectator") != "1"
+                or alice_pending_record.get("userinfo_team") != "blue"
+                or alice_pending_record.get("wire_spectator") != "1"
+                or alice_pending_record.get("wire_team") != "blue"):
             raise ProcessFailure(
-                f"Alice did not receive saved player/red userinfo before begin: {alice_pending_record}")
+                f"Alice's binding changed requested spectator/blue userinfo: {alice_pending_record}")
         role_events_after_alice = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         if (role_events_after_alice.get("client_userinfo_before_count")
                 != role_events_before_alice.get("client_userinfo_before_count")
@@ -1108,7 +1156,18 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             password="player-pass")
         require_live("PasswordPlayer", spectator=True, team="blue", waiting=False, pending=True)
         process.send("qcx_restore_continue")
-        wait_client_exit(denied_spectator[1], denied_spectator[2], "denied-spectator")
+        require_dropped(denied_spectator, "PasswordPlayer")
+
+        # The same denied requested role must drop when the wait expires, and
+        # when an actual map transition cancels a BOUND identity before begin.
+        for ending in ("timeout", "map"):
+            load_roster("qcx-password-player", 1 if ending == "timeout" else 0)
+            denied = start_client(f"denied-spectator-{ending}", "PasswordPlayer", "blue",
+                spectator="wrong-spectator", password="player-pass")
+            require_live("PasswordPlayer", spectator=True, team="blue", waiting=False, pending=True)
+            if ending == "map":
+                process.send("map e1m2")
+            require_dropped(denied, "PasswordPlayer")
 
         # A saved spectator remains claimable when the incoming player request
         # fails the player password. An empty spectator password is the existing
@@ -1125,7 +1184,7 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             "denied-player", "PasswordSpectator", "red", password="wrong-player")
         require_live("PasswordSpectator", spectator=False, team="red", waiting=False, pending=True)
         process.send("qcx_restore_continue")
-        wait_client_exit(denied_player[1], denied_player[2], "denied-player")
+        require_dropped(denied_player, "PasswordSpectator")
 
         # A name match does not bypass saved-role admission: this player has no
         # valid server password and must never claim the saved player entry.
@@ -1143,7 +1202,11 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             and session.get("available") == 1
             and roster_client(session, "DeniedSavedPlayer") is None,
             timeout=8, description="saved-role password rejection claimed a roster entry")
-        wait_client_exit(denied_saved_player[1], denied_saved_player[2], "denied-saved-player")
+        # Rejected direct-connect never reaches the acceptance release loop.
+        require_log_marker(denied_saved_player[2], "password", timeout=8)
+        if denied_saved_player[1].poll() is None:
+            denied_saved_player[1].terminate()
+            denied_saved_player[1].wait(timeout=3)
         if denied_saved_wait.get("available") != 1:
             raise ProcessFailure(f"denied saved-role wait was not initialized: {denied_saved_wait}")
     finally:
