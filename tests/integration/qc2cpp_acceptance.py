@@ -783,7 +783,8 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         launched_clients.append(launched)
         return launched
 
-    def require_live(name, *, spectator, team, slot=None, waiting=None, pending=None, timeout=12):
+    def require_live(name, *, spectator, team, slot=None, waiting=None, pending=None,
+                     state=None, timeout=12):
         def matches(session):
             record = roster_client(session, name)
             if record is None:
@@ -793,6 +794,8 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             if slot is not None and record.get("slot") != slot:
                 return False
             if waiting is not None and record.get("waiting") is not waiting:
+                return False
+            if state is not None and record.get("state") != state:
                 return False
             return pending is None or record.get("pending") is pending
         return wait_restore_session(process, matches, timeout=timeout,
@@ -851,10 +854,34 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
             raise ProcessFailure(f"valid replacement retained the old deadline: {replacement_wait}")
         initial_wait = load_roster("qcx-roster-one", 60)
         charlie = start_client("charlie-claim", "Charlie", "blue", spectator=True)
-        charlie_waiting = require_live("Charlie", spectator=True, team="blue", waiting=True)
+        charlie_waiting = require_live("Charlie", spectator=True, team="blue", waiting=True,
+                                       state=3)
         if charlie_waiting.get("available") != 1 or charlie_waiting.get("bound") != 0:
             raise ProcessFailure(f"mismatched client did not leave Alice available: {charlie_waiting}")
         charlie_slot = roster_client(charlie_waiting, "Charlie").get("slot")
+        callbacks_before_early_commands = process.observe(
+            "qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        spawncount = charlie_waiting.get("spawncount")
+        if not isinstance(spawncount, int):
+            raise ProcessFailure(f"restore wait did not expose its spawncount: {charlie_waiting}")
+        process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "cmd spawn {spawncount} 0"',
+            "qc2cpp_test_stuff_client", timeout=8)
+        process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "cmd begin {spawncount}"',
+            "qc2cpp_test_stuff_client", timeout=8)
+        time.sleep(1.0)
+        guarded_wait = observe_restore_session(process, timeout=8)
+        guarded_charlie = roster_client(guarded_wait, "Charlie")
+        if (guarded_charlie is None or guarded_charlie.get("waiting") is not True
+                or guarded_charlie.get("state") != 3):
+            raise ProcessFailure(
+                "waiting Charlie bypassed restore wait with spawn/begin: "
+                f"{guarded_wait}")
+        callbacks_after_early_commands = process.observe(
+            "qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        if callbacks_after_early_commands != callbacks_before_early_commands:
+            raise ProcessFailure(
+                "waiting Charlie ran gameplay callbacks before restore completion: "
+                f"{callbacks_before_early_commands} -> {callbacks_after_early_commands}")
         process.observe(f'qc2cpp_test_stuff_client {charlie_slot} "cmd qcx_restore_list"',
             "qc2cpp_test_stuff_client", timeout=8)
         require_log_marker(charlie[2], "Alice [player, team=red]", timeout=8)
