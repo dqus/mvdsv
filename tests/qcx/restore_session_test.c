@@ -546,6 +546,26 @@ static void test_bound_identity_keeps_connection_owned_state(void)
 	assert(strcmp(client_print_text, "Selected saved identity Alice.\n") == 0);
 }
 
+static void test_bound_identity_exposes_saved_role_for_signon(void)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	entry.role = QCX_SAVE_ROLE_PLAYER;
+	connect_client(1U, "Alice", 1);
+	svs.clients[1].spectator = true;
+	install_and_reconcile(&entry, 1U);
+	assert(svs.clients[1].spectator);
+	assert(!QCX_RestoreSessionEffectiveSpectator(&svs.clients[1]));
+
+	reset_fixture();
+	entry.role = QCX_SAVE_ROLE_SPECTATOR;
+	connect_client(1U, "Alice", 1);
+	svs.clients[1].spectator = false;
+	install_and_reconcile(&entry, 1U);
+	assert(!svs.clients[1].spectator);
+	assert(QCX_RestoreSessionEffectiveSpectator(&svs.clients[1]));
+}
+
 static void test_bound_client_without_fallback_is_dropped_on_continue(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
@@ -890,6 +910,7 @@ int main(void)
 	test_admission_uses_the_saved_identity_role();
 	test_bound_client_without_fallback_is_dropped_on_continue();
 	test_bound_identity_keeps_connection_owned_state();
+	test_bound_identity_exposes_saved_role_for_signon();
 	test_roster_list_prints_only_available_saved_identities();
 	test_bound_client_preserves_its_edict_through_begin_and_drop();
 	test_unspawned_saved_client_uses_the_ordinary_spawn_path();

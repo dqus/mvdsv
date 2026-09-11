@@ -31,6 +31,7 @@ void QCX_RestoreSessionNameChanged(client_t *client);
 void QCX_RestoreSessionFrame(double monotonic_now);
 qbool QCX_RestoreSessionClientWaiting(const client_t *client);
 qbool QCX_RestoreSessionClientPending(const client_t *client);
+qbool QCX_RestoreSessionEffectiveSpectator(const client_t *client);
 qbool QCX_RestoreSessionClientRestoresGameplay(const client_t *client);
 qbool QCX_RestoreSessionClientRoleLocked(const client_t *client);
 void QCX_RestoreSessionPrintRoster(client_t *client);

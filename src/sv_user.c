@@ -447,7 +447,11 @@ static void Cmd_New_f (void)
 	MSG_WriteString(&sv_client->netchan.message, gamedir);
 
 	playernum = NUM_FOR_EDICT(sv_client->edict)-1;
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionEffectiveSpectator(sv_client))
+#else
 	if (sv_client->spectator)
+#endif
 		playernum |= 128;
 	MSG_WriteByte (&sv_client->netchan.message, playernum);
 
