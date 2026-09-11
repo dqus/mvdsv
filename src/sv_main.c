@@ -1410,7 +1410,6 @@ static void SVC_DirectConnect (void)
 
 #if defined(QCX_ENABLED)
 	if (QCX_RestoreSessionWaiting()) {
-		if (qcx_restore_identity) spectator = qcx_saved_spectator;
 		newcl = QCX_RestoreSessionAdmissionSlot(Info_ValueForKey(userinfo, "name"));
 		if (newcl == NULL) {
 			Netchan_OutOfBandPrint(NS_SERVER, adr,
