@@ -1265,6 +1265,7 @@ static void SVC_DirectConnect (void)
 	qbool spass, vip, rip_vip, qcx_restore_identity = false;
 #if defined(QCX_ENABLED)
 	qbool qcx_saved_spectator;
+	qbool qcx_requested_spectator = false;
 #endif
 
 	int clients, spectators, vips;
@@ -1343,6 +1344,10 @@ static void SVC_DirectConnect (void)
 
 #if defined(QCX_ENABLED)
 	if (QCX_RestoreSessionWaiting()) {
+		const char *const requested_spectator =
+			Info_ValueForKey(userinfo, "spectator");
+		qcx_requested_spectator = *requested_spectator
+			&& strcmp(requested_spectator, "0") != 0;
 		qcx_restore_identity = QCX_RestoreSessionAdmissionRole(
 			Info_ValueForKey(userinfo, "name"), &qcx_saved_spectator);
 		if (!qcx_restore_identity) {
@@ -1549,6 +1554,13 @@ static void SVC_DirectConnect (void)
 
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
 		newcl->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+
+#if defined(QCX_ENABLED)
+	if (qcx_restore_identity) {
+		QCX_RestoreSessionRememberAdmissionIdentity(newcl,
+			qcx_requested_spectator);
+	}
+#endif
 
 	// mvd/qtv related stuff
 	// Well, here is a chance what player connect after demo recording started,
