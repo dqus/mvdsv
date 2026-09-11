@@ -113,6 +113,15 @@ if(NOT remember_identity EQUAL -1)
 		"SVC_DirectConnect must not retain a rollback snapshot for restore admission")
 endif()
 
+string(FIND "${sv_main}" "spectator = qcx_saved_spectator" saved_role_overwrite)
+string(FIND "${sv_main}" "SV_NormalizeRoleUserinfo(userinfo, sizeof(userinfo)," requested_role_normalize)
+string(FIND "${sv_main}" "newcl->spectator = spectator" connection_role)
+if(NOT saved_role_overwrite EQUAL -1 OR requested_role_normalize EQUAL -1
+	OR connection_role EQUAL -1 OR NOT requested_role_normalize LESS connection_role)
+	message(FATAL_ERROR
+		"SVC_DirectConnect must retain requested role after saved-role admission")
+endif()
+
 file(READ "${MVDSV_SOURCE_DIR}/src/pr2_exec.c" pr2_exec)
 string(FIND "${pr2_exec}" "pr2_save_result_t PR2_LoadGame(" load_begin)
 if(load_begin EQUAL -1)
