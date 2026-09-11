@@ -1046,82 +1046,100 @@ qbool CheckUserinfo( char *userinfobuf, unsigned int bufsize, char *userinfo )
 int SV_VIPbyIP(netadr_t adr);
 int SV_VIPbyPass (char *pass);
 
+typedef struct sv_role_admission_s {
+	qbool allowed;
+	qbool vip;
+} sv_role_admission_t;
+
+static sv_role_admission_t SV_EvaluateRoleAdmission(const char *userinfo,
+	qbool spectator_role)
+{
+	sv_role_admission_t admission;
+	char *role_password;
+	char *password_value;
+
+	admission.vip = false;
+	if (spectator_role) {
+		char *spectator_value = Info_ValueForKey((char *)userinfo, "spectator");
+		if (!(admission.vip = SV_VIPbyPass(spectator_value))) {
+			if (!(admission.vip = SV_VIPbyPass(Info_ValueForKey((char *)userinfo, "password")))) {
+				admission.vip = SV_VIPbyIP(net_from);
+			}
+		}
+		role_password = spectator_password.string;
+		admission.allowed = admission.vip || !role_password[0]
+			|| !strcasecmp(role_password, "none")
+			|| !strcmp(role_password, spectator_value);
+	} else {
+		password_value = Info_ValueForKey((char *)userinfo, "password");
+		if (!(admission.vip = SV_VIPbyPass(password_value))) {
+			admission.vip = SV_VIPbyIP(net_from);
+		}
+		role_password = password.string;
+		admission.allowed = admission.vip || !role_password[0]
+			|| !strcasecmp(role_password, "none")
+			|| !strcmp(role_password, password_value);
+	}
+
+	return admission;
+}
+
+static void SV_RejectRoleAdmission(qbool spectator_role)
+{
+	if (spectator_role) {
+		Con_Printf("%s:spectator password failed\n", NET_AdrToString(net_from));
+		Netchan_OutOfBandPrint(NS_SERVER, net_from,
+			"%c\nrequires a spectator password\n\n", A2C_PRINT);
+	} else {
+		Con_Printf("%s:password failed\n", NET_AdrToString(net_from));
+		Netchan_OutOfBandPrint(NS_SERVER, net_from,
+			"%c\nserver requires a password\n\n", A2C_PRINT);
+	}
+}
+
+static int SV_NormalizeRoleUserinfo(char *userinfo, int userinfo_size,
+	qbool spectator_role)
+{
+	char *spectator_value;
+	int spectator;
+
+	if (spectator_role) {
+		spectator_value = Info_ValueForKey(userinfo, "spectator");
+		Info_RemoveKey(userinfo, "spectator");
+		Info_SetValueForStarKey(userinfo, "*spectator", "1", userinfo_size);
+		spectator = Q_atoi(spectator_value);
+		if (!spectator) spectator = true;
+	} else {
+		Info_RemoveKey(userinfo, "spectator");
+		spectator = false;
+	}
+	Info_RemoveKey(userinfo, "password");
+	return spectator;
+}
+
 qbool CheckPasswords( char *userinfo, int userinfo_size, qbool *spass_ptr, qbool *vip_ptr, int *spectator_ptr )
 {
 	int spectator;
-	qbool spass, vip;
+	qbool spass;
+	qbool spectator_role;
+	sv_role_admission_t admission;
+	char *spectator_value = Info_ValueForKey(userinfo, "spectator");
 
-	char *s = Info_ValueForKey (userinfo, "spectator");
-	char *pwd;
-
-	spass = vip = spectator = false;
-
-	if (s[0] && strcmp(s, "0"))
-	{
-		spass = true;
-
-		// first the pass, then ip
-		if ( !( vip = SV_VIPbyPass( s ) ) )
-		{
-			if ( !( vip = SV_VIPbyPass( Info_ValueForKey( userinfo, "password") ) ) )
-			{
-				vip = SV_VIPbyIP( net_from );
-			}
-		}
-
-		pwd = spectator_password.string;
-
-		if (pwd[0] && strcasecmp(pwd, "none") && strcmp(pwd, s))
-		{
-			spass = false; // failed
-		}
-
-		if (!vip && !spass)
-		{
-			Con_Printf ("%s:spectator password failed\n", NET_AdrToString (net_from));
-			Netchan_OutOfBandPrint (NS_SERVER, net_from, "%c\nrequires a spectator password\n\n", A2C_PRINT);
-
-			return false;
-		}
-
-		Info_RemoveKey (userinfo, "spectator"); // remove passwd
-		Info_SetValueForStarKey (userinfo, "*spectator", "1", userinfo_size);
-
-		spectator = Q_atoi(s);
-
-		if (!spectator)
-			spectator = true;
-	}
-	else
-	{
-		s = Info_ValueForKey (userinfo, "password");
-
-		// first the pass, then ip
-		if (!(vip = SV_VIPbyPass(s)))
-		{
-			vip = SV_VIPbyIP(net_from);
-		}
-
-		pwd = password.string;
-
-		if (!vip && pwd[0] && strcasecmp(pwd, "none") && strcmp(pwd, s))
-		{
-			Con_Printf ("%s:password failed\n", NET_AdrToString (net_from));
-			Netchan_OutOfBandPrint (NS_SERVER, net_from, "%c\nserver requires a password\n\n", A2C_PRINT);
-
-			return false;
-		}
-
-		Info_RemoveKey (userinfo, "spectator"); // remove "spectator 0" for example
-
-		spectator = false;
+	spectator_role = spectator_value[0] && strcmp(spectator_value, "0");
+	admission = SV_EvaluateRoleAdmission(userinfo, spectator_role);
+	if (!admission.allowed) {
+		SV_RejectRoleAdmission(spectator_role);
+		return false;
 	}
 
-	Info_RemoveKey (userinfo, "password"); // remove passwd
+	spass = spectator_role && (!spectator_password.string[0]
+		|| !strcasecmp(spectator_password.string, "none")
+		|| !strcmp(spectator_password.string, spectator_value));
+	spectator = SV_NormalizeRoleUserinfo(userinfo, userinfo_size, spectator_role);
 
 	// copy 
 	*spass_ptr     = spass;
-	*vip_ptr       = vip;
+	*vip_ptr       = admission.vip;
 	*spectator_ptr = spectator;
 
 	return true;
@@ -1266,6 +1284,8 @@ static void SVC_DirectConnect (void)
 #if defined(QCX_ENABLED)
 	qbool qcx_saved_spectator;
 	qbool qcx_requested_spectator = false;
+	sv_role_admission_t qcx_requested_auth;
+	sv_role_admission_t qcx_saved_auth;
 #endif
 
 	int clients, spectators, vips;
@@ -1359,21 +1379,24 @@ static void SVC_DirectConnect (void)
 			}
 		}
 		if (qcx_restore_identity) {
-			if (qcx_saved_spectator) {
-				const char *const requested_spectator =
-					Info_ValueForKey(userinfo, "spectator");
-				if (!*requested_spectator || !strcmp(requested_spectator, "0")) {
-					Info_SetValueForKey(userinfo, "spectator", "1", sizeof(userinfo));
-				}
-			} else {
-				Info_RemoveKey(userinfo, "spectator");
+			qcx_requested_auth = SV_EvaluateRoleAdmission(userinfo,
+				qcx_requested_spectator);
+			qcx_saved_auth = SV_EvaluateRoleAdmission(userinfo, qcx_saved_spectator);
+			if (!qcx_saved_auth.allowed) {
+				SV_RejectRoleAdmission(qcx_saved_spectator);
+				return;
 			}
+			spass = false;
+			vip = qcx_saved_auth.vip;
+			spectator = SV_NormalizeRoleUserinfo(userinfo, sizeof(userinfo),
+				qcx_requested_spectator);
 		}
 	}
 #endif
 
 	// check for password or spectator_password
-	if ( !CheckPasswords( userinfo, sizeof(userinfo), &spass, &vip, &spectator) )
+	if (!qcx_restore_identity
+		&& !CheckPasswords(userinfo, sizeof(userinfo), &spass, &vip, &spectator))
 		return; // pass was wrong
 
 	adr = net_from;
@@ -1447,6 +1470,13 @@ static void SVC_DirectConnect (void)
 	// accept the new client
 	// this is the only place a client_t is ever initialized
 	memset (newcl, 0, sizeof(*newcl));
+	newcl->qcx_restore_fallback_allowed = true;
+
+#if defined(QCX_ENABLED)
+	if (qcx_restore_identity) {
+		newcl->qcx_restore_fallback_allowed = qcx_requested_auth.allowed;
+	}
+#endif
 
 	newcl->userid = SV_GenerateUserID();
 
@@ -1554,13 +1584,6 @@ static void SVC_DirectConnect (void)
 
 	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
 		newcl->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
-
-#if defined(QCX_ENABLED)
-	if (qcx_restore_identity) {
-		QCX_RestoreSessionRememberAdmissionIdentity(newcl,
-			qcx_requested_spectator);
-	}
-#endif
 
 	// mvd/qtv related stuff
 	// Well, here is a chance what player connect after demo recording started,

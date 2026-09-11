@@ -78,6 +78,8 @@ endif()
 file(READ "${MVDSV_SOURCE_DIR}/src/sv_main.c" sv_main)
 foreach(required IN ITEMS
 	"QCX_RestoreSessionAdmissionRole("
+	"SV_EvaluateRoleAdmission("
+	"qcx_restore_fallback_allowed"
 	"QCX_RestoreSessionClientDropped(drop)"
 	"!qcx_restore_identity")
 	string(FIND "${sv_main}" "${required}" position)
@@ -87,31 +89,28 @@ foreach(required IN ITEMS
 endforeach()
 
 string(FIND "${sv_main}" "QCX_RestoreSessionAdmissionRole(" admission_role)
-string(FIND "${sv_main}" "CheckPasswords( userinfo" check_passwords)
-if(admission_role EQUAL -1 OR check_passwords EQUAL -1 OR NOT admission_role LESS check_passwords)
+string(FIND "${sv_main}" "qcx_saved_auth = SV_EvaluateRoleAdmission(userinfo, qcx_saved_spectator)" saved_role_auth)
+string(FIND "${sv_main}" "QCX_RestoreSessionAdmissionSlot(Info_ValueForKey(userinfo, \"name\"))" admission_slot)
+if(admission_role EQUAL -1 OR saved_role_auth EQUAL -1 OR admission_slot EQUAL -1
+	OR NOT admission_role LESS saved_role_auth OR NOT saved_role_auth LESS admission_slot)
 	message(FATAL_ERROR
-		"SVC_DirectConnect must select the saved role before authenticating the connection")
+		"SVC_DirectConnect must evaluate the saved role before roster admission")
 endif()
 
 foreach(required IN ITEMS
 	"SV_FindReconnectingClient(net_from, qport)"
-	"!strcmp(requested_spectator, \"0\")"
-	"QCX_RestoreSessionRememberAdmissionIdentity(newcl,")
+	"qcx_requested_auth = SV_EvaluateRoleAdmission(userinfo,"
+	"newcl->qcx_restore_fallback_allowed = qcx_requested_auth.allowed")
 	string(FIND "${sv_main}" "${required}" position)
 	if(position EQUAL -1)
-		message(FATAL_ERROR "SVC_DirectConnect is missing saved-role authentication edge case ${required}")
+		message(FATAL_ERROR "SVC_DirectConnect is missing independent role admission ${required}")
 	endif()
 endforeach()
 
-string(FIND "${sv_main}" "qcx_requested_spectator =" requested_role)
-string(FIND "${sv_main}" "Info_SetValueForKey(userinfo, \"spectator\", \"1\"" forced_role)
-string(FIND "${sv_main}" "PR_GameSetNewParms();" new_parms)
 string(FIND "${sv_main}" "QCX_RestoreSessionRememberAdmissionIdentity(newcl," remember_identity)
-if(requested_role EQUAL -1 OR forced_role EQUAL -1 OR new_parms EQUAL -1
-	OR remember_identity EQUAL -1 OR NOT requested_role LESS forced_role
-	OR NOT new_parms LESS remember_identity)
+if(NOT remember_identity EQUAL -1)
 	message(FATAL_ERROR
-		"SVC_DirectConnect must preserve requested identity before forcing saved role")
+		"SVC_DirectConnect must not retain a rollback snapshot for restore admission")
 endif()
 
 file(READ "${MVDSV_SOURCE_DIR}/src/pr2_exec.c" pr2_exec)

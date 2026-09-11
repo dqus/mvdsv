@@ -206,6 +206,7 @@ typedef struct client_s
 	int				userid;				// identifying number
 	ctxinfo_t		_userinfo_ctx_;			// infostring
 	ctxinfo_t		_userinfoshort_ctx_;	// infostring
+	qbool			qcx_restore_fallback_allowed;
 	qbool			qcx_restore_waiting;
 	qbool			qcx_restore_pending;
 	int				qcx_restore_roster_index;
