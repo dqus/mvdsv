@@ -212,6 +212,7 @@ typedef struct client_s
 	qbool			qcx_restore_has_original_identity;
 	qbool			qcx_restore_original_spectator;
 	char				qcx_restore_original_team[CLIENT_NAME_LEN];
+	float				qcx_restore_original_spawn_parms[NUM_SPAWN_PARMS];
 
 	antilag_position_t	antilag_positions[MAX_ANTILAG_POSITIONS];
 	int				antilag_position_next;

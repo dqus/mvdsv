@@ -158,9 +158,9 @@ static void QCX_TestRestoreSession_f(void)
 	QCX_RestoreSessionGetStatus(&status, Sys_DoubleTime());
 	if (!QCX_TestJsonAppend(&cursor, &remaining,
 		"{\"qc2cpp_test_restore_session\":{\"waiting\":%s,"
-		"\"paused\":%d,\"remaining_seconds\":%.3f,\"available\":%u,"
+		"\"paused\":%d,\"spawncount\":%d,\"remaining_seconds\":%.3f,\"available\":%u,"
 		"\"bound\":%u,\"active\":%u,\"clients\":[",
-		status.waiting ? "true" : "false", sv.paused, status.remaining_seconds,
+		status.waiting ? "true" : "false", sv.paused, svs.spawncount, status.remaining_seconds,
 		status.available_count, status.bound_count, status.active_count)) goto overflow;
 	for (slot = 0; slot < MAX_CLIENTS; ++slot) {
 		client_t *const client = &svs.clients[slot];
@@ -170,7 +170,8 @@ static void QCX_TestRestoreSession_f(void)
 		if (!first && !QCX_TestJsonAppend(&cursor, &remaining, ",")) goto overflow;
 		first = false;
 		if (client->edict != NULL) edict_slot = (int)(client->edict - sv.edicts);
-		if (!QCX_TestJsonAppend(&cursor, &remaining, "{\"slot\":%d,\"name\":", slot)
+		if (!QCX_TestJsonAppend(&cursor, &remaining,
+			"{\"slot\":%d,\"state\":%d,\"name\":", slot, client->state)
 			|| !QCX_TestJsonString(&cursor, &remaining, client->name)
 			|| !QCX_TestJsonAppend(&cursor, &remaining, ",\"spectator\":%s,\"team\":",
 				client->spectator ? "true" : "false")
