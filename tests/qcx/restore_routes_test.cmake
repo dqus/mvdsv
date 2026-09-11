@@ -21,6 +21,18 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
+string(FIND "${sv_user}" "static void Cmd_New_f (void)" new_begin)
+string(FIND "${sv_user}" "void SV_QCXStartClientSignon(client_t *client)" new_end)
+if(new_begin EQUAL -1 OR new_end EQUAL -1 OR NOT new_begin LESS new_end)
+	message(FATAL_ERROR "could not isolate Cmd_New_f")
+endif()
+math(EXPR new_length "${new_end} - ${new_begin}")
+string(SUBSTRING "${sv_user}" ${new_begin} ${new_length} new_source)
+string(FIND "${new_source}" "QCX_RestoreSessionEffectiveSpectator(sv_client)" effective_role)
+if(effective_role EQUAL -1)
+	message(FATAL_ERROR "Cmd_New_f must encode the saved role for a bound QCX client")
+endif()
+
 string(FIND "${sv_user}" "if (sv.paused && !pending_qcx_client && !waiting_qcx_client)" position)
 if(position EQUAL -1)
 	message(FATAL_ERROR "Cmd_Begin must defer pause notification for every QCX restore handshake")
