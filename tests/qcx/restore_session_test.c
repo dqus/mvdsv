@@ -266,6 +266,7 @@ static client_t *connect_client(uint32_t slot, const char *name, int userid)
 	assert(slot < test_slot_capacity);
 	memset(client, 0, sizeof(*client));
 	client->state = cs_connected;
+	client->qcx_restore_fallback_allowed = true;
 	client->userid = userid;
 	strcpy(client->name, name);
 	client->_userinfo_ctx_.max = MAX_CLIENT_INFOS;
@@ -492,57 +493,72 @@ static void set_client_role_and_team(client_t *client, qbool spectator, const ch
 	assert(Info_Set(&client->_userinfoshort_ctx_, "team", team));
 }
 
-static void test_binding_forces_saved_role_and_team(void)
+static void test_bound_identity_keeps_connection_owned_state(void)
 {
-	qcx_save_roster_entry_t player = saved(1U, "Alice");
-	qcx_save_roster_entry_t spectator = saved(2U, "Bob");
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	char team[CLIENT_NAME_LEN];
+	char userinfo_spectator[2];
+	char userinfo_team[CLIENT_NAME_LEN];
+	char userinfoshort_spectator[2];
+	char userinfoshort_team[CLIENT_NAME_LEN];
+	float spawn_parms[NUM_SPAWN_PARMS];
+	qbool spectator;
+	uint32_t index;
 	reset_fixture();
-	strcpy(player.team, "red");
-	player.role = QCX_SAVE_ROLE_PLAYER;
-	for (uint32_t index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		player.spawn_parms[index] = (float)index + 0.5f;
+	strcpy(entry.team, "red");
+	entry.role = QCX_SAVE_ROLE_PLAYER;
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		entry.spawn_parms[index] = 200.0f + (float)index;
 	}
 	connect_client(3U, "aLiCe", 3);
 	set_client_role_and_team(&svs.clients[3], true, "blue");
-	install_and_reconcile(&player, 1U);
-	assert(!svs.clients[1].spectator);
-	assert(strcmp(svs.clients[1].name, "aLiCe") == 0);
-	assert(strcmp(svs.clients[1].team, "red") == 0);
-	for (uint32_t index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		assert(svs.clients[1].spawn_parms[index] == (float)index + 0.5f);
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		svs.clients[3].spawn_parms[index] = 100.0f + (float)index;
 	}
-	assert(*Info_Get(&svs.clients[1]._userinfo_ctx_, "*spectator") == '\0');
-	assert(*Info_Get(&svs.clients[1]._userinfoshort_ctx_, "*spectator") == '\0');
-	assert(strcmp(Info_Get(&svs.clients[1]._userinfo_ctx_, "team"), "red") == 0);
-	assert(strcmp(Info_Get(&svs.clients[1]._userinfoshort_ctx_, "team"), "red") == 0);
-	assert(client_print_calls == 1U);
+	spectator = svs.clients[3].spectator;
+	strcpy(team, svs.clients[3].team);
+	strcpy(userinfo_spectator,
+		Info_Get(&svs.clients[3]._userinfo_ctx_, "*spectator"));
+	strcpy(userinfo_team, Info_Get(&svs.clients[3]._userinfo_ctx_, "team"));
+	strcpy(userinfoshort_spectator,
+		Info_Get(&svs.clients[3]._userinfoshort_ctx_, "*spectator"));
+	strcpy(userinfoshort_team,
+		Info_Get(&svs.clients[3]._userinfoshort_ctx_, "team"));
+	memcpy(spawn_parms, svs.clients[3].spawn_parms, sizeof(spawn_parms));
 
-	reset_fixture();
-	strcpy(spectator.team, "blue");
-	spectator.role = QCX_SAVE_ROLE_SPECTATOR;
-	connect_client(2U, "Bob", 2);
-	set_client_role_and_team(&svs.clients[2], false, "red");
-	install_and_reconcile(&spectator, 1U);
-	assert(svs.clients[2].spectator);
-	assert(strcmp(svs.clients[2].team, "blue") == 0);
-	assert(strcmp(Info_Get(&svs.clients[2]._userinfo_ctx_, "*spectator"), "1") == 0);
-	assert(strcmp(Info_Get(&svs.clients[2]._userinfoshort_ctx_, "*spectator"), "1") == 0);
-	assert(strcmp(Info_Get(&svs.clients[2]._userinfo_ctx_, "team"), "blue") == 0);
-	assert(strcmp(Info_Get(&svs.clients[2]._userinfoshort_ctx_, "team"), "blue") == 0);
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	assert((svs.clients[1].spectator != 0) == spectator);
+	assert(strcmp(svs.clients[1].name, "aLiCe") == 0);
+	assert(strcmp(svs.clients[1].team, team) == 0);
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfo_ctx_, "*spectator"),
+		userinfo_spectator) == 0);
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfo_ctx_, "team"),
+		userinfo_team) == 0);
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfoshort_ctx_, "*spectator"),
+		userinfoshort_spectator) == 0);
+	assert(strcmp(Info_Get(&svs.clients[1]._userinfoshort_ctx_, "team"),
+		userinfoshort_team) == 0);
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		assert(svs.clients[1].spawn_parms[index] == spawn_parms[index]);
+	}
+	assert(client_print_calls == 1U);
+	assert(strcmp(client_print_text, "Selected saved identity Alice.\n") == 0);
 }
 
-static void test_binding_removes_an_empty_saved_team(void)
+static void test_bound_client_without_fallback_is_dropped_on_continue(void)
 {
-	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
 	reset_fixture();
-	entry.role = QCX_SAVE_ROLE_PLAYER;
 	connect_client(1U, "Alice", 1);
-	set_client_role_and_team(&svs.clients[1], true, "blue");
+	svs.clients[1].qcx_restore_fallback_allowed = false;
 	install_and_reconcile(&entry, 1U);
-	assert(!svs.clients[1].spectator);
-	assert(svs.clients[1].team[0] == '\0');
-	assert(*Info_Get(&svs.clients[1]._userinfo_ctx_, "team") == '\0');
-	assert(*Info_Get(&svs.clients[1]._userinfoshort_ctx_, "team") == '\0');
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	QCX_RestoreSessionContinue();
+	QCX_RestoreSessionFrame(102.0);
+	assert(drop_calls == 1U);
+	assert(drop_slots[0] == 1);
+	assert(svs.clients[1].state == cs_free);
 }
 
 static void test_roster_list_prints_only_available_saved_identities(void)
@@ -766,7 +782,7 @@ static void test_timeout_abandons_bound_and_waiting_clients(void)
 	assert(last_pause_reason == SV_PAUSE_RESTORE && !last_pause_active && last_pause_notify);
 }
 
-static void test_manual_continuation_restores_a_bound_client_identity(void)
+static void test_manual_continuation_keeps_a_bound_client_identity(void)
 {
 	qcx_save_roster_entry_t entry = saved(1U, "Alice");
 	uint32_t index;
@@ -786,86 +802,6 @@ static void test_manual_continuation_restores_a_bound_client_identity(void)
 	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
 		assert(svs.clients[1].spawn_parms[index] == 100.0f + (float)index);
 	}
-}
-
-static void test_admission_snapshot_restores_requested_identity(void)
-{
-	qcx_save_roster_entry_t entry = saved(1U, "Alice");
-	qcx_save_image_t image;
-	uint32_t index;
-	reset_fixture();
-	connect_client(1U, "Alice", 1);
-	set_client_role_and_team(&svs.clients[1], false, "blue");
-	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		svs.clients[1].spawn_parms[index] = 100.0f + (float)index;
-		entry.spawn_parms[index] = 200.0f + (float)index;
-	}
-	strcpy(entry.team, "red");
-	image = make_image(&entry, 1U);
-	assert(QCX_RestoreSessionInstall(&image, 100.0));
-	QCX_RestoreSessionRememberAdmissionIdentity(&svs.clients[1], true);
-	QCX_RestoreSessionFrame(101.0);
-	assert(!svs.clients[1].spectator);
-	assert(strcmp(svs.clients[1].team, "red") == 0);
-	QCX_RestoreSessionContinue();
-	QCX_RestoreSessionFrame(102.0);
-	assert(svs.clients[1].spectator);
-	assert(strcmp(svs.clients[1].team, "blue") == 0);
-	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		assert(svs.clients[1].spawn_parms[index] == 100.0f + (float)index);
-	}
-}
-
-static client_t *prepare_unbound_admission_snapshot(void)
-{
-	qcx_save_roster_entry_t entry = saved(1U, "Alice");
-	qcx_save_image_t image;
-	client_t *client;
-	uint32_t index;
-	reset_fixture();
-	strcpy(entry.team, "red");
-	image = make_image(&entry, 1U);
-	assert(QCX_RestoreSessionInstall(&image, 100.0));
-	client = connect_client(1U, "Alice", 1);
-	set_client_role_and_team(client, false, "blue");
-	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		client->spawn_parms[index] = 100.0f + (float)index;
-	}
-	/* DirectConnect has authenticated the saved player role, then retains the
-	 * requested spectator role only in the admission snapshot. */
-	QCX_RestoreSessionRememberAdmissionIdentity(client, true);
-	strcpy(client->name, "Una");
-	QCX_RestoreSessionObserveClient(client);
-	QCX_RestoreSessionNameChanged(client);
-	QCX_RestoreSessionFrame(101.0);
-	/* The unmatched client is evacuated from Alice's reserved slot. */
-	client = &svs.clients[0];
-	assert(strcmp(client->name, "Una") == 0);
-	assert(QCX_RestoreSessionClientWaiting(client));
-	assert(!QCX_RestoreSessionClientPending(client));
-	return client;
-}
-
-static void assert_unbound_admission_identity(const client_t *client)
-{
-	uint32_t index;
-	assert(client->spectator);
-	assert(strcmp(client->team, "blue") == 0);
-	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
-		assert(client->spawn_parms[index] == 100.0f + (float)index);
-	}
-}
-
-static void test_unbound_admission_snapshot_rolls_back_on_continue_and_cancel(void)
-{
-	client_t *client = prepare_unbound_admission_snapshot();
-	QCX_RestoreSessionContinue();
-	QCX_RestoreSessionFrame(102.0);
-	assert_unbound_admission_identity(client);
-
-	client = prepare_unbound_admission_snapshot();
-	QCX_RestoreSessionCancel();
-	assert_unbound_admission_identity(client);
 }
 
 static void test_zero_and_negative_timeout_wait_for_manual_continuation(void)
@@ -918,7 +854,7 @@ static void test_manual_pause_survives_restore_completion(void)
 	assert(sv.paused == SV_PAUSE_MANUAL);
 }
 
-static void test_cancelling_a_bound_identity_restores_its_original_role(void)
+static void test_cancelling_a_bound_identity_keeps_its_connection_role(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
 	uint32_t index;
@@ -930,7 +866,7 @@ static void test_cancelling_a_bound_identity_restores_its_original_role(void)
 	}
 	install_and_reconcile(&entry, 1U);
 	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
-	assert(!svs.clients[1].spectator);
+	assert(svs.clients[1].spectator);
 	QCX_RestoreSessionCancel();
 	assert(!QCX_RestoreSessionWaiting());
 	assert(svs.clients[1].spectator);
@@ -952,8 +888,8 @@ int main(void)
 	test_duplicate_waiting_names_claim_the_lowest_slot();
 	test_admission_does_not_consume_reserved_slots();
 	test_admission_uses_the_saved_identity_role();
-	test_binding_forces_saved_role_and_team();
-	test_binding_removes_an_empty_saved_team();
+	test_bound_client_without_fallback_is_dropped_on_continue();
+	test_bound_identity_keeps_connection_owned_state();
 	test_roster_list_prints_only_available_saved_identities();
 	test_bound_client_preserves_its_edict_through_begin_and_drop();
 	test_unspawned_saved_client_uses_the_ordinary_spawn_path();
@@ -965,13 +901,11 @@ int main(void)
 	test_excess_unmatched_client_is_dropped_from_highest_slot();
 	test_inactive_and_complete_frames_do_not_compare_names();
 	test_timeout_abandons_bound_and_waiting_clients();
-	test_manual_continuation_restores_a_bound_client_identity();
-	test_admission_snapshot_restores_requested_identity();
-	test_unbound_admission_snapshot_rolls_back_on_continue_and_cancel();
+	test_manual_continuation_keeps_a_bound_client_identity();
 	test_zero_and_negative_timeout_wait_for_manual_continuation();
 	test_all_active_completes_without_abandonment();
 	test_manual_pause_survives_restore_completion();
-	test_cancelling_a_bound_identity_restores_its_original_role();
+	test_cancelling_a_bound_identity_keeps_its_connection_role();
 	reset_fixture();
 	return 0;
 }

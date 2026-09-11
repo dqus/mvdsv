@@ -52,27 +52,6 @@ static void QCX_RestoreSessionClearClientFlags(client_t *client)
 	client->qcx_restore_roster_index = -1;
 }
 
-static void QCX_RestoreSessionClearClientOriginalIdentity(client_t *client)
-{
-	client->qcx_restore_has_original_identity = false;
-	client->qcx_restore_original_spectator = false;
-	client->qcx_restore_original_team[0] = '\0';
-	memset(client->qcx_restore_original_spawn_parms, 0,
-		sizeof(client->qcx_restore_original_spawn_parms));
-}
-
-void QCX_RestoreSessionRememberAdmissionIdentity(client_t *client,
-	qbool requested_spectator)
-{
-	if (client == NULL || client->qcx_restore_has_original_identity) return;
-	client->qcx_restore_has_original_identity = true;
-	client->qcx_restore_original_spectator = requested_spectator;
-	strlcpy(client->qcx_restore_original_team, client->team,
-		sizeof(client->qcx_restore_original_team));
-	memcpy(client->qcx_restore_original_spawn_parms, client->spawn_parms,
-		sizeof(client->qcx_restore_original_spawn_parms));
-}
-
 static void QCX_RestoreSessionRepairClient(client_t *client, uint32_t slot)
 {
 	client->netchan.message.data = client->netchan.message_buf;
@@ -109,34 +88,11 @@ static qcx_restore_roster_entry_t *QCX_RestoreSessionClientEntry(client_t *clien
 	return entry;
 }
 
-static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
+static void QCX_RestoreSessionNotifyBoundIdentity(client_t *client,
 	const qcx_save_roster_entry_t *saved)
 {
-	const qbool spectator = saved->role == QCX_SAVE_ROLE_SPECTATOR;
-	if (!client->qcx_restore_has_original_identity) {
-		QCX_RestoreSessionRememberAdmissionIdentity(client,
-			client->spectator != 0);
-	}
-	client->spectator = spectator;
-	if (spectator) {
-		(void)Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
-		(void)Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
-	} else {
-		(void)Info_Remove(&client->_userinfo_ctx_, "*spectator");
-		(void)Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
-	}
-	if (saved->team[0] == '\0') {
-		(void)Info_Remove(&client->_userinfo_ctx_, "team");
-		(void)Info_Remove(&client->_userinfoshort_ctx_, "team");
-	} else {
-		(void)Info_Set(&client->_userinfo_ctx_, "team", saved->team);
-		(void)Info_Set(&client->_userinfoshort_ctx_, "team", saved->team);
-	}
-	strlcpy(client->team, saved->team, sizeof(client->team));
-	memcpy(client->spawn_parms, saved->spawn_parms, sizeof(client->spawn_parms));
-	SV_ClientPrintf(client, PRINT_HIGH, "Restoring saved identity as %s%s%s.\n",
-		spectator ? "spectator" : "player", saved->team[0] == '\0' ? "" : " on team ",
-		saved->team[0] == '\0' ? "" : saved->team);
+	SV_ClientPrintf(client, PRINT_HIGH, "Selected saved identity %s.\n",
+		saved->name);
 }
 
 static void QCX_RestoreSessionQueueRestoredNew(client_t *client)
@@ -168,32 +124,6 @@ static void QCX_RestoreSessionQueueWaitingNew(client_t *client)
 	client->netchan.last_reliable_sequence = client->netchan.outgoing_sequence;
 	SV_QCXStartClientSignon(client);
 	client->send_message = true;
-}
-
-static void QCX_RestoreSessionRestoreOriginalIdentity(client_t *client)
-{
-	if (!client->qcx_restore_has_original_identity) return;
-	client->spectator = client->qcx_restore_original_spectator;
-	if (client->spectator) {
-		(void)Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
-		(void)Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
-	} else {
-		(void)Info_Remove(&client->_userinfo_ctx_, "*spectator");
-		(void)Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
-	}
-	if (client->qcx_restore_original_team[0] == '\0') {
-		(void)Info_Remove(&client->_userinfo_ctx_, "team");
-		(void)Info_Remove(&client->_userinfoshort_ctx_, "team");
-	} else {
-		(void)Info_Set(&client->_userinfo_ctx_, "team",
-			client->qcx_restore_original_team);
-		(void)Info_Set(&client->_userinfoshort_ctx_, "team",
-			client->qcx_restore_original_team);
-	}
-	strlcpy(client->team, client->qcx_restore_original_team, sizeof(client->team));
-	memcpy(client->spawn_parms, client->qcx_restore_original_spawn_parms,
-		sizeof(client->spawn_parms));
-	QCX_RestoreSessionClearClientOriginalIdentity(client);
 }
 
 static void QCX_RestoreSessionSwapClients(uint32_t left_slot, uint32_t right_slot)
@@ -380,7 +310,6 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		QCX_RestoreSessionClearClientFlags(&svs.clients[slot]);
-		QCX_RestoreSessionClearClientOriginalIdentity(&svs.clients[slot]);
 		if (image->roster_count != 0U
 			&& QCX_RestoreSessionClientIsLive(&svs.clients[slot])) {
 			svs.clients[slot].qcx_restore_waiting = true;
@@ -416,16 +345,20 @@ static void QCX_RestoreSessionReset(qbool notify_clients)
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		client_t *const client = &svs.clients[slot];
 		QCX_RESTORE_SESSION_VISIT_SLOT();
-		/* A bound identity has not reached Cmd_Begin yet.  A fresh admission can
-		 * also have a pre-bind snapshot after DirectConnect authenticated its
-		 * saved role, then changed its name before reconciliation.  Neither may
-		 * carry the saved choice into an unrelated session. */
-		if (client->qcx_restore_has_original_identity
-			&& QCX_RestoreSessionClientIsLive(client)) {
-			QCX_RestoreSessionRestoreOriginalIdentity(client);
+		if (notify_clients && QCX_RestoreSessionClientIsLive(client)
+			&& (client->qcx_restore_pending || client->qcx_restore_waiting)) {
+			const qbool pending = client->qcx_restore_pending;
+			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
+			QCX_RestoreSessionClearClientFlags(client);
+			if (fallback_allowed) {
+				if (pending) QCX_RestoreSessionQueueRestoredNew(client);
+				else QCX_RestoreSessionQueueWaitingNew(client);
+			} else {
+				QCX_RestoreSessionDropClient(slot);
+			}
+		} else {
+			QCX_RestoreSessionClearClientFlags(client);
 		}
-		QCX_RestoreSessionClearClientFlags(client);
-		QCX_RestoreSessionClearClientOriginalIdentity(client);
 	}
 	memset(&qcx_restore_session, 0, sizeof(qcx_restore_session));
 	SV_SetPauseReason(SV_PAUSE_RESTORE, false, NULL, notify_clients);
@@ -570,20 +503,20 @@ static void QCX_RestoreSessionFinish(qbool abandon)
 		client_t *const client = &svs.clients[slot];
 		if (!QCX_RestoreSessionClientIsLive(client)) {
 			QCX_RestoreSessionClearClientFlags(client);
-			QCX_RestoreSessionClearClientOriginalIdentity(client);
 			continue;
 		}
 		if (client->qcx_restore_pending) {
-			QCX_RestoreSessionRestoreOriginalIdentity(client);
+			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
 			QCX_RestoreSessionClearClientFlags(client);
-			QCX_RestoreSessionQueueRestoredNew(client);
+			if (fallback_allowed) QCX_RestoreSessionQueueRestoredNew(client);
+			else QCX_RestoreSessionDropClient(slot);
 		} else if (client->qcx_restore_waiting) {
-			QCX_RestoreSessionRestoreOriginalIdentity(client);
+			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
 			QCX_RestoreSessionClearClientFlags(client);
-			QCX_RestoreSessionQueueWaitingNew(client);
+			if (fallback_allowed) QCX_RestoreSessionQueueWaitingNew(client);
+			else QCX_RestoreSessionDropClient(slot);
 		} else {
 			QCX_RestoreSessionClearClientFlags(client);
-			QCX_RestoreSessionClearClientOriginalIdentity(client);
 		}
 	}
 	sv_client = saved_client;
@@ -661,7 +594,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			client_t *const client = &svs.clients[client_slot];
 			client->qcx_restore_pending = true;
 			client->qcx_restore_roster_index = (int)index;
-			QCX_RestoreSessionApplySavedIdentity(client,
+			QCX_RestoreSessionNotifyBoundIdentity(client,
 				&qcx_restore_session.roster.entries[index].saved);
 			if (was_waiting[client_slot]
 				&& !qcx_restore_session.initial_handshake_pending) {
@@ -821,7 +754,6 @@ qbool QCX_RestoreSessionClientDropped(client_t *client)
 		return false;
 	}
 	QCX_RestoreSessionClearClientFlags(client);
-	QCX_RestoreSessionClearClientOriginalIdentity(client);
 	qcx_restore_session.dirty = true;
 	return true;
 }
