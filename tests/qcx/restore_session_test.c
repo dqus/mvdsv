@@ -566,6 +566,62 @@ static void test_bound_identity_exposes_saved_role_for_signon(void)
 	assert(QCX_RestoreSessionEffectiveSpectator(&svs.clients[1]));
 }
 
+static void test_begin_commits_saved_identity(qbool saved_spectator, qbool saved_spawned)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	qcx_restore_session_status_t status;
+	client_t *client;
+	qbool restores_spawned_gameplay;
+	uint32_t index;
+	reset_fixture();
+	entry.role = saved_spectator ? QCX_SAVE_ROLE_SPECTATOR : QCX_SAVE_ROLE_PLAYER;
+	entry.spawned = saved_spawned;
+	strcpy(entry.team, "red");
+	client = connect_client(1U, "Alice", 1);
+	set_client_role_and_team(client, !saved_spectator, "blue");
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		client->spawn_parms[index] = 100.0f + (float)index;
+		entry.spawn_parms[index] = 200.0f + (float)index;
+	}
+	assert((client->spectator != 0) == !saved_spectator);
+	assert(strcmp(client->team, "blue") == 0);
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionClientPending(client));
+	assert(QCX_RestoreSessionPrepareSpawn(client) == saved_spawned);
+	assert((client->spectator != 0) == !saved_spectator);
+	assert(strcmp(client->team, "blue") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "*spectator"),
+		saved_spectator ? "" : "1") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "*spectator"),
+		saved_spectator ? "" : "1") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "team"), "blue") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "team"), "blue") == 0);
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		assert(client->spawn_parms[index] == 100.0f + (float)index);
+	}
+	QCX_RestoreSessionGetStatus(&status, 101.0);
+	assert(status.bound_count == 1U && status.active_count == 0U);
+	restores_spawned_gameplay = !saved_spawned;
+	assert(QCX_RestoreSessionCommitBegin(client, &restores_spawned_gameplay));
+	assert(restores_spawned_gameplay == saved_spawned);
+	assert((client->spectator != 0) == saved_spectator);
+	assert(strcmp(client->team, "red") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "*spectator"),
+		saved_spectator ? "1" : "") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "*spectator"),
+		saved_spectator ? "1" : "") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "team"), "red") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "team"), "red") == 0);
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		assert(client->spawn_parms[index] == 200.0f + (float)index);
+	}
+	QCX_RestoreSessionGetStatus(&status, 101.0);
+	assert(status.bound_count == 0U && status.active_count == 1U);
+	assert(!QCX_RestoreSessionClientPending(client));
+	assert(!QCX_RestoreSessionClientWaiting(client));
+	assert(!QCX_RestoreSessionPrepareSpawn(client));
+}
+
 static void test_bound_client_without_fallback_is_dropped_on_continue(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
@@ -619,7 +675,7 @@ static void test_bound_client_preserves_its_edict_through_begin_and_drop(void)
 	assert(memcmp(&before, &sv.edicts[2], sizeof(before)) == 0);
 	assert(svs.clients[1].entgravity == 1.0f);
 	assert(svs.clients[1].maxspeed == 320.0f);
-	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	assert(QCX_RestoreSessionCommitBegin(&svs.clients[1], NULL));
 	assert(QCX_RestoreSessionClientRoleLocked(&svs.clients[1]));
 	assert(!QCX_RestoreSessionClientPending(&svs.clients[1]));
 	assert(QCX_RestoreSessionClientDropped(&svs.clients[1]));
@@ -638,7 +694,7 @@ static void test_unspawned_saved_client_uses_the_ordinary_spawn_path(void)
 	install_and_reconcile(&entry, 1U);
 	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
 	assert(!QCX_RestoreSessionPrepareSpawn(&svs.clients[1]));
-	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	assert(QCX_RestoreSessionCommitBegin(&svs.clients[1], NULL));
 }
 
 static void test_fresh_observed_client_waits_before_reconciliation(void)
@@ -661,7 +717,7 @@ static void test_active_identity_cannot_claim_another_saved_slot(void)
 	reset_fixture();
 	connect_client(1U, "Alice", 1);
 	install_and_reconcile(entries, 2U);
-	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	assert(QCX_RestoreSessionCommitBegin(&svs.clients[1], NULL));
 	connect_client(0U, "Una", 0);
 	QCX_RestoreSessionObserveClient(&svs.clients[0]);
 	QCX_RestoreSessionFrame(102.0);
@@ -853,7 +909,7 @@ static void test_all_active_completes_without_abandonment(void)
 	reset_fixture();
 	connect_client(1U, "Alice", 1);
 	install_and_reconcile(&entry, 1U);
-	assert(QCX_RestoreSessionBegin(&svs.clients[1]));
+	assert(QCX_RestoreSessionCommitBegin(&svs.clients[1], NULL));
 	QCX_RestoreSessionFrame(102.0);
 	assert(!QCX_RestoreSessionWaiting());
 	assert(game_disconnect_calls == 0U);
@@ -911,6 +967,10 @@ int main(void)
 	test_bound_client_without_fallback_is_dropped_on_continue();
 	test_bound_identity_keeps_connection_owned_state();
 	test_bound_identity_exposes_saved_role_for_signon();
+	test_begin_commits_saved_identity(false, true);
+	test_begin_commits_saved_identity(true, true);
+	test_begin_commits_saved_identity(false, false);
+	test_begin_commits_saved_identity(true, false);
 	test_roster_list_prints_only_available_saved_identities();
 	test_bound_client_preserves_its_edict_through_begin_and_drop();
 	test_unspawned_saved_client_uses_the_ordinary_spawn_path();
