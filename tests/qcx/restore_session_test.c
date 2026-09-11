@@ -75,6 +75,7 @@ qbool Info_Set(ctxinfo_t *context, const char *name, const char *value)
 {
 	info_t *item;
 	assert(context != NULL && name != NULL && value != NULL);
+	if (value[0] == '\0') return Info_Remove(context, name);
 	for (item = context->info_list; item != NULL; item = item->next) {
 		if (strcmp(item->name, name) == 0) {
 			free(item->value);
@@ -83,6 +84,7 @@ qbool Info_Set(ctxinfo_t *context, const char *name, const char *value)
 			return true;
 		}
 	}
+	if (context->cur >= context->max) return false;
 	item = calloc(1U, sizeof(*item));
 	assert(item != NULL);
 	item->name = strdup(name);
@@ -92,6 +94,7 @@ qbool Info_Set(ctxinfo_t *context, const char *name, const char *value)
 	allocated_info[allocated_info_count++] = item;
 	item->next = context->info_list;
 	context->info_list = item;
+	++context->cur;
 	return true;
 }
 
@@ -107,10 +110,19 @@ qbool Info_Remove(ctxinfo_t *context, const char *name)
 	for (item = &context->info_list; *item != NULL; item = &(*item)->next) {
 		if (strcmp((*item)->name, name) == 0) {
 			*item = (*item)->next;
+			--context->cur;
 			return true;
 		}
 	}
 	return false;
+}
+
+void Info_RemoveAll(ctxinfo_t *context)
+{
+	/* Allocation ownership stays with reset_fixture, as for Info_Remove. */
+	memset(context->info_hash, 0, sizeof(context->info_hash));
+	context->info_list = NULL;
+	context->cur = 0;
 }
 
 void MVD_PlayerReset(int slot)
@@ -271,8 +283,10 @@ static client_t *connect_client(uint32_t slot, const char *name, int userid)
 	strcpy(client->name, name);
 	client->_userinfo_ctx_.max = MAX_CLIENT_INFOS;
 	client->_userinfo_ctx_.info_list = make_info("name", name);
+	client->_userinfo_ctx_.cur = 1;
 	client->_userinfoshort_ctx_.max = MAX_CLIENT_INFOS;
 	client->_userinfoshort_ctx_.info_list = make_info("name", name);
+	client->_userinfoshort_ctx_.cur = 1;
 	client->netchan.message.data = client->netchan.message_buf;
 	client->netchan.message.maxsize = (int)sizeof(client->netchan.message_buf);
 	client->datagram.data = client->datagram_buf;
@@ -585,6 +599,10 @@ static void test_begin_commits_saved_identity(qbool saved_spectator, qbool saved
 	}
 	assert((client->spectator != 0) == !saved_spectator);
 	assert(strcmp(client->team, "blue") == 0);
+	if (!saved_spectator) {
+		client->_userinfo_ctx_.max = client->_userinfo_ctx_.cur;
+		client->_userinfoshort_ctx_.max = client->_userinfoshort_ctx_.cur;
+	}
 	install_and_reconcile(&entry, 1U);
 	assert(QCX_RestoreSessionClientPending(client));
 	assert(QCX_RestoreSessionPrepareSpawn(client) == saved_spawned);
@@ -601,11 +619,15 @@ static void test_begin_commits_saved_identity(qbool saved_spectator, qbool saved
 	}
 	QCX_RestoreSessionGetStatus(&status, 101.0);
 	assert(status.bound_count == 1U && status.active_count == 0U);
+	client->sendinfo = false;
 	restores_spawned_gameplay = !saved_spawned;
 	assert(QCX_RestoreSessionCommitBegin(client, &restores_spawned_gameplay));
+	assert(client->sendinfo);
 	assert(restores_spawned_gameplay == saved_spawned);
 	assert((client->spectator != 0) == saved_spectator);
 	assert(strcmp(client->team, "red") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "name"), "Alice") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "name"), "Alice") == 0);
 	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "*spectator"),
 		saved_spectator ? "1" : "") == 0);
 	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "*spectator"),
@@ -620,6 +642,75 @@ static void test_begin_commits_saved_identity(qbool saved_spectator, qbool saved
 	assert(!QCX_RestoreSessionClientPending(client));
 	assert(!QCX_RestoreSessionClientWaiting(client));
 	assert(!QCX_RestoreSessionPrepareSpawn(client));
+}
+
+static void test_begin_rejects_full_userinfo_without_partial_commit(
+	qbool short_context, qbool missing_spectator)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	qcx_restore_session_status_t status;
+	client_t *client;
+	client_t before;
+	ctxinfo_t *full_context;
+	qbool restores_spawned_gameplay = true;
+	uint32_t index;
+	reset_fixture();
+	entry.role = missing_spectator ? QCX_SAVE_ROLE_SPECTATOR : QCX_SAVE_ROLE_PLAYER;
+	strcpy(entry.team, "red");
+	client = connect_client(1U, "Alice", 1);
+	set_client_role_and_team(client, false, "blue");
+	full_context = short_context ? &client->_userinfoshort_ctx_ : &client->_userinfo_ctx_;
+	if (!missing_spectator) assert(Info_Remove(full_context, "team"));
+	full_context->max = full_context->cur;
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		client->spawn_parms[index] = 100.0f + (float)index;
+		entry.spawn_parms[index] = 200.0f + (float)index;
+	}
+	install_and_reconcile(&entry, 1U);
+	client->sendinfo = false;
+	memcpy(&before, client, sizeof(before));
+	assert(!QCX_RestoreSessionCommitBegin(client, &restores_spawned_gameplay));
+	assert(!restores_spawned_gameplay);
+	assert(memcmp(client, &before, sizeof(before)) == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "*spectator"), "") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "*spectator"), "") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "team"),
+		!short_context && !missing_spectator ? "" : "blue") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "team"),
+		short_context && !missing_spectator ? "" : "blue") == 0);
+	QCX_RestoreSessionGetStatus(&status, 101.0);
+	assert(status.bound_count == 1U && status.active_count == 0U);
+	assert(QCX_RestoreSessionClientPending(client));
+	/* A rejected attempt leaves the identity available for a later commit. */
+	++full_context->max;
+	assert(QCX_RestoreSessionCommitBegin(client, &restores_spawned_gameplay));
+	assert(restores_spawned_gameplay);
+	assert(client->sendinfo);
+	assert((client->spectator != 0) == missing_spectator);
+	assert(strcmp(client->team, "red") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "team"), "red") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "team"), "red") == 0);
+}
+
+static void test_begin_can_replace_team_with_spectator_in_full_userinfo(void)
+{
+	qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	client_t *client;
+	reset_fixture();
+	entry.role = QCX_SAVE_ROLE_SPECTATOR;
+	client = connect_client(1U, "Alice", 1);
+	set_client_role_and_team(client, false, "blue");
+	client->_userinfo_ctx_.max = client->_userinfo_ctx_.cur;
+	client->_userinfoshort_ctx_.max = client->_userinfoshort_ctx_.cur;
+	install_and_reconcile(&entry, 1U);
+	assert(QCX_RestoreSessionCommitBegin(client, NULL));
+	assert(client->spectator && client->team[0] == '\0');
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "*spectator"), "1") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "*spectator"), "1") == 0);
+	assert(strcmp(Info_Get(&client->_userinfo_ctx_, "team"), "") == 0);
+	assert(strcmp(Info_Get(&client->_userinfoshort_ctx_, "team"), "") == 0);
+	assert(client->_userinfo_ctx_.cur == client->_userinfo_ctx_.max);
+	assert(client->_userinfoshort_ctx_.cur == client->_userinfoshort_ctx_.max);
 }
 
 static void test_bound_client_without_fallback_is_dropped_on_continue(void)
@@ -971,6 +1062,11 @@ int main(void)
 	test_begin_commits_saved_identity(true, true);
 	test_begin_commits_saved_identity(false, false);
 	test_begin_commits_saved_identity(true, false);
+	test_begin_rejects_full_userinfo_without_partial_commit(false, true);
+	test_begin_rejects_full_userinfo_without_partial_commit(true, true);
+	test_begin_rejects_full_userinfo_without_partial_commit(false, false);
+	test_begin_rejects_full_userinfo_without_partial_commit(true, false);
+	test_begin_can_replace_team_with_spectator_in_full_userinfo();
 	test_roster_list_prints_only_available_saved_identities();
 	test_bound_client_preserves_its_edict_through_begin_and_drop();
 	test_unspawned_saved_client_uses_the_ordinary_spawn_path();
