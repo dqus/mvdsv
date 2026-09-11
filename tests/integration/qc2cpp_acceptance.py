@@ -1094,7 +1094,7 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         # A saved player may use the server password even when the incoming
         # spectator request is not independently authorized. The restore may
         # bind that saved player, but must not fall back to the rejected
-        # spectator request when the operator abandons the session.
+        # spectator connection identity while the restore is bound.
         process.send('password "player-pass"')
         process.send('spectator_password "spectator-pass"')
         source_password_player = start_client(
@@ -1106,14 +1106,14 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         denied_spectator = start_client(
             "denied-spectator", "PasswordPlayer", "blue", spectator="wrong-spectator",
             password="player-pass")
-        require_live("PasswordPlayer", spectator=False, team="red", waiting=False, pending=True)
+        require_live("PasswordPlayer", spectator=True, team="blue", waiting=False, pending=True)
         process.send("qcx_restore_continue")
         wait_client_exit(denied_spectator[1], denied_spectator[2], "denied-spectator")
 
         # A saved spectator remains claimable when the incoming player request
         # fails the player password. An empty spectator password is the existing
         # server configuration that admits the saved spectator without inventing
-        # a test-only rule.
+        # a test-only rule. The bound connection remains its requested player.
         process.send('spectator_password "none"')
         source_password_spectator = start_client(
             "source-password-spectator", "PasswordSpectator", "blue", spectator=True)
@@ -1123,7 +1123,7 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         load_roster("qcx-password-spectator", 0)
         denied_player = start_client(
             "denied-player", "PasswordSpectator", "red", password="wrong-player")
-        require_live("PasswordSpectator", spectator=True, team="blue", waiting=False, pending=True)
+        require_live("PasswordSpectator", spectator=False, team="red", waiting=False, pending=True)
         process.send("qcx_restore_continue")
         wait_client_exit(denied_player[1], denied_player[2], "denied-player")
 
