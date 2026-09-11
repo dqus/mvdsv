@@ -655,6 +655,17 @@ qbool QCX_RestoreSessionClientPending(const client_t *client)
 	return client != NULL && client->qcx_restore_pending;
 }
 
+qbool QCX_RestoreSessionEffectiveSpectator(const client_t *client)
+{
+	qcx_restore_roster_entry_t *entry;
+	if (client == NULL) return false;
+	entry = QCX_RestoreSessionClientEntry((client_t *)client);
+	if (entry != NULL && entry->state == QCX_RESTORE_ENTRY_BOUND) {
+		return entry->saved.role == QCX_SAVE_ROLE_SPECTATOR;
+	}
+	return client->spectator != 0;
+}
+
 qbool QCX_RestoreSessionClientRestoresGameplay(const client_t *client)
 {
 	qcx_restore_roster_entry_t *entry;
