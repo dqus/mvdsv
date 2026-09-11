@@ -177,7 +177,7 @@ def connected_save_client_command(client, basedir, port):
 
 
 def roster_client_command(client, basedir, port, *, name, team, spectator=False,
-                          acceptance=True):
+                          password=None, acceptance=True):
     command = [str(client.resolve()), "-nosound", "-basedir", str(basedir.resolve()), "-game", "qw",
         "+set", "name", name, "+set", "team", team]
     if acceptance:
@@ -185,7 +185,9 @@ def roster_client_command(client, basedir, port, *, name, team, spectator=False,
     else:
         command += ["+set", "vid_renderer", "headless"]
     if spectator:
-        command += ["+set", "spectator", "1"]
+        command += ["+set", "spectator", spectator if isinstance(spectator, str) else "1"]
+    if password is not None:
+        command += ["+set", "password", password]
     return command + ["+connect", f"127.0.0.1:{port}"]
 
 
@@ -771,12 +773,12 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
     process = RunningProcess(server_command(server, basedir, mode, port), run_root / "server.log")
     launched_clients = []
 
-    def start_client(label, name, team, spectator=False):
+    def start_client(label, name, team, spectator=False, password=None):
         log = run_root / f"{label}.log"
         output_file = log.open("w", encoding="utf-8")
         process_handle = subprocess.Popen(
             roster_client_command(client, client_basedir, port, name=name, team=team,
-                                  spectator=spectator),
+                                  spectator=spectator, password=password),
             stdout=output_file, stderr=subprocess.STDOUT, text=True)
         output_file.close()
         launched = label, process_handle, log
@@ -1088,6 +1090,62 @@ def run_roster_restore_suite(server, artifacts, assets, output, mode, client):
         require_log_marker(target_alice[2], "[qc2cpp-save-connected] replication", timeout=8)
         require_log_marker(target_bob[2], "[qc2cpp-save-connected] replication", timeout=8)
         release_roster_clients(process, [target_alice, target_bob])
+
+        # A saved player may use the server password even when the incoming
+        # spectator request is not independently authorized. The restore may
+        # bind that saved player, but must not fall back to the rejected
+        # spectator request when the operator abandons the session.
+        process.send('password "player-pass"')
+        process.send('spectator_password "spectator-pass"')
+        source_password_player = start_client(
+            "source-password-player", "PasswordPlayer", "red", password="player-pass")
+        require_live("PasswordPlayer", spectator=False, team="red", waiting=False, state=4)
+        save_roster("qcx-password-player")
+        release_roster_clients(process, [source_password_player])
+        load_roster("qcx-password-player", 0)
+        denied_spectator = start_client(
+            "denied-spectator", "PasswordPlayer", "blue", spectator="wrong-spectator",
+            password="player-pass")
+        require_live("PasswordPlayer", spectator=False, team="red", waiting=False, pending=True)
+        process.send("qcx_restore_continue")
+        wait_client_exit(denied_spectator[1], denied_spectator[2], "denied-spectator")
+
+        # A saved spectator remains claimable when the incoming player request
+        # fails the player password. An empty spectator password is the existing
+        # server configuration that admits the saved spectator without inventing
+        # a test-only rule.
+        process.send('spectator_password "none"')
+        source_password_spectator = start_client(
+            "source-password-spectator", "PasswordSpectator", "blue", spectator=True)
+        require_live("PasswordSpectator", spectator=True, team="blue", waiting=False, state=4)
+        save_roster("qcx-password-spectator")
+        release_roster_clients(process, [source_password_spectator])
+        load_roster("qcx-password-spectator", 0)
+        denied_player = start_client(
+            "denied-player", "PasswordSpectator", "red", password="wrong-player")
+        require_live("PasswordSpectator", spectator=True, team="blue", waiting=False, pending=True)
+        process.send("qcx_restore_continue")
+        wait_client_exit(denied_player[1], denied_player[2], "denied-player")
+
+        # A name match does not bypass saved-role admission: this player has no
+        # valid server password and must never claim the saved player entry.
+        process.send('spectator_password "spectator-pass"')
+        source_denied_player = start_client(
+            "source-denied-player", "DeniedSavedPlayer", "red", password="player-pass")
+        require_live("DeniedSavedPlayer", spectator=False, team="red", waiting=False, state=4)
+        save_roster("qcx-denied-saved-player")
+        release_roster_clients(process, [source_denied_player])
+        denied_saved_wait = load_roster("qcx-denied-saved-player", 0)
+        denied_saved_player = start_client(
+            "denied-saved-player", "DeniedSavedPlayer", "red", password="wrong-player")
+        wait_restore_session(process,
+            lambda session: session.get("waiting") is True
+            and session.get("available") == 1
+            and roster_client(session, "DeniedSavedPlayer") is None,
+            timeout=8, description="saved-role password rejection claimed a roster entry")
+        wait_client_exit(denied_saved_player[1], denied_saved_player[2], "denied-saved-player")
+        if denied_saved_wait.get("available") != 1:
+            raise ProcessFailure(f"denied saved-role wait was not initialized: {denied_saved_wait}")
     finally:
         for _label, client_process, _client_log in launched_clients:
             if client_process.poll() is None:
