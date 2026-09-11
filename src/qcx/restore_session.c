@@ -57,6 +57,20 @@ static void QCX_RestoreSessionClearClientOriginalIdentity(client_t *client)
 	client->qcx_restore_has_original_identity = false;
 	client->qcx_restore_original_spectator = false;
 	client->qcx_restore_original_team[0] = '\0';
+	memset(client->qcx_restore_original_spawn_parms, 0,
+		sizeof(client->qcx_restore_original_spawn_parms));
+}
+
+void QCX_RestoreSessionRememberAdmissionIdentity(client_t *client,
+	qbool requested_spectator)
+{
+	if (client == NULL || client->qcx_restore_has_original_identity) return;
+	client->qcx_restore_has_original_identity = true;
+	client->qcx_restore_original_spectator = requested_spectator;
+	strlcpy(client->qcx_restore_original_team, client->team,
+		sizeof(client->qcx_restore_original_team));
+	memcpy(client->qcx_restore_original_spawn_parms, client->spawn_parms,
+		sizeof(client->qcx_restore_original_spawn_parms));
 }
 
 static void QCX_RestoreSessionRepairClient(client_t *client, uint32_t slot)
@@ -100,10 +114,8 @@ static void QCX_RestoreSessionApplySavedIdentity(client_t *client,
 {
 	const qbool spectator = saved->role == QCX_SAVE_ROLE_SPECTATOR;
 	if (!client->qcx_restore_has_original_identity) {
-		client->qcx_restore_has_original_identity = true;
-		client->qcx_restore_original_spectator = client->spectator != 0;
-		strlcpy(client->qcx_restore_original_team, client->team,
-			sizeof(client->qcx_restore_original_team));
+		QCX_RestoreSessionRememberAdmissionIdentity(client,
+			client->spectator != 0);
 	}
 	client->spectator = spectator;
 	if (spectator) {
@@ -179,6 +191,8 @@ static void QCX_RestoreSessionRestoreOriginalIdentity(client_t *client)
 			client->qcx_restore_original_team);
 	}
 	strlcpy(client->team, client->qcx_restore_original_team, sizeof(client->team));
+	memcpy(client->spawn_parms, client->qcx_restore_original_spawn_parms,
+		sizeof(client->spawn_parms));
 	QCX_RestoreSessionClearClientOriginalIdentity(client);
 }
 
@@ -402,11 +416,11 @@ static void QCX_RestoreSessionReset(qbool notify_clients)
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		client_t *const client = &svs.clients[slot];
 		QCX_RESTORE_SESSION_VISIT_SLOT();
-		/* A bound identity has not reached Cmd_Begin yet.  A replacement map
-		 * must not carry its saved spectator/team choice into an unrelated
-		 * session.  Active identities, on the other hand, have completed their
-		 * restore and keep the saved choice across an ordinary map change. */
-		if (client->qcx_restore_pending
+		/* A bound identity has not reached Cmd_Begin yet.  A fresh admission can
+		 * also have a pre-bind snapshot after DirectConnect authenticated its
+		 * saved role, then changed its name before reconciliation.  Neither may
+		 * carry the saved choice into an unrelated session. */
+		if (client->qcx_restore_has_original_identity
 			&& QCX_RestoreSessionClientIsLive(client)) {
 			QCX_RestoreSessionRestoreOriginalIdentity(client);
 		}
@@ -514,8 +528,15 @@ client_t *QCX_RestoreSessionAdmissionSlot(const char *raw_name)
 
 void QCX_RestoreSessionObserveClient(client_t *client)
 {
-	(void)client;
-	if (QCX_RestoreSessionWaiting()) qcx_restore_session.dirty = true;
+	if (!QCX_RestoreSessionWaiting() || client == NULL
+		|| !QCX_RestoreSessionClientIsLive(client)) {
+		return;
+	}
+	/* DirectConnect and sequenced signon packets can share one packet loop.
+	 * Mark the new client before the next safe-frame reconciliation so it
+	 * cannot enter gameplay through spawn/begin in that interval. */
+	client->qcx_restore_waiting = true;
+	qcx_restore_session.dirty = true;
 }
 
 void QCX_RestoreSessionNameChanged(client_t *client)
@@ -557,6 +578,7 @@ static void QCX_RestoreSessionFinish(qbool abandon)
 			QCX_RestoreSessionClearClientFlags(client);
 			QCX_RestoreSessionQueueRestoredNew(client);
 		} else if (client->qcx_restore_waiting) {
+			QCX_RestoreSessionRestoreOriginalIdentity(client);
 			QCX_RestoreSessionClearClientFlags(client);
 			QCX_RestoreSessionQueueWaitingNew(client);
 		} else {
@@ -700,6 +722,15 @@ qbool QCX_RestoreSessionClientPending(const client_t *client)
 	return client != NULL && client->qcx_restore_pending;
 }
 
+qbool QCX_RestoreSessionClientRestoresGameplay(const client_t *client)
+{
+	qcx_restore_roster_entry_t *entry;
+	if (client == NULL) return false;
+	entry = QCX_RestoreSessionClientEntry((client_t *)client);
+	return entry != NULL && entry->state == QCX_RESTORE_ENTRY_BOUND
+		&& entry->saved.spawned != 0U;
+}
+
 qbool QCX_RestoreSessionClientRoleLocked(const client_t *client)
 {
 	qcx_restore_roster_entry_t *entry;
@@ -754,7 +785,7 @@ qbool QCX_RestoreSessionPrepareSpawn(client_t *client)
 {
 	qcx_restore_roster_entry_t *const entry = QCX_RestoreSessionClientEntry(client);
 	edict_t *ent;
-	if (entry == NULL || entry->state != QCX_RESTORE_ENTRY_BOUND) return false;
+	if (entry == NULL || !QCX_RestoreSessionClientRestoresGameplay(client)) return false;
 	ent = client->edict;
 	if (ent == NULL) return false;
 	client->entgravity = fofs_gravity ? EdictFieldFloat(ent, fofs_gravity) : 1.0f;
