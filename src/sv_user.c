@@ -1025,14 +1025,17 @@ static void Cmd_Begin_f (void)
 		return;
 	}
 
-	sv_client->state = cs_spawned;
-
 #if defined(QCX_ENABLED)
 	pending_qcx_client = QCX_RestoreSessionClientPending(sv_client);
-	restoring_qcx_client = pending_qcx_client
-		&& QCX_RestoreSessionClientRestoresGameplay(sv_client);
 	waiting_qcx_client = QCX_RestoreSessionClientWaiting(sv_client);
+	if (pending_qcx_client
+		&& !QCX_RestoreSessionCommitBegin(sv_client, &restoring_qcx_client)) {
+		SV_DropClient(sv_client);
+		return;
+	}
 #endif
+	sv_client->state = cs_spawned;
+
 	if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)
 	{
 		if (sv_client->spectator)
@@ -1078,8 +1081,8 @@ static void Cmd_Begin_f (void)
 
 	/* A roster-bound client still has to send `begin` before it can complete
 	 * the restore.  FTE stops that signon after svc_setpause, so defer this
-	 * particular notification until QCX_RestoreSessionBegin clears the
-	 * restore reason.  The server remains paused throughout the handshake. */
+	 * particular notification until the restore session clears the restore
+	 * reason.  The server remains paused throughout the handshake. */
 	if (sv.paused && !pending_qcx_client && !waiting_qcx_client)
 	{
 		ClientReliableWrite_Begin (sv_client, svc_setpause, 2);
@@ -1104,10 +1107,6 @@ static void Cmd_Begin_f (void)
 	}
 
 #if defined(QCX_ENABLED)
-	if (pending_qcx_client && !QCX_RestoreSessionBegin(sv_client)) {
-		SV_DropClient(sv_client);
-		return;
-	}
 	/* This is the first safe point to tell a restored client about a pause:
 	 * FTE aborts a fresh signon if svc_setpause arrives before `begin`, while
 	 * normal waiting/handoff clients will receive the usual notification on

@@ -741,14 +741,36 @@ qbool QCX_RestoreSessionPrepareSpawn(client_t *client)
 	return true;
 }
 
-qbool QCX_RestoreSessionBegin(client_t *client)
+qbool QCX_RestoreSessionCommitBegin(client_t *client,
+	qbool *restores_spawned_gameplay)
 {
 	qcx_restore_roster_entry_t *const entry = QCX_RestoreSessionClientEntry(client);
-	if (entry == NULL || entry->state != QCX_RESTORE_ENTRY_BOUND
-		|| !QCX_RestoreRosterActivate(&qcx_restore_session.roster,
-			(uint32_t)client->qcx_restore_roster_index)) {
+	uint32_t index;
+	if (restores_spawned_gameplay != NULL) *restores_spawned_gameplay = false;
+	if (entry == NULL || entry->state != QCX_RESTORE_ENTRY_BOUND) {
 		return false;
 	}
+	/* Binding keeps the connection's identity intact.  Begin is the single
+	 * point where the selected saved identity becomes the live identity. */
+	client->spectator = entry->saved.role == QCX_SAVE_ROLE_SPECTATOR;
+	if (client->spectator) {
+		Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
+		Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
+	} else {
+		Info_Remove(&client->_userinfo_ctx_, "*spectator");
+		Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
+	}
+	strlcpy(client->team, entry->saved.team, sizeof(client->team));
+	Info_Set(&client->_userinfo_ctx_, "team", client->team);
+	Info_Set(&client->_userinfoshort_ctx_, "team", client->team);
+	for (index = 0U; index < NUM_SPAWN_PARMS; ++index) {
+		client->spawn_parms[index] = entry->saved.spawn_parms[index];
+	}
+	if (restores_spawned_gameplay != NULL) {
+		*restores_spawned_gameplay = entry->saved.spawned != 0U;
+	}
+	(void)QCX_RestoreRosterActivate(&qcx_restore_session.roster,
+		(uint32_t)client->qcx_restore_roster_index);
 	client->qcx_restore_pending = false;
 	client->qcx_restore_waiting = false;
 	qcx_restore_session.dirty = true;

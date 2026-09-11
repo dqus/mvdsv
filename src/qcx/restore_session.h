@@ -36,7 +36,8 @@ qbool QCX_RestoreSessionClientRestoresGameplay(const client_t *client);
 qbool QCX_RestoreSessionClientRoleLocked(const client_t *client);
 void QCX_RestoreSessionPrintRoster(client_t *client);
 qbool QCX_RestoreSessionPrepareSpawn(client_t *client);
-qbool QCX_RestoreSessionBegin(client_t *client);
+qbool QCX_RestoreSessionCommitBegin(client_t *client,
+	qbool *restores_spawned_gameplay);
 qbool QCX_RestoreSessionClientDropped(client_t *client);
 
 #endif
