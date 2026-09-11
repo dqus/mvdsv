@@ -238,6 +238,25 @@ static void QCX_RestoreSessionDropClient(uint32_t slot)
 	MVD_PlayerReset((int)slot);
 }
 
+static void QCX_RestoreSessionUnbindClient(uint32_t slot, qbool notify_client)
+{
+	client_t *const client = &svs.clients[slot];
+	const qbool pending = client->qcx_restore_pending;
+	const qbool waiting = client->qcx_restore_waiting;
+	QCX_RestoreSessionClearClientFlags(client);
+	if (!notify_client || !QCX_RestoreSessionClientIsLive(client)
+		|| (!pending && !waiting)) return;
+	if (!client->qcx_restore_fallback_allowed) {
+		/* Ordinary drop retains the zombie/netchannel lifetime.  The eviction
+		 * helper's immediate slot reuse is unnecessary after abandonment. */
+		SV_DropClient(client);
+	} else if (pending) {
+		QCX_RestoreSessionQueueRestoredNew(client);
+	} else {
+		QCX_RestoreSessionQueueWaitingNew(client);
+	}
+}
+
 static void QCX_RestoreSessionEvacuateUnmatchedReservations(void)
 {
 	uint32_t slot;
@@ -315,6 +334,9 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 		QCX_RestoreSessionClearClientFlags(&svs.clients[slot]);
 		if (image->roster_count != 0U
 			&& QCX_RestoreSessionClientIsLive(&svs.clients[slot])) {
+			/* Carried connections already own their admitted identity.  A
+			 * fresh claim's fallback restriction belongs to that restore only. */
+			svs.clients[slot].qcx_restore_fallback_allowed = true;
 			svs.clients[slot].qcx_restore_waiting = true;
 		}
 	}
@@ -346,22 +368,8 @@ static void QCX_RestoreSessionReset(qbool notify_clients)
 {
 	uint32_t slot;
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
-		client_t *const client = &svs.clients[slot];
 		QCX_RESTORE_SESSION_VISIT_SLOT();
-		if (notify_clients && QCX_RestoreSessionClientIsLive(client)
-			&& (client->qcx_restore_pending || client->qcx_restore_waiting)) {
-			const qbool pending = client->qcx_restore_pending;
-			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
-			QCX_RestoreSessionClearClientFlags(client);
-			if (fallback_allowed) {
-				if (pending) QCX_RestoreSessionQueueRestoredNew(client);
-				else QCX_RestoreSessionQueueWaitingNew(client);
-			} else {
-				QCX_RestoreSessionDropClient(slot);
-			}
-		} else {
-			QCX_RestoreSessionClearClientFlags(client);
-		}
+		QCX_RestoreSessionUnbindClient(slot, notify_clients);
 	}
 	memset(&qcx_restore_session, 0, sizeof(qcx_restore_session));
 	SV_SetPauseReason(SV_PAUSE_RESTORE, false, NULL, notify_clients);
@@ -503,24 +511,7 @@ static void QCX_RestoreSessionFinish(qbool abandon)
 		QCX_RestoreRosterAbandonNonActive(&qcx_restore_session.roster);
 	}
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
-		client_t *const client = &svs.clients[slot];
-		if (!QCX_RestoreSessionClientIsLive(client)) {
-			QCX_RestoreSessionClearClientFlags(client);
-			continue;
-		}
-		if (client->qcx_restore_pending) {
-			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
-			QCX_RestoreSessionClearClientFlags(client);
-			if (fallback_allowed) QCX_RestoreSessionQueueRestoredNew(client);
-			else QCX_RestoreSessionDropClient(slot);
-		} else if (client->qcx_restore_waiting) {
-			const qbool fallback_allowed = client->qcx_restore_fallback_allowed;
-			QCX_RestoreSessionClearClientFlags(client);
-			if (fallback_allowed) QCX_RestoreSessionQueueWaitingNew(client);
-			else QCX_RestoreSessionDropClient(slot);
-		} else {
-			QCX_RestoreSessionClearClientFlags(client);
-		}
+		QCX_RestoreSessionUnbindClient(slot, true);
 	}
 	sv_client = saved_client;
 	sv_player = saved_player;
