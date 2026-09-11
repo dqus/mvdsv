@@ -21,7 +21,7 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
-string(FIND "${sv_user}" "if (sv.paused && !restoring_qcx_client && !waiting_qcx_client)" position)
+string(FIND "${sv_user}" "if (sv.paused && !pending_qcx_client && !waiting_qcx_client)" position)
 if(position EQUAL -1)
 	message(FATAL_ERROR "Cmd_Begin must defer pause notification for every QCX restore handshake")
 endif()
@@ -44,6 +44,11 @@ if(prepare_spawn EQUAL -1 OR legacy_load EQUAL -1 OR NOT prepare_spawn LESS lega
 	message(FATAL_ERROR
 		"Cmd_Spawn_f must choose the per-client QCX restored path before legacy sv.loadgame")
 endif()
+string(FIND "${spawn_source}" "if (QCX_RestoreSessionClientWaiting(sv_client)) return;" spawn_wait_guard)
+string(FIND "${spawn_source}" "if (sv_client->state != cs_connected)" spawn_state_check)
+if(spawn_wait_guard EQUAL -1 OR spawn_state_check EQUAL -1 OR NOT spawn_wait_guard LESS spawn_state_check)
+	message(FATAL_ERROR "Cmd_Spawn_f must reject waiting QCX clients before state changes")
+endif()
 
 string(FIND "${sv_user}" "static void Cmd_Begin_f (void)" begin_begin)
 string(FIND "${sv_user}" "//=============================================================================" begin_end)
@@ -53,15 +58,22 @@ endif()
 math(EXPR begin_length "${begin_end} - ${begin_begin}")
 string(SUBSTRING "${sv_user}" ${begin_begin} ${begin_length} begin_source)
 foreach(required IN ITEMS
-	"restoring_qcx_client = QCX_RestoreSessionClientPending(sv_client)"
+	"pending_qcx_client = QCX_RestoreSessionClientPending(sv_client)"
+	"&& QCX_RestoreSessionClientRestoresGameplay(sv_client)"
 	"waiting_qcx_client = QCX_RestoreSessionClientWaiting(sv_client)"
 	"if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)"
-	"if (sv.loadgame || restoring_qcx_client)")
+	"if (sv.loadgame || restoring_qcx_client)"
+	"if (pending_qcx_client && !QCX_RestoreSessionBegin(sv_client))")
 	string(FIND "${begin_source}" "${required}" position)
 	if(position EQUAL -1)
 		message(FATAL_ERROR "Cmd_Begin_f must use per-client restored state: ${required}")
 	endif()
 endforeach()
+string(FIND "${begin_source}" "if (QCX_RestoreSessionClientWaiting(sv_client)) return;" begin_wait_guard)
+string(FIND "${begin_source}" "if (sv_client->state == cs_spawned)" begin_state_check)
+if(begin_wait_guard EQUAL -1 OR begin_state_check EQUAL -1 OR NOT begin_wait_guard LESS begin_state_check)
+	message(FATAL_ERROR "Cmd_Begin_f must reject waiting QCX clients before state changes")
+endif()
 
 file(READ "${MVDSV_SOURCE_DIR}/src/sv_main.c" sv_main)
 foreach(required IN ITEMS
@@ -83,12 +95,24 @@ endif()
 
 foreach(required IN ITEMS
 	"SV_FindReconnectingClient(net_from, qport)"
-	"!strcmp(requested_spectator, \"0\")")
+	"!strcmp(requested_spectator, \"0\")"
+	"QCX_RestoreSessionRememberAdmissionIdentity(newcl,")
 	string(FIND "${sv_main}" "${required}" position)
 	if(position EQUAL -1)
 		message(FATAL_ERROR "SVC_DirectConnect is missing saved-role authentication edge case ${required}")
 	endif()
 endforeach()
+
+string(FIND "${sv_main}" "qcx_requested_spectator =" requested_role)
+string(FIND "${sv_main}" "Info_SetValueForKey(userinfo, \"spectator\", \"1\"" forced_role)
+string(FIND "${sv_main}" "PR_GameSetNewParms();" new_parms)
+string(FIND "${sv_main}" "QCX_RestoreSessionRememberAdmissionIdentity(newcl," remember_identity)
+if(requested_role EQUAL -1 OR forced_role EQUAL -1 OR new_parms EQUAL -1
+	OR remember_identity EQUAL -1 OR NOT requested_role LESS forced_role
+	OR NOT new_parms LESS remember_identity)
+	message(FATAL_ERROR
+		"SVC_DirectConnect must preserve requested identity before forcing saved role")
+endif()
 
 file(READ "${MVDSV_SOURCE_DIR}/src/pr2_exec.c" pr2_exec)
 string(FIND "${pr2_exec}" "pr2_save_result_t PR2_LoadGame(" load_begin)
@@ -168,7 +192,7 @@ if(server_wipe EQUAL -1 OR restored_manual_pause EQUAL -1
 endif()
 
 string(FIND "${begin_source}" "QCX_RestoreSessionBegin(sv_client)" restored_begin)
-string(FIND "${begin_source}" "if (restoring_qcx_client && (sv.paused & SV_PAUSE_MANUAL))" restored_pause)
+string(FIND "${begin_source}" "if (pending_qcx_client && (sv.paused & SV_PAUSE_MANUAL))" restored_pause)
 if(restored_begin EQUAL -1 OR restored_pause EQUAL -1 OR NOT restored_begin LESS restored_pause)
 	message(FATAL_ERROR
 		"Cmd_Begin_f must send a surviving pause only after the restored client completes begin")

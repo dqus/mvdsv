@@ -26,11 +26,14 @@ void QCX_RestoreSessionGetStatus(qcx_restore_session_status_t *out,
 qbool QCX_RestoreSessionSlotReserved(uint32_t slot);
 qbool QCX_RestoreSessionAdmissionRole(const char *raw_name, qbool *spectator);
 client_t *QCX_RestoreSessionAdmissionSlot(const char *raw_name);
+void QCX_RestoreSessionRememberAdmissionIdentity(client_t *client,
+	qbool requested_spectator);
 void QCX_RestoreSessionObserveClient(client_t *client);
 void QCX_RestoreSessionNameChanged(client_t *client);
 void QCX_RestoreSessionFrame(double monotonic_now);
 qbool QCX_RestoreSessionClientWaiting(const client_t *client);
 qbool QCX_RestoreSessionClientPending(const client_t *client);
+qbool QCX_RestoreSessionClientRestoresGameplay(const client_t *client);
 qbool QCX_RestoreSessionClientRoleLocked(const client_t *client);
 void QCX_RestoreSessionPrintRoster(client_t *client);
 qbool QCX_RestoreSessionPrepareSpawn(client_t *client);

@@ -898,6 +898,10 @@ static void Cmd_Spawn_f (void)
 	unsigned    n;
 	qbool       restoring_qcx_client = false;
 
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionClientWaiting(sv_client)) return;
+#endif
+
 	if (sv_client->state != cs_connected)
 	{
 		Con_Printf ("Spawn not valid -- already spawned\n");
@@ -1040,6 +1044,11 @@ static void Cmd_Begin_f (void)
 	int i;
 	qbool restoring_qcx_client = false;
 	qbool waiting_qcx_client = false;
+	qbool pending_qcx_client = false;
+
+#if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionClientWaiting(sv_client)) return;
+#endif
 
 	if (sv_client->state != cs_connected) {
 		return;
@@ -1057,7 +1066,9 @@ static void Cmd_Begin_f (void)
 	sv_client->state = cs_spawned;
 
 #if defined(QCX_ENABLED)
-	restoring_qcx_client = QCX_RestoreSessionClientPending(sv_client);
+	pending_qcx_client = QCX_RestoreSessionClientPending(sv_client);
+	restoring_qcx_client = pending_qcx_client
+		&& QCX_RestoreSessionClientRestoresGameplay(sv_client);
 	waiting_qcx_client = QCX_RestoreSessionClientWaiting(sv_client);
 #endif
 	if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)
@@ -1107,7 +1118,7 @@ static void Cmd_Begin_f (void)
 	 * the restore.  FTE stops that signon after svc_setpause, so defer this
 	 * particular notification until QCX_RestoreSessionBegin clears the
 	 * restore reason.  The server remains paused throughout the handshake. */
-	if (sv.paused && !restoring_qcx_client && !waiting_qcx_client)
+	if (sv.paused && !pending_qcx_client && !waiting_qcx_client)
 	{
 		ClientReliableWrite_Begin (sv_client, svc_setpause, 2);
 		ClientReliableWrite_Byte (sv_client, sv.paused);
@@ -1131,7 +1142,7 @@ static void Cmd_Begin_f (void)
 	}
 
 #if defined(QCX_ENABLED)
-	if (restoring_qcx_client && !QCX_RestoreSessionBegin(sv_client)) {
+	if (pending_qcx_client && !QCX_RestoreSessionBegin(sv_client)) {
 		SV_DropClient(sv_client);
 		return;
 	}
@@ -1139,7 +1150,7 @@ static void Cmd_Begin_f (void)
 	 * FTE aborts a fresh signon if svc_setpause arrives before `begin`, while
 	 * normal waiting/handoff clients will receive the usual notification on
 	 * their later non-restored begin. */
-	if (restoring_qcx_client && (sv.paused & SV_PAUSE_MANUAL)) {
+	if (pending_qcx_client && (sv.paused & SV_PAUSE_MANUAL)) {
 		ClientReliableWrite_Begin(sv_client, svc_setpause, 2);
 		ClientReliableWrite_Byte(sv_client, sv.paused);
 		SV_ClientPrintf(sv_client, PRINT_HIGH, "Server is paused.\n");
