@@ -1049,6 +1049,7 @@ int SV_VIPbyPass (char *pass);
 typedef struct sv_role_admission_s {
 	qbool allowed;
 	qbool vip;
+	qbool spass;
 } sv_role_admission_t;
 
 static sv_role_admission_t SV_EvaluateRoleAdmission(const char *userinfo,
@@ -1059,6 +1060,7 @@ static sv_role_admission_t SV_EvaluateRoleAdmission(const char *userinfo,
 	char *password_value;
 
 	admission.vip = false;
+	admission.spass = false;
 	if (spectator_role) {
 		char *spectator_value = Info_ValueForKey((char *)userinfo, "spectator");
 		if (!(admission.vip = SV_VIPbyPass(spectator_value))) {
@@ -1067,6 +1069,9 @@ static sv_role_admission_t SV_EvaluateRoleAdmission(const char *userinfo,
 			}
 		}
 		role_password = spectator_password.string;
+		admission.spass = !role_password[0]
+			|| !strcasecmp(role_password, "none")
+			|| !strcmp(role_password, spectator_value);
 		admission.allowed = admission.vip || !role_password[0]
 			|| !strcasecmp(role_password, "none")
 			|| !strcmp(role_password, spectator_value);
@@ -1132,9 +1137,7 @@ qbool CheckPasswords( char *userinfo, int userinfo_size, qbool *spass_ptr, qbool
 		return false;
 	}
 
-	spass = spectator_role && (!spectator_password.string[0]
-		|| !strcasecmp(spectator_password.string, "none")
-		|| !strcmp(spectator_password.string, spectator_value));
+	spass = admission.spass;
 	spectator = SV_NormalizeRoleUserinfo(userinfo, userinfo_size, spectator_role);
 
 	// copy 
@@ -1197,7 +1200,8 @@ qbool CheckReConnect( netadr_t adr, int qport )
 
 //==============================================
 
-void CountPlayersSpecsVips(int *clients_ptr, int *spectators_ptr, int *vips_ptr, client_t **newcl_ptr)
+static void CountPlayersSpecsVipsExcept(client_t *exclude, int *clients_ptr,
+	int *spectators_ptr, int *vips_ptr, client_t **newcl_ptr)
 {
 	client_t *cl = NULL, *newcl = NULL;
 	int clients = 0, spectators = 0, vips = 0;
@@ -1205,6 +1209,8 @@ void CountPlayersSpecsVips(int *clients_ptr, int *spectators_ptr, int *vips_ptr,
 
 	for (i = 0, cl = svs.clients; i < MAX_CLIENTS; i++, cl++)
 	{
+		if (cl == exclude)
+			continue;
 		if (cl->state == cs_free)
 		{
 			if (!newcl)
@@ -1234,6 +1240,12 @@ void CountPlayersSpecsVips(int *clients_ptr, int *spectators_ptr, int *vips_ptr,
 		*vips_ptr = vips;
 	if (newcl_ptr)
 		*newcl_ptr = newcl;
+}
+
+void CountPlayersSpecsVips(int *clients_ptr, int *spectators_ptr, int *vips_ptr, client_t **newcl_ptr)
+{
+	CountPlayersSpecsVipsExcept(NULL, clients_ptr, spectators_ptr, vips_ptr,
+		newcl_ptr);
 }
 
 //==============================================
@@ -1266,6 +1278,92 @@ qbool PlayerCanConnect(int clients)
 	return false;
 }
 
+typedef struct sv_capacity_admission_s {
+	qbool allowed;
+	int spectator;
+	int vip;
+	int rip_vip;
+	qbool forced_spectator;
+} sv_capacity_admission_t;
+
+/* This evaluator deliberately has no side effects.  Callers normalize the
+ * max-client cvars first, then apply the result to their connection state. */
+static sv_capacity_admission_t SV_EvaluateCapacityAdmission(int spectator,
+	int vip, qbool spass, int clients, int spectators, int vips, int svf)
+{
+	sv_capacity_admission_t admission;
+
+	memset(&admission, 0, sizeof(admission));
+	admission.spectator = spectator;
+	admission.vip = vip;
+	if (spectator) {
+		if ((vip && spass && (spectators < (int)maxspectators.value
+			|| vips < (int)maxvip_spectators.value))
+			|| (!vip && spass && spectators < (int)maxspectators.value)) {
+			admission.allowed = true;
+			return admission;
+		}
+	} else if (clients < (int)maxclients.value) {
+		admission.allowed = true;
+		return admission;
+	}
+
+	/* Keep the historical overflow policies in the evaluator so a restored
+	 * client falling back to its requested identity follows DirectConnect. */
+	if (spectator == 2 && !vip && vips < (int)maxvip_spectators.value) {
+		admission.allowed = true;
+		admission.vip = true;
+		admission.rip_vip = true;
+	} else if (!spectator && spectators < (int)maxspectators.value
+		&& (((int)sv_forcespec_onfull.value == 2 && (svf & SVF_SPEC_ONFULL))
+			|| ((int)sv_forcespec_onfull.value == 1
+				&& !(svf & SVF_NO_SPEC_ONFULL)))) {
+		admission.allowed = true;
+		admission.spectator = true;
+		admission.forced_spectator = true;
+	}
+	return admission;
+}
+
+qbool SV_AdmitRestoreFallback(client_t *client)
+{
+	sv_capacity_admission_t admission;
+	int clients, spectators, vips;
+	int svf;
+	char *vip_value;
+
+	assert(client != NULL);
+	FixMaxClientsCvars();
+	CountPlayersSpecsVipsExcept(client, &clients, &spectators, &vips, NULL);
+	svf = Q_atoi(Info_Get(&client->_userinfo_ctx_, "svf"));
+	admission = SV_EvaluateCapacityAdmission(client->qcx_restore_fallback_spectator,
+		client->qcx_restore_fallback_vip,
+		client->qcx_restore_fallback_spass, clients, spectators, vips, svf);
+	if (!admission.allowed) {
+		return false;
+	}
+
+	client->spectator = admission.spectator;
+	client->vip = admission.vip;
+	client->rip_vip = admission.rip_vip;
+	if (client->spectator) {
+		Info_SetStar(&client->_userinfo_ctx_, "*spectator", "1");
+		Info_SetStar(&client->_userinfoshort_ctx_, "*spectator", "1");
+	} else {
+		Info_Remove(&client->_userinfo_ctx_, "*spectator");
+		Info_Remove(&client->_userinfoshort_ctx_, "*spectator");
+	}
+	if (admission.forced_spectator) {
+		SV_ClientPrintf(client, PRINT_HIGH,
+			"Server is full: continuing as spectator.\n");
+	}
+	vip_value = client->vip ? va("%d", client->vip) : "";
+	Info_SetStar(&client->_userinfo_ctx_, "*VIP", vip_value);
+	Info_SetStar(&client->_userinfoshort_ctx_, "*VIP", vip_value);
+	client->sendinfo = true;
+	return true;
+}
+
 /*
 ==================
 SVC_DirectConnect
@@ -1280,6 +1378,7 @@ extern char *shortinfotbl[];
 static void SVC_DirectConnect (void)
 {
 	int spectator;
+	int fallback_spectator;
 	qbool spass, vip, rip_vip, qcx_restore_identity = false;
 #if defined(QCX_ENABLED)
 	qbool qcx_saved_spectator;
@@ -1292,6 +1391,7 @@ static void SVC_DirectConnect (void)
 
 	int clients, spectators, vips;
 	int qport, i, edictnum;
+	sv_capacity_admission_t capacity_admission;
 
 	client_t *newcl;
 
@@ -1374,6 +1474,8 @@ static void SVC_DirectConnect (void)
 		 * independent role capabilities for later saved-name claims. */
 		qcx_player_auth = SV_EvaluateRoleAdmission(userinfo, false);
 		qcx_spectator_auth = SV_EvaluateRoleAdmission(userinfo, true);
+		qcx_requested_auth = qcx_requested_spectator
+			? qcx_spectator_auth : qcx_player_auth;
 		qcx_restore_identity = QCX_RestoreSessionAdmissionRole(
 			Info_ValueForKey(userinfo, "name"), &qcx_saved_spectator);
 		if (!qcx_restore_identity) {
@@ -1385,8 +1487,6 @@ static void SVC_DirectConnect (void)
 			}
 		}
 		if (qcx_restore_identity) {
-			qcx_requested_auth = qcx_requested_spectator
-				? qcx_spectator_auth : qcx_player_auth;
 			qcx_saved_auth = qcx_saved_spectator
 				? qcx_spectator_auth : qcx_player_auth;
 			if (!qcx_saved_auth.allowed) {
@@ -1405,6 +1505,10 @@ static void SVC_DirectConnect (void)
 	if (!qcx_restore_identity
 		&& !CheckPasswords(userinfo, sizeof(userinfo), &spass, &vip, &spectator))
 		return; // pass was wrong
+	/* SV_EvaluateCapacityAdmission may force a full player into spectator.
+	 * A restore fallback must repeat this normalized requested role, rather
+	 * than treating the post-capacity role as the original request. */
+	fallback_spectator = spectator;
 
 	adr = net_from;
 
@@ -1430,46 +1534,27 @@ static void SVC_DirectConnect (void)
 
 	// if at server limits, refuse connection
 
-	if ((!qcx_restore_identity
-		&& ((spectator && !SpectatorCanConnect(vip, spass, spectators, vips))
-			|| (!spectator && !PlayerCanConnect(clients))))
-		|| !newcl)
-	{
+	if (!newcl) {
 		Sys_Printf ("%s:full connect\n", NET_AdrToString (adr));
-
-		// no way to connect does't matter VIP or whatever, just no free slots
-		if (!newcl)
-		{
+		Netchan_OutOfBandPrint (NS_SERVER, adr, "%c\nserver is full\n\n", A2C_PRINT);
+		return;
+	}
+	if (!qcx_restore_identity) {
+		capacity_admission = SV_EvaluateCapacityAdmission(spectator, vip, spass,
+			clients, spectators, vips, Q_atoi(Info_ValueForKey(userinfo, "svf")));
+		if (!capacity_admission.allowed) {
+			Sys_Printf ("%s:full connect\n", NET_AdrToString (adr));
 			Netchan_OutOfBandPrint (NS_SERVER, adr, "%c\nserver is full\n\n", A2C_PRINT);
 			return;
 		}
-
-		// !!! SPECTATOR 2 FEATURE !!!
-		if (spectator == 2 && !vip &&  vips < (int)maxvip_spectators.value)
-		{
-			vip = rip_vip = 1; // yet can be connected if realip is on vip list
-		}
-		else if (    !spectator && spectators < (int)maxspectators.value
-				  && (
-				  	      ( (int)sv_forcespec_onfull.value == 2
-							&&   (Q_atoi(Info_ValueForKey(userinfo, "svf")) & SVF_SPEC_ONFULL)
-				  	      ) 
-				   	   		||
-						  ( (int)sv_forcespec_onfull.value == 1
-							&&   !(Q_atoi(Info_ValueForKey(userinfo, "svf")) & SVF_NO_SPEC_ONFULL)
-						  )
-				   	 )
-				)
-		{
-			Netchan_OutOfBandPrint (NS_SERVER, adr, "%c\nserver is full: connecting as spectator\n", A2C_PRINT);
+		if (capacity_admission.forced_spectator) {
+			Netchan_OutOfBandPrint (NS_SERVER, adr,
+				"%c\nserver is full: connecting as spectator\n", A2C_PRINT);
 			Info_SetValueForStarKey (userinfo, "*spectator", "1", sizeof(userinfo));
-			spectator = true;
 		}
-		else
-		{
-			Netchan_OutOfBandPrint (NS_SERVER, adr, "%c\nserver is full\n\n", A2C_PRINT);
-			return;
-		}
+		spectator = capacity_admission.spectator;
+		vip = capacity_admission.vip;
+		rip_vip = capacity_admission.rip_vip;
 	}
 
 	// build a new connection
@@ -1477,6 +1562,9 @@ static void SVC_DirectConnect (void)
 	// this is the only place a client_t is ever initialized
 	memset (newcl, 0, sizeof(*newcl));
 	newcl->qcx_restore_fallback_allowed = true;
+	newcl->qcx_restore_fallback_vip = vip;
+	newcl->qcx_restore_fallback_spass = spass;
+	newcl->qcx_restore_fallback_spectator = fallback_spectator;
 	newcl->qcx_restore_player_allowed = true;
 	newcl->qcx_restore_spectator_allowed = true;
 
@@ -1484,9 +1572,16 @@ static void SVC_DirectConnect (void)
 	if (QCX_RestoreSessionWaiting()) {
 		newcl->qcx_restore_player_allowed = qcx_player_auth.allowed;
 		newcl->qcx_restore_spectator_allowed = qcx_spectator_auth.allowed;
+		/* Preserve requested-role credentials from before capacity admission.
+		 * spectator == 2 provisionally sets vip/rip_vip, which must be
+		 * recomputed (including the real-IP check) if restore falls back. */
+		newcl->qcx_restore_fallback_vip = qcx_requested_auth.vip;
+		newcl->qcx_restore_fallback_spass = qcx_requested_auth.spass;
 	}
 	if (qcx_restore_identity) {
 		newcl->qcx_restore_fallback_allowed = qcx_requested_auth.allowed;
+		newcl->qcx_restore_fallback_vip = qcx_requested_auth.vip;
+		newcl->qcx_restore_fallback_spass = qcx_requested_auth.spass;
 	}
 #endif
 
