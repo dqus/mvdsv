@@ -196,17 +196,21 @@ static int QCX_RestoreSessionFindClientForRoster(uint32_t roster_index)
 	return -1;
 }
 
-static int QCX_RestoreSessionFindLowestNamedClient(const char *name)
+static int QCX_RestoreSessionFindLowestNamedClient(
+	const qcx_save_roster_entry_t *saved)
 {
 	uint32_t slot;
 	for (slot = 0U; slot < qcx_restore_session.slot_capacity; ++slot) {
 		QCX_RESTORE_SESSION_VISIT_SLOT();
 		const client_t *const client = &svs.clients[slot];
 		if (!QCX_RestoreSessionClientIsLive(client)
-			|| client->qcx_restore_roster_index >= 0) {
+			|| client->qcx_restore_roster_index >= 0
+			|| !(saved->role == QCX_SAVE_ROLE_SPECTATOR
+				? client->qcx_restore_spectator_allowed
+				: client->qcx_restore_player_allowed)) {
 			continue;
 		}
-		if (Q_namecmp(client->name, name) == 0) return (int)slot;
+		if (Q_namecmp(client->name, saved->name) == 0) return (int)slot;
 	}
 	return -1;
 }
@@ -337,6 +341,8 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 			/* Carried connections already own their admitted identity.  A
 			 * fresh claim's fallback restriction belongs to that restore only. */
 			svs.clients[slot].qcx_restore_fallback_allowed = true;
+			svs.clients[slot].qcx_restore_player_allowed = true;
+			svs.clients[slot].qcx_restore_spectator_allowed = true;
 			svs.clients[slot].qcx_restore_waiting = true;
 		}
 	}
@@ -582,7 +588,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 	}
 	for (index = 0U; index < qcx_restore_session.roster.count; ++index) {
 		const int client_slot = QCX_RestoreSessionFindLowestNamedClient(
-			qcx_restore_session.roster.entries[index].saved.name);
+			&qcx_restore_session.roster.entries[index].saved);
 		if (client_slot >= 0
 			&& QCX_RestoreRosterBind(&qcx_restore_session.roster, index)) {
 			client_t *const client = &svs.clients[client_slot];
