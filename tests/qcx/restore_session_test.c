@@ -279,6 +279,8 @@ static client_t *connect_client(uint32_t slot, const char *name, int userid)
 	memset(client, 0, sizeof(*client));
 	client->state = cs_connected;
 	client->qcx_restore_fallback_allowed = true;
+	client->qcx_restore_player_allowed = true;
+	client->qcx_restore_spectator_allowed = true;
 	client->userid = userid;
 	strcpy(client->name, name);
 	client->_userinfo_ctx_.max = MAX_CLIENT_INFOS;
