@@ -203,10 +203,20 @@ This will be sent on the initial connection and upon each server load.
 ================
 */
 int SV_VIPbyIP (netadr_t adr);
+static qbool SV_SignonSpectator(const client_t *client)
+{
+#if defined(QCX_ENABLED)
+	return QCX_RestoreSessionEffectiveSpectator(client);
+#else
+	return client->spectator != 0;
+#endif
+}
+
 static void Cmd_New_f (void)
 {
 	char		*gamedir;
 	int			playernum;
+	qbool		signon_spectator = SV_SignonSpectator(sv_client);
 	extern cvar_t sv_serverip;
 	extern cvar_t sv_getrealip;
 
@@ -301,11 +311,11 @@ static void Cmd_New_f (void)
 			sv_client->state = cs_connected;
 		}
 
-		if (!SV_Login(sv_client))
+		if (!SV_Login(sv_client, signon_spectator))
 			return;
 
 		// If logins are mandatory, check
-		if (SV_LoginRequired(sv_client)) {
+		if (SV_LoginRequired(sv_client, signon_spectator)) {
 			return;
 		}
 
@@ -353,7 +363,7 @@ static void Cmd_New_f (void)
 			"> ezQuake 2.2 (https://ezquake.github.io)\n"
 			"> fodquake 0.4 (http://fodquake.net)\n"
 			"> FTEQW (http://fte.triptohell.info/)\n");
-		if (!sv_client->spectator) {
+		if (!signon_spectator) {
 			SV_DropClient (sv_client);
 			return;
 		}
@@ -447,11 +457,7 @@ static void Cmd_New_f (void)
 	MSG_WriteString(&sv_client->netchan.message, gamedir);
 
 	playernum = NUM_FOR_EDICT(sv_client->edict)-1;
-#if defined(QCX_ENABLED)
-	if (QCX_RestoreSessionEffectiveSpectator(sv_client))
-#else
-	if (sv_client->spectator)
-#endif
+	if (SV_SignonSpectator(sv_client))
 		playernum |= 128;
 	MSG_WriteByte (&sv_client->netchan.message, playernum);
 
@@ -863,6 +869,9 @@ static void Cmd_Spawn_f (void)
 #if defined(QCX_ENABLED)
 	if (QCX_RestoreSessionClientWaiting(sv_client)) return;
 #endif
+	if (SV_LoginRequired(sv_client, SV_SignonSpectator(sv_client))) {
+		return;
+	}
 
 	if (sv_client->state != cs_connected)
 	{
@@ -1012,6 +1021,9 @@ static void Cmd_Begin_f (void)
 #if defined(QCX_ENABLED)
 	if (QCX_RestoreSessionClientWaiting(sv_client)) return;
 #endif
+	if (SV_LoginRequired(sv_client, SV_SignonSpectator(sv_client))) {
+		return;
+	}
 
 	if (sv_client->state == cs_spawned)
 		return; // don't begin again

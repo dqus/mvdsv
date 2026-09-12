@@ -16,6 +16,7 @@ from qc2cpp_acceptance import (
     observe_restore_session,
     only_roster_client,
     prepare_game_directory,
+    roster_client,
     server_command,
     wait_restore_session,
 )
@@ -32,11 +33,12 @@ class QWConnection:
         self.socket.settimeout(3)
         self.qport = self.socket.getsockname()[1]
         self.sequence = 1
+        self.last_print = ""
 
     def close(self):
         self.socket.close()
 
-    def connect(self, name, *, password, spectator):
+    def connect(self, name, *, password, spectator, allow_info=False):
         self.socket.send(b"\xff\xff\xff\xffgetchallenge\n")
         deadline = time.monotonic() + 3
         challenge = None
@@ -59,6 +61,10 @@ class QWConnection:
                     self.sequence = 1
                     return True
                 if packet[4:5] == b"n":
+                    self.last_print = packet[5:].decode("latin1", errors="replace")
+                    if (allow_info
+                            and b"server is full: connecting as spectator" in packet):
+                        continue
                     return False
         raise ProcessFailure("QW admission response missing")
 
@@ -104,6 +110,37 @@ class RestoreAuthorization(unittest.TestCase):
                 connection.close()
                 process.close()
 
+        root = cls.root / "source-forced-spectator"
+        base = prepare_game_directory(root, cls.args.assets, cls.args.artifacts, cls.args.mode)
+        port = available_udp_port()
+        process = cls.start_server(base, port, root / "server.log")
+        saved = QWConnection(port)
+        missing = QWConnection(port)
+        try:
+            assert_map_snapshot(process.observe("qc2cpp_test_snapshot",
+                "qc2cpp_test_snapshot", timeout=12), "e1m2")
+            for connection, name in ((saved, "Saved"), (missing, "Missing")):
+                if not connection.connect(name, password="player-pass", spectator="0"):
+                    raise ProcessFailure("two-player source admission failed")
+                session = observe_restore_session(process)
+                connection.command("new", f'spawn {session["spawncount"]} 0',
+                                   f'begin {session["spawncount"]}')
+            wait_restore_session(process,
+                lambda current: roster_client(current, "Saved") is not None
+                and roster_client(current, "Saved")["state"] == 4
+                and roster_client(current, "Missing") is not None
+                and roster_client(current, "Missing")["state"] == 4,
+                timeout=8, description="two-player source did not enter gameplay")
+            process.send("save forced-spectator")
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+            cls.force_spec_save = (base / "qw/save/forced-spectator.sav").read_bytes()
+            if cls.force_spec_save[:4] != b"QCMS":
+                raise ProcessFailure("two-player source did not save QCMS")
+        finally:
+            saved.close()
+            missing.close()
+            process.close()
+
     @classmethod
     def start_server(cls, base, port, log):
         command = server_command(cls.args.server, base, cls.args.mode, port, start_map=False)
@@ -114,13 +151,14 @@ class RestoreAuthorization(unittest.TestCase):
         process.send('spectator_password "spec-pass"')
         return process
 
-    def fixture(self, saved_spectator):
+    def fixture(self, saved_spectator, *, login_required=False, save_bytes=None,
+                expected_available=1):
         type(self).case_number += 1
         root = self.root / f"case-{self.case_number}"
         base = prepare_game_directory(root, self.args.assets, self.args.artifacts, self.args.mode)
         save = base / "qw/save/auth.sav"
         save.parent.mkdir()
-        save.write_bytes(self.saves[saved_spectator])
+        save.write_bytes(self.saves[saved_spectator] if save_bytes is None else save_bytes)
         port = available_udp_port()
         self.process = self.start_server(base, port, root / "server.log")
         self.addCleanup(self.process.close)
@@ -130,11 +168,15 @@ class RestoreAuthorization(unittest.TestCase):
         # This exercises saved-spectator admission independently of that role.
         if saved_spectator:
             self.process.send('spectator_password "0"')
+        if login_required:
+            self.process.send("sv_login 1")
         self.process.send("load auth")
         self.process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
         wait_restore_session(self.process,
-            lambda session: session["waiting"] and session["available"] == 1,
+            lambda session: session["waiting"]
+            and session["available"] == expected_available,
             timeout=8, description="saved roster did not wait")
+        self.port = port
         self.connection = QWConnection(port)
         self.addCleanup(self.connection.close)
 
@@ -143,6 +185,15 @@ class RestoreAuthorization(unittest.TestCase):
             lambda current: len(current["clients"]) == 1 and predicate(current["clients"][0]),
             timeout=5, description="client did not reach the expected state")
         return session, only_roster_client(session, "authorization connection")
+
+    def named_client(self, name, predicate=lambda client: True):
+        def matches(session):
+            record = roster_client(session, name)
+            return record is not None and predicate(record)
+
+        session = wait_restore_session(self.process, matches, timeout=5,
+            description=f"{name} did not reach the expected state")
+        return session, roster_client(session, name)
 
     def saved_credentials(self, saved_spectator, *, both=False):
         return dict(password="player-pass" if both or not saved_spectator else "wrong-player",
@@ -242,6 +293,120 @@ class RestoreAuthorization(unittest.TestCase):
 
     def test_spectator_rename_accepts_saved_authority(self):
         self.check_rename_with_saved_auth(True)
+
+    def check_login_policy_uses_saved_role(self, saved_spectator):
+        self.fixture(saved_spectator, login_required=True)
+        self.assertTrue(self.connection.connect(
+            "Saved", **self.saved_credentials(saved_spectator, both=True)))
+        session, bound = self.client(lambda client: client["pending"])
+        self.assert_requested_identity(bound, saved_spectator)
+        self.begin(session)
+        time.sleep(0.25)
+        if saved_spectator:
+            _, active = self.client(
+                lambda client: client["state"] == 4 and not client["pending"])
+            self.assertTrue(active["spectator"])
+        else:
+            _, blocked = self.client()
+            self.assertTrue(blocked["pending"])
+            self.assertNotEqual(blocked["state"], 4)
+            self.assertTrue(blocked["spectator"])
+
+    def test_player_restore_requires_login_even_when_requested_spectator(self):
+        self.check_login_policy_uses_saved_role(False)
+
+    def test_spectator_restore_is_login_exempt_even_when_requested_player(self):
+        self.check_login_policy_uses_saved_role(True)
+
+    def test_bound_fallback_rechecks_requested_spectator_capacity(self):
+        self.fixture(False)
+        # The saved player bypasses admission capacity only while it remains a
+        # restore claim.  Its requested spectator identity has a valid password
+        # but no spectator capacity, so abandoning the claim must drop it.
+        self.process.send("maxspectators 0")
+        self.assertTrue(self.connection.connect(
+            "Saved", **self.saved_credentials(False, both=True)))
+        _, bound = self.client(lambda client: client["pending"])
+        self.assertTrue(bound["spectator"])
+        self.process.send("qcx_restore_continue")
+        wait_restore_session(self.process,
+            lambda session: not session["waiting"] and not session["clients"],
+            timeout=8, description="capacity-denied fallback remained connected")
+
+    def force_spectator_waiting_client(self):
+        self.fixture(False, save_bytes=self.force_spec_save, expected_available=2)
+        # The original player request has valid player credentials only.  Its
+        # first ordinary admission is force-spec because player capacity is
+        # full; resuming from restore must repeat that player admission, not
+        # reinterpret the already-forced spectator as a passworded spectator.
+        self.process.send("maxclients 1")
+        self.process.send("maxspectators 1")
+        self.process.send("sv_forcespec_onfull 1")
+        self.process.send('spectator_password "secret"')
+        self.assertTrue(self.connection.connect(
+            "Saved", password="player-pass", spectator="0"))
+        session, restored = self.named_client(
+            "Saved", lambda client: client["pending"])
+        self.assertFalse(restored["spectator"])
+        self.begin(session)
+        self.named_client("Saved", lambda client: client["state"] == 4)
+
+        fallback_connection = QWConnection(self.port)
+        self.addCleanup(fallback_connection.close)
+        self.assertTrue(fallback_connection.connect(
+            "Unmatched", password="player-pass", spectator="0", allow_info=True))
+        _, forced = self.named_client(
+            "Unmatched",
+            lambda client: client["waiting"] and client["spectator"])
+        self.assertTrue(forced["spectator"])
+        return fallback_connection
+
+    def test_forced_spectator_fallback_reuses_requested_player_role(self):
+        fallback_connection = self.force_spectator_waiting_client()
+        self.process.send("qcx_restore_continue")
+        session, fallback = self.named_client(
+            "Unmatched",
+            lambda client: not client["waiting"] and client["spectator"])
+        fallback_connection.command("new", f'spawn {session["spawncount"]} 0',
+                                    f'begin {session["spawncount"]}')
+        _, active = self.named_client("Unmatched", lambda client: client["state"] == 4)
+        self.assertTrue(active["spectator"])
+
+    def test_forced_spectator_fallback_clears_userinfo_when_player_capacity_opens(self):
+        fallback_connection = self.force_spectator_waiting_client()
+        self.process.send("maxclients 2")
+        self.process.send("qcx_restore_continue")
+        session, fallback = self.named_client(
+            "Unmatched",
+            lambda client: not client["waiting"] and not client["spectator"])
+        fallback_connection.command("new", f'spawn {session["spawncount"]} 0',
+                                    f'begin {session["spawncount"]}')
+        _, active = self.named_client("Unmatched", lambda client: client["state"] == 4)
+        self.assertFalse(active["spectator"])
+        self.assertEqual(active["userinfo_spectator"], "")
+        self.assertEqual(active["wire_spectator"], "")
+
+    def test_restore_fallback_rechecks_provisional_vip_spectator(self):
+        self.fixture(False)
+        # spectator=2 may provisionally occupy a VIP spectator slot, but it
+        # must pass the subsequent real-IP VIP check before it can sign on.
+        self.process.send("maxclients 23")
+        self.process.send("maxspectators 0")
+        self.process.send("maxvip_spectators 1")
+        self.process.send("spectator_password none")
+        self.process.send("sv_getrealip 0")
+        provisional = QWConnection(self.port)
+        self.addCleanup(provisional.close)
+        self.assertTrue(provisional.connect(
+            "Provisional", password="unused", spectator="2"), provisional.last_print)
+        _, waiting = self.client(lambda client: client["waiting"])
+        self.assertTrue(waiting["spectator"])
+        self.process.send("qcx_restore_continue")
+        provisional.command("pext")
+        provisional.command("new")
+        wait_restore_session(self.process,
+            lambda session: not session["waiting"] and not session["clients"],
+            timeout=8, description="non-VIP provisional spectator survived fallback")
 
 
 def main():

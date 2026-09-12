@@ -576,7 +576,7 @@ SV_Login
 called on connect after cmd new is issued
 ===============
 */
-qbool SV_Login(client_t* cl)
+qbool SV_Login(client_t* cl, qbool spectator)
 {
 	extern cvar_t sv_registrationinfo;
 	char* ip;
@@ -597,7 +597,7 @@ qbool SV_Login(client_t* cl)
 	}
 
 	// sv_login == 1 -> spectators don't login
-	if ((int)sv_login.value == 1 && cl->spectator)
+	if ((int)sv_login.value == 1 && spectator)
 	{
 		SV_Logout(cl);
 		cl->logged = -1;
@@ -870,11 +870,11 @@ void SV_LoginWebFailed(client_t* cl)
 	}
 }
 
-qbool SV_LoginRequired(client_t* cl)
+qbool SV_LoginRequired(client_t* cl, qbool spectator)
 {
 	int login = (int)sv_login.value;
 
-	if (login == 2 || (login == 1 && !cl->spectator)) {
+	if (login == 2 || (login == 1 && !spectator)) {
 		if (WebLoginsEnabled()) {
 			return !cl->logged_in_via_web;
 		}

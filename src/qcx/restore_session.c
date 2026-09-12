@@ -250,7 +250,8 @@ static void QCX_RestoreSessionUnbindClient(uint32_t slot, qbool notify_client)
 	QCX_RestoreSessionClearClientFlags(client);
 	if (!notify_client || !QCX_RestoreSessionClientIsLive(client)
 		|| (!pending && !waiting)) return;
-	if (!client->qcx_restore_fallback_allowed) {
+	if (!client->qcx_restore_fallback_allowed
+		|| !SV_AdmitRestoreFallback(client)) {
 		/* Ordinary drop retains the zombie/netchannel lifetime.  The eviction
 		 * helper's immediate slot reuse is unnecessary after abandonment. */
 		SV_DropClient(client);
@@ -341,6 +342,10 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 			/* Carried connections already own their admitted identity.  A
 			 * fresh claim's fallback restriction belongs to that restore only. */
 			svs.clients[slot].qcx_restore_fallback_allowed = true;
+			svs.clients[slot].qcx_restore_fallback_vip = svs.clients[slot].vip;
+			svs.clients[slot].qcx_restore_fallback_spass = true;
+			svs.clients[slot].qcx_restore_fallback_spectator =
+				svs.clients[slot].spectator;
 			svs.clients[slot].qcx_restore_player_allowed = true;
 			svs.clients[slot].qcx_restore_spectator_allowed = true;
 			svs.clients[slot].qcx_restore_waiting = true;

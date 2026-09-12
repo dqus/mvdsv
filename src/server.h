@@ -207,6 +207,9 @@ typedef struct client_s
 	ctxinfo_t		_userinfo_ctx_;			// infostring
 	ctxinfo_t		_userinfoshort_ctx_;	// infostring
 	qbool			qcx_restore_fallback_allowed;
+	qbool			qcx_restore_fallback_vip;
+	qbool			qcx_restore_fallback_spass;
+	int			qcx_restore_fallback_spectator;
 	qbool			qcx_restore_player_allowed;
 	qbool			qcx_restore_spectator_allowed;
 	qbool			qcx_restore_waiting;
@@ -828,6 +831,7 @@ int SV_BoundRate (qbool dl, int rate);
 /* Starts the ordinary QW signon for a client which QCX has kept connected
  * while it chose a saved restore identity. */
 void SV_QCXStartClientSignon (client_t *client);
+qbool SV_AdmitRestoreFallback (client_t *client);
 
 typedef struct
 {
@@ -1080,14 +1084,14 @@ void SV_CreateAccount_f(void);
 void SV_RemoveAccount_f(void);
 void SV_ListAccount_f (void);
 void Login_Init (void);
-qbool SV_Login(client_t *cl);
+qbool SV_Login(client_t *cl, qbool spectator);
 void SV_Logout(client_t *cl);
 void SV_ParseWebLogin(client_t* cl);
 void SV_ParseLogin(client_t *cl);
 void SV_LoginCheckTimeOut(client_t *cl);
 void SV_LoginWebCheck(client_t* cl);
 void SV_LoginWebFailed(client_t* cl);
-qbool SV_LoginRequired(client_t* cl);
+qbool SV_LoginRequired(client_t* cl, qbool spectator);
 qbool SV_LoginBlockJoinRequest(client_t* cl);
 
 // sv_master.c
