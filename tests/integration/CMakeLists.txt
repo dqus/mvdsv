@@ -522,6 +522,20 @@ endif()
 
 add_custom_target(qc2cpp_acceptance_assets DEPENDS ${qc2cpp_acceptance_asset_targets})
 
+if(qc2cpp_qwsp_enabled)
+    foreach(mode IN ITEMS native wasm)
+        string(TOUPPER "${mode}" upper_mode)
+        if(MVDSV_QC2CPP_${upper_mode})
+            add_test(NAME qc2cpp_qwsp_restore_auth_${mode}
+                COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/qwsp_restore_auth_acceptance.py"
+                    --mode ${mode} --server $<TARGET_FILE:mvdsv>
+                    --artifacts "${qc2cpp_qwsp_${mode}_build}" --assets "${qc2cpp_assets}")
+            set_tests_properties(qc2cpp_qwsp_restore_auth_${mode} PROPERTIES
+                LABELS "qcx;integration;external" TIMEOUT 120)
+        endif()
+    endforeach()
+endif()
+
 foreach(test_name IN ITEMS
 	qc2cpp_server_map_native
 	qc2cpp_legacy_strings_native
