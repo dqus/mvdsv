@@ -268,24 +268,8 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 
-string(FIND "${sv_main}" "QCX_RestoreSessionAdmissionRole(" admission_role)
-string(FIND "${sv_main}" "qcx_saved_auth = SV_EvaluateRoleAdmission(userinfo, qcx_saved_spectator)" saved_role_auth)
-string(FIND "${sv_main}" "QCX_RestoreSessionAdmissionSlot(Info_ValueForKey(userinfo, \"name\"))" admission_slot)
-if(admission_role EQUAL -1 OR saved_role_auth EQUAL -1 OR admission_slot EQUAL -1
-	OR NOT admission_role LESS saved_role_auth OR NOT saved_role_auth LESS admission_slot)
-	message(FATAL_ERROR
-		"SVC_DirectConnect must evaluate the saved role before roster admission")
-endif()
-
-foreach(required IN ITEMS
-	"SV_FindReconnectingClient(net_from, qport)"
-	"qcx_requested_auth = SV_EvaluateRoleAdmission(userinfo,"
-	"newcl->qcx_restore_fallback_allowed = qcx_requested_auth.allowed")
-	string(FIND "${sv_main}" "${required}" position)
-	if(position EQUAL -1)
-		message(FATAL_ERROR "SVC_DirectConnect is missing independent role admission ${required}")
-	endif()
-endforeach()
+# Independent requested/saved-role admission is exercised by the real UDP
+# DirectConnect, reconnect, and name-claim cases in qwsp_restore_auth_acceptance.py.
 
 string(FIND "${sv_main}" "QCX_RestoreSessionRememberAdmissionIdentity(newcl," remember_identity)
 if(NOT remember_identity EQUAL -1)
