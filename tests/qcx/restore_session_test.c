@@ -40,6 +40,8 @@ static qbool last_pause_active;
 static qbool last_pause_notify;
 static uint32_t game_disconnect_calls;
 static qbool game_disconnect_spectator;
+static qbool fallback_capacity_allowed;
+static uint32_t fallback_capacity_calls;
 static double test_monotonic_now;
 static info_t *allocated_info[MAX_CLIENTS * 2];
 static uint32_t allocated_info_count;
@@ -221,6 +223,13 @@ void SV_DropClient(client_t *client)
 	client->state = cs_zombie;
 }
 
+qbool SV_AdmitRestoreFallback(client_t *client)
+{
+	(void)client;
+	++fallback_capacity_calls;
+	return fallback_capacity_allowed;
+}
+
 static info_t *make_info(const char *name, const char *value)
 {
 	info_t *const item = calloc(1U, sizeof(*item));
@@ -267,6 +276,8 @@ static void reset_fixture(void)
 	last_pause_notify = false;
 	game_disconnect_calls = 0U;
 	game_disconnect_spectator = false;
+	fallback_capacity_allowed = true;
+	fallback_capacity_calls = 0U;
 	test_monotonic_now = 100.0;
 	sv_maxspeed.value = 320.0f;
 	qcx_restore_wait_timeout.value = 60.0f;
@@ -733,6 +744,25 @@ static void test_bound_client_without_fallback_is_dropped_on_continue(void)
 	assert(svs.clients[1].state == cs_zombie);
 }
 
+static void test_bound_client_without_fallback_capacity_is_dropped_on_continue(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	const qcx_save_image_t image = make_image(&entry, 1U);
+	reset_fixture();
+	assert(QCX_RestoreSessionInstall(&image, 100.0));
+	connect_client(1U, "Alice", 1);
+	fallback_capacity_allowed = false;
+	QCX_RestoreSessionObserveClient(&svs.clients[1]);
+	QCX_RestoreSessionFrame(101.0);
+	assert(QCX_RestoreSessionClientPending(&svs.clients[1]));
+	QCX_RestoreSessionContinue();
+	QCX_RestoreSessionFrame(102.0);
+	assert(fallback_capacity_calls == 1U);
+	assert(drop_calls == 1U);
+	assert(drop_slots[0] == 1);
+	assert(svs.clients[1].state == cs_zombie);
+}
+
 static void test_roster_list_prints_only_available_saved_identities(void)
 {
 	qcx_save_roster_entry_t entries[2] = { saved(1U, "Alice"), saved(2U, "Bob") };
@@ -1185,6 +1215,7 @@ int main(void)
 	test_admission_does_not_consume_reserved_slots();
 	test_admission_uses_the_saved_identity_role();
 	test_bound_client_without_fallback_is_dropped_on_continue();
+	test_bound_client_without_fallback_capacity_is_dropped_on_continue();
 	test_bound_identity_keeps_connection_owned_state();
 	test_bound_identity_exposes_saved_role_for_signon();
 	test_begin_commits_saved_identity(false, true);
