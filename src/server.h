@@ -207,6 +207,8 @@ typedef struct client_s
 	ctxinfo_t		_userinfo_ctx_;			// infostring
 	ctxinfo_t		_userinfoshort_ctx_;	// infostring
 	qbool			qcx_restore_fallback_allowed;
+	qbool			qcx_restore_player_allowed;
+	qbool			qcx_restore_spectator_allowed;
 	qbool			qcx_restore_waiting;
 	qbool			qcx_restore_pending;
 	int				qcx_restore_roster_index;

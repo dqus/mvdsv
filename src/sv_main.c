@@ -1286,6 +1286,8 @@ static void SVC_DirectConnect (void)
 	qbool qcx_requested_spectator = false;
 	sv_role_admission_t qcx_requested_auth;
 	sv_role_admission_t qcx_saved_auth;
+	sv_role_admission_t qcx_player_auth;
+	sv_role_admission_t qcx_spectator_auth;
 #endif
 
 	int clients, spectators, vips;
@@ -1368,6 +1370,10 @@ static void SVC_DirectConnect (void)
 			Info_ValueForKey(userinfo, "spectator");
 		qcx_requested_spectator = *requested_spectator
 			&& strcmp(requested_spectator, "0") != 0;
+		/* Password userinfo is removed by normalization.  Retain only the
+		 * independent role capabilities for later saved-name claims. */
+		qcx_player_auth = SV_EvaluateRoleAdmission(userinfo, false);
+		qcx_spectator_auth = SV_EvaluateRoleAdmission(userinfo, true);
 		qcx_restore_identity = QCX_RestoreSessionAdmissionRole(
 			Info_ValueForKey(userinfo, "name"), &qcx_saved_spectator);
 		if (!qcx_restore_identity) {
@@ -1375,13 +1381,14 @@ static void SVC_DirectConnect (void)
 			if (reconnect != NULL && QCX_RestoreSessionClientRoleLocked(reconnect)
 				&& Q_namecmp(reconnect->name, Info_ValueForKey(userinfo, "name")) == 0) {
 				qcx_restore_identity = true;
-				qcx_saved_spectator = reconnect->spectator != 0;
+				qcx_saved_spectator = QCX_RestoreSessionEffectiveSpectator(reconnect);
 			}
 		}
 		if (qcx_restore_identity) {
-			qcx_requested_auth = SV_EvaluateRoleAdmission(userinfo,
-				qcx_requested_spectator);
-			qcx_saved_auth = SV_EvaluateRoleAdmission(userinfo, qcx_saved_spectator);
+			qcx_requested_auth = qcx_requested_spectator
+				? qcx_spectator_auth : qcx_player_auth;
+			qcx_saved_auth = qcx_saved_spectator
+				? qcx_spectator_auth : qcx_player_auth;
 			if (!qcx_saved_auth.allowed) {
 				SV_RejectRoleAdmission(qcx_saved_spectator);
 				return;
@@ -1470,8 +1477,14 @@ static void SVC_DirectConnect (void)
 	// this is the only place a client_t is ever initialized
 	memset (newcl, 0, sizeof(*newcl));
 	newcl->qcx_restore_fallback_allowed = true;
+	newcl->qcx_restore_player_allowed = true;
+	newcl->qcx_restore_spectator_allowed = true;
 
 #if defined(QCX_ENABLED)
+	if (QCX_RestoreSessionWaiting()) {
+		newcl->qcx_restore_player_allowed = qcx_player_auth.allowed;
+		newcl->qcx_restore_spectator_allowed = qcx_spectator_auth.allowed;
+	}
 	if (qcx_restore_identity) {
 		newcl->qcx_restore_fallback_allowed = qcx_requested_auth.allowed;
 	}

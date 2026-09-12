@@ -69,6 +69,7 @@ set(expected_integration
 	qc2cpp_qwsp_monsters_native
 	qc2cpp_qwsp_command_route_native
 	qc2cpp_qwsp_restore_native
+	qc2cpp_qwsp_restore_auth_native
 	qc2cpp_server_map_wasm
 	qc2cpp_legacy_strings_wasm
 	qc2cpp_optional_fields_wasm
@@ -84,6 +85,7 @@ set(expected_integration
 	qc2cpp_qwsp_monsters_wasm
 	qc2cpp_qwsp_command_route_wasm
 	qc2cpp_qwsp_restore_wasm
+	qc2cpp_qwsp_restore_auth_wasm
 	qc2cpp_qwsp_restore_native_wasm
 	qc2cpp_qwsp_restore_wasm_native)
 
