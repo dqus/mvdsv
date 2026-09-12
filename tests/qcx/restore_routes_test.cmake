@@ -28,10 +28,19 @@ if(new_begin EQUAL -1 OR new_end EQUAL -1 OR NOT new_begin LESS new_end)
 endif()
 math(EXPR new_length "${new_end} - ${new_begin}")
 string(SUBSTRING "${sv_user}" ${new_begin} ${new_length} new_source)
-string(FIND "${new_source}" "QCX_RestoreSessionEffectiveSpectator(sv_client)" effective_role)
+string(FIND "${new_source}" "SV_SignonSpectator(sv_client)" effective_role)
 if(effective_role EQUAL -1)
 	message(FATAL_ERROR "Cmd_New_f must encode the saved role for a bound QCX client")
 endif()
+foreach(required IN ITEMS
+	"SV_Login(sv_client, signon_spectator)"
+	"SV_LoginRequired(sv_client, signon_spectator)"
+	"if (!signon_spectator)")
+	string(FIND "${new_source}" "${required}" position)
+	if(position EQUAL -1)
+		message(FATAL_ERROR "Cmd_New_f must apply saved role to signon policy: ${required}")
+	endif()
+endforeach()
 
 string(FIND "${sv_user}" "if (sv.paused && !pending_qcx_client && !waiting_qcx_client)" position)
 if(position EQUAL -1)
@@ -155,6 +164,9 @@ static int pending, waiting, saved_spectator, saved_spawned, commit_allowed;
 static int commits, connects, spawns, spectator_spawns, drops;
 static qbool QCX_RestoreSessionClientWaiting(client_t *client) { (void)client; return waiting; }
 static qbool QCX_RestoreSessionClientPending(client_t *client) { (void)client; return pending; }
+static qbool SV_SignonSpectator(const client_t *client) { return client->spectator != 0; }
+static qbool SV_LoginRequired(client_t *client, qbool spectator)
+{ (void)client; (void)spectator; return false; }
 static qbool QCX_RestoreSessionCommitBegin(client_t *client, qbool *spawned)
 {
 	int i;
