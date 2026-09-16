@@ -94,13 +94,6 @@ int main(int argc, char **argv)
 	assert(QCX_Globals()->other == 0U);
 	assert(legacy_globals.self == 101 && legacy_globals.other == 102);
 	assert(QCX_SetMapName("dm6"));
-	uint8_t mapname[3] = {0};
-	qcx_byte_count_t required = 0U;
-	assert(active_game->string_read(active_game->context, QCX_SCOPE_GLOBAL, 0U,
-		(const uint8_t *)"mapname", 7U, mapname, sizeof(mapname), &required)
-		== QCX_PLUGIN_OK);
-	assert(required == sizeof(mapname));
-	assert(mapname[0] == 'd' && mapname[1] == 'm' && mapname[2] == '6');
 	QCX_ClearGlobals();
 	qcx_active = false;
 	assert(QCX_Globals() == NULL);

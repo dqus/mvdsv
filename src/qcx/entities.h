@@ -17,15 +17,13 @@ qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot);
 uint32_t QCX_EntityCapacity(void);
 int QCX_ResolveEntityFields(void);
 const char *QCX_EntityFieldError(void);
+int QCX_EntityStringHeaderAddress(qcx_legacy_string_ref_t ref,
+	qcx_guest_address_t *header);
 qbool QCX_EntityHasModel(const struct edict_s *entity);
 qcx_entity_id_t QCX_EdictToSlot(const struct edict_s *edict);
 struct edict_s *QCX_SlotToEdict(qcx_entity_id_t slot);
 void QCX_ClearEdict(struct edict_s *edict);
 int QCX_SetEntityString(struct edict_s *edict, const char *field, const char *value);
 const char *QCX_EntityStringFieldName(const struct edict_s *edict, const void *member);
-qcx_plugin_status_t QCX_CopyEntityString(const struct edict_s *edict, const char *field,
-	char *out, uint32_t capacity, uint32_t *required);
-qcx_plugin_status_t QCX_CopyLegacyString(int32_t token, char *out,
-	uint32_t capacity, uint32_t *required);
 
 #endif
