@@ -1,90 +1,120 @@
 #include "qwsvdef.h"
 
-#include "qcx/strings.h"
-
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
+#include "qcx/strings.h"
 
 #include <limits.h>
 #include <string.h>
 
-static qcx_legacy_string_projection_t
-	legacy_string_projections[QCX_LEGACY_STRING_FIELD_COUNT];
-static qcx_transport_kind_t legacy_string_transport;
-static qbool legacy_string_projections_ready;
-
-void QCX_SetLegacyStringProjections(
-	const qcx_legacy_string_projection_t projections[QCX_LEGACY_STRING_FIELD_COUNT],
-	qcx_transport_kind_t kind)
+static void QCX_ClearStringView(qcx_string_view_t *view)
 {
-	if (projections == NULL || (kind != QCX_TRANSPORT_NATIVE
-		&& kind != QCX_TRANSPORT_WASM)) {
-		QCX_ClearLegacyStringProjections();
-		return;
+	if (view != NULL) {
+		view->data = 0U;
+		view->size = 0U;
 	}
-	memcpy(legacy_string_projections, projections, sizeof(legacy_string_projections));
-	legacy_string_transport = kind;
-	legacy_string_projections_ready = true;
 }
 
-void QCX_ClearLegacyStringProjections(void)
+int QCX_ReadStringHeader(qcx_guest_address_t header, qcx_string_view_t *view)
 {
-	memset(legacy_string_projections, 0, sizeof(legacy_string_projections));
-	legacy_string_transport = QCX_TRANSPORT_NONE;
-	legacy_string_projections_ready = false;
+	qcx_string_view_t result = {0U, 0U};
+	const qcx_transport_kind_t kind = QCX_GameTransportKind();
+	if (view == NULL || header == 0U) {
+		QCX_ClearStringView(view);
+		return 0;
+	}
+	if (kind == QCX_TRANSPORT_NATIVE) {
+		const uint8_t *native_header;
+		char *data = NULL;
+		if (header > UINTPTR_MAX) {
+			QCX_ClearStringView(view);
+			return 0;
+		}
+		native_header = (const uint8_t *)(uintptr_t)header;
+		memcpy(&data, native_header, sizeof(data));
+		memcpy(&result.size, native_header + sizeof(data), sizeof(result.size));
+		result.data = (qcx_guest_address_t)(uintptr_t)data;
+	} else if (kind == QCX_TRANSPORT_WASM) {
+		const qcx_game_api_v1_t *const game = QCX_Game();
+		void *header_view = NULL;
+		if (game == NULL || game->memory_view == NULL
+			|| game->memory_view(game->context, header,
+				sizeof(uint32_t) * 2U, _Alignof(uint32_t), &header_view) != QCX_PLUGIN_OK
+			|| header_view == NULL) {
+			QCX_ClearStringView(view);
+			return 0;
+		}
+		memcpy(&result.data, header_view, sizeof(uint32_t));
+		memcpy(&result.size, (const uint8_t *)header_view + sizeof(uint32_t),
+			sizeof(result.size));
+	} else {
+		QCX_ClearStringView(view);
+		return 0;
+	}
+	if (result.size == UINT32_MAX || (result.size != 0U && result.data == 0U)) {
+		QCX_ClearStringView(view);
+		return 0;
+	}
+	*view = result;
+	return 1;
 }
 
-static const char *QCX_MapProjectedStringData(const void *member, uint32_t length)
+const char *QCX_BorrowStringView(const qcx_string_view_t *view)
 {
-	if (member == NULL || length == 0U || length == UINT32_MAX) {
+	const qcx_transport_kind_t kind = QCX_GameTransportKind();
+	if (view == NULL || view->size == UINT32_MAX) {
 		return NULL;
 	}
-	if (legacy_string_transport == QCX_TRANSPORT_NATIVE) {
-		char *data = NULL;
-		memcpy(&data, member, sizeof(data));
-		return data;
+	if (view->size == 0U) {
+		return "";
 	}
-	if (legacy_string_transport == QCX_TRANSPORT_WASM) {
-		uint32_t offset = 0U;
-		void *view = NULL;
-		const qcx_game_api_v1_t *const game = QCX_Game();
-		memcpy(&offset, member, sizeof(offset));
-		if (offset == 0U || game == NULL || game->memory_view == NULL
-			|| game->memory_view(game->context, offset, length + 1U, 1U, &view)
-				!= QCX_PLUGIN_OK || view == NULL
-			|| ((const char *)view)[length] != '\0') {
+	if (view->data == 0U) {
+		return NULL;
+	}
+	if (kind == QCX_TRANSPORT_NATIVE) {
+		if (view->data > UINTPTR_MAX) {
 			return NULL;
 		}
-		return view;
+		const char *const value = (const char *)(uintptr_t)view->data;
+		return value[view->size] == '\0' ? value : NULL;
+	}
+	if (kind == QCX_TRANSPORT_WASM) {
+		const qcx_game_api_v1_t *const game = QCX_Game();
+		void *payload = NULL;
+		if (game == NULL || game->memory_view == NULL
+			|| game->memory_view(game->context, view->data, view->size + 1U,
+				1U, &payload) != QCX_PLUGIN_OK
+			|| payload == NULL || ((const char *)payload)[view->size] != '\0') {
+			return NULL;
+		}
+		return payload;
 	}
 	return NULL;
 }
 
-const char *QCX_BorrowLegacyString(int32_t token)
+int QCX_ReadLegacyString(qcx_legacy_string_ref_t ref, qcx_string_view_t *view)
 {
-	if (token == 0) {
-		return "";
+	qcx_guest_address_t header;
+	if (view == NULL || ref < 0) {
+		QCX_ClearStringView(view);
+		return 0;
 	}
-	if (token < 0 || !legacy_string_projections_ready) {
+	if (ref == 0) {
+		QCX_ClearStringView(view);
+		return 1;
+	}
+	if (!QCX_EntityStringHeaderAddress(ref, &header)) {
+		QCX_ClearStringView(view);
+		return 0;
+	}
+	return QCX_ReadStringHeader(header, view);
+}
+
+const char *QCX_BorrowLegacyString(qcx_legacy_string_ref_t ref)
+{
+	qcx_string_view_t view;
+	if (!QCX_ReadLegacyString(ref, &view)) {
 		return NULL;
 	}
-	const uint32_t index = (uint32_t)token - 1U;
-	const uint32_t slot = index / QCX_LEGACY_STRING_FIELD_COUNT;
-	const uint32_t field = index % QCX_LEGACY_STRING_FIELD_COUNT;
-	if (slot >= QCX_EntityCapacity()) {
-		return NULL;
-	}
-	edict_t *const edict = QCX_SlotToEdict(slot);
-	if (edict == NULL || edict->v == NULL) {
-		return NULL;
-	}
-	const qcx_legacy_string_projection_t *const projection =
-		&legacy_string_projections[field];
-	const uint8_t *const base = (const uint8_t *)edict->v;
-	uint32_t length = 0U;
-	memcpy(&length, base + projection->length_offset, sizeof(length));
-	if (length == 0U) {
-		return "";
-	}
-	return QCX_MapProjectedStringData(base + projection->data_offset, length);
+	return QCX_BorrowStringView(&view);
 }
