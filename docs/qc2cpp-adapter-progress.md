@@ -466,3 +466,35 @@ game_legacy_string_read -> call_scalars`. None of
 `QCX_CopyLegacyString` occurred in the post-change sample. Focused fixture
 counters and the source route contract independently prove that this absence
 is structural, not merely a sampling result.
+
+## Direct QCX string storage acceptance
+
+The direct-string-storage adapter is accepted against qc2cpp
+`a7d99d8187c39ff11e070763f87cbecea6fa22c5` and MVDSV
+`35e1cb3311bedd4de6fc2fd17a8e5bc6eaad1f77`. Fixed legacy string words are
+now positive byte offsets from the published entity-object base to canonical
+`qc::String` read headers. Native reads the header and payload directly;
+Wasm uses `memory_view` only to map the header and payload. Guest mutation
+continues through `string_write`.
+
+Fresh Release QW Native and Wasm games built successfully. The full
+`qc2cpp_acceptance_assets` target rebuilt QW and QWSP Native/Wasm games and
+passed checker validation. The focused process suite passed all six cases:
+`qc2cpp_server_map_{native,wasm}`, `qc2cpp_legacy_strings_{native,wasm}`, and
+`qc2cpp_save_{native_native,wasm_wasm}`. This covers direct fixed reads,
+model presence, semantic netname/mapname writes, clear/reuse, save/restore,
+and unpublish/reload in both transports.
+
+The installed SDK and fresh generated outputs contain none of the removed
+resolver/projection/read-callback exports or fixed `qcx.<field>.data/length`
+descriptors. Production MVDSV contains neither `QCX_CopyEntityString` nor
+`QCX_CopyLegacyString`; the only owned test copy is local and made from a live
+borrowed view. Native and real-Wasm host tests verify positive structural
+references and direct entity/global `qc.string` headers, so no generic host
+descriptor cache or copy API was retained.
+
+A short two-client `povdmm4` observation with the fresh artifacts kept both
+servers live throughout the window: Native was 2.49% CPU and Wasm was 2.63%
+over one eight-second sample each. This is a smoke observation, not a
+comparative performance claim or threshold; raw artifacts are in
+`/tmp/qcx-direct-string-profile.wdtKXo`.
