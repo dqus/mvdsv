@@ -76,7 +76,7 @@ int QCX_ResolveEntityFields(void)
 
 const char *QCX_EntityFieldError(void)
 {
-	return "qcx.model.data";
+	return "entity field table";
 }
 
 void QCX_Unpublish(void *context)
