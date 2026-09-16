@@ -86,3 +86,15 @@ file(READ "${MVDSV_SOURCE_DIR}/src/qcx/strings.c" borrowed_string_source)
 if(borrowed_string_source MATCHES "legacy_string_read|QCX_TransportIngress|calloc[ \t\r\n]*\\(|realloc[ \t\r\n]*\\(|malloc[ \t\r\n]*\\(")
 	message(FATAL_ERROR "QCX borrowed strings must not enter the game, allocate, or copy payloads")
 endif()
+
+file(GLOB qcx_sources "${MVDSV_SOURCE_DIR}/src/qcx/*.[ch]")
+foreach(source IN LISTS qcx_sources)
+	file(READ "${source}" contents)
+	if(contents MATCHES "QCX_CopyEntityString|QCX_CopyLegacyString"
+		OR contents MATCHES "QCX_LEGACY_STRING_FIELD_COUNT|qcx_legacy_string_projection"
+		OR contents MATCHES "qcx_model_length_offset|qcx\\..*\\.(data|length)"
+		OR contents MATCHES "slot[ \t]*/[ \t]*11"
+		OR contents MATCHES "string_read|legacy_string_read")
+		message(FATAL_ERROR "${source} retains a removed QCX string route")
+	endif()
+endforeach()

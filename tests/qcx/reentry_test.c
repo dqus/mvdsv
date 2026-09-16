@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "qwsvdef.h"
+#include "qcx/adapter.h"
 #include "qcx/client_command.h"
 #include "qcx/entries.h"
 #include "qcx/entities.h"
@@ -77,12 +78,6 @@ void PR1_SetString(string_t *address, char *value)
 void *VM_ExplicitArgPtr(vm_t *vm, intptr_t value)
 { (void)vm; (void)value; return NULL; }
 
-qcx_plugin_status_t QCX_CopyEntityString(const edict_t *entity, const char *field,
-	char *out, uint32_t capacity, uint32_t *required)
-{
-	(void)entity; (void)field; (void)out; (void)capacity; (void)required;
-	return QCX_PLUGIN_BAD_ARGUMENT;
-}
 void PR2_GameStartFrame(qbool is_bot_frame) { (void)is_bot_frame; }
 void SV_LinkEdict(edict_t *entity, qbool touch) { (void)entity; (void)touch; }
 void SV_PreRunCmd(void) { }
@@ -120,6 +115,19 @@ edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 qcx_shared_global_state_v1_t *QCX_Globals(void) { return &globals; }
 qbool QCX_Active(void) { return qcx_active; }
 const qcx_game_api_v1_t *QCX_Game(void) { return NULL; }
+
+qcx_transport_kind_t QCX_GameTransportKind(void)
+{
+	return QCX_TRANSPORT_NATIVE;
+}
+
+int QCX_EntityStringHeaderAddress(qcx_legacy_string_ref_t ref,
+	qcx_guest_address_t *header)
+{
+	(void)ref;
+	(void)header;
+	return 0;
+}
 
 void QCX_EdictTouch(qcx_entity_id_t first, qcx_entity_id_t second, float time,
 	float frametime)

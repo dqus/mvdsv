@@ -5,6 +5,7 @@
 #include "qcx/entities.h"
 #include "qcx/globals.h"
 #include "qcx/restore_session.h"
+#include "qcx/strings.h"
 
 #include <stdint.h>
 #include <inttypes.h>
@@ -67,6 +68,24 @@ static void QCX_TestRestoreSession_f(void);
 static void QCX_TestStuffClient_f(void);
 static void QCX_TestReleaseClient_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
+
+static qbool QCX_TestCopyLegacyString(qcx_legacy_string_ref_t ref, char *out,
+	size_t capacity)
+{
+	qcx_string_view_t view;
+	const char *value;
+	if (out == NULL || capacity == 0U || !QCX_ReadLegacyString(ref, &view)
+		|| view.size >= capacity) {
+		return false;
+	}
+	value = QCX_BorrowStringView(&view);
+	if (value == NULL) {
+		return false;
+	}
+	memcpy(out, value, view.size);
+	out[view.size] = '\0';
+	return true;
+}
 
 static void QCX_TestSnapshot_f(void)
 {
@@ -367,8 +386,8 @@ static void QCX_TestReportSaveState(void)
 		if (discovered > 0) probe_slot = (uint32_t)discovered;
 	}
 	if (sv.num_edicts > 0 && sv.edicts[0].v != NULL) {
-		(void)QCX_CopyEntityString(&sv.edicts[0], "message", message,
-			sizeof(message), NULL);
+		(void)QCX_TestCopyLegacyString(sv.edicts[0].v->message, message,
+			sizeof(message));
 	}
 	if (probe_slot < (uint32_t)sv.num_edicts && sv.edicts[probe_slot].v != NULL) {
 		probe_think = sv.edicts[probe_slot].v->think;
@@ -628,8 +647,8 @@ static int QCX_TestFindQwspMonster(void)
 			|| candidate->v->think == 0 || candidate->v->nextthink <= (float)sv.time) {
 			continue;
 		}
-		if (QCX_CopyEntityString(candidate, "classname", classname, sizeof(classname), NULL)
-			!= QCX_PLUGIN_OK || strncmp(classname, "monster_", 8U) != 0) {
+		if (!QCX_TestCopyLegacyString(candidate->v->classname, classname,
+			sizeof(classname)) || strncmp(classname, "monster_", 8U) != 0) {
 			continue;
 		}
 		return slot;
@@ -668,8 +687,8 @@ static void QCX_TestReportQwspMonster(void)
 	client_t *const player = QCX_TestFindQwspPlayer();
 	if (slot == 0U || slot >= (uint32_t)sv.num_edicts || sv.edicts[slot].e.free
 		|| sv.edicts[slot].v == NULL
-		|| QCX_CopyEntityString(&sv.edicts[slot], "classname", classname,
-			sizeof(classname), NULL) != QCX_PLUGIN_OK) {
+		|| !QCX_TestCopyLegacyString(sv.edicts[slot].v->classname, classname,
+			sizeof(classname))) {
 		Con_Printf("{\"qc2cpp_test_qwsp_monster\":{\"ready\":false}}\n");
 		return;
 	}
@@ -826,8 +845,9 @@ void QCX_TestObserverEdictThink(edict_t *thinking)
 void QCX_TestObserverEdictTouch(edict_t *touched, edict_t *toucher)
 {
 	char classname[16];
-	if (QCX_CopyEntityString(touched, "classname", classname, sizeof(classname), NULL)
-		!= QCX_PLUGIN_OK || strcmp(classname, "teledeath") != 0) {
+	if (touched == NULL || touched->v == NULL
+		|| !QCX_TestCopyLegacyString(touched->v->classname, classname, sizeof(classname))
+		|| strcmp(classname, "teledeath") != 0) {
 		return;
 	}
 	observer.teledeath_owner = (uint32_t)touched->v->owner;
