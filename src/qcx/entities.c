@@ -2,6 +2,7 @@
 
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
+#include "qcx/layout_contract.h"
 #include "qcx/strings.h"
 
 #include <limits.h>
@@ -46,8 +47,8 @@ int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 		|| memory->shared_state_base == 0U
 		|| memory->entity_object_base == 0U
 		|| memory->shared_state_base != memory->entity_object_base
-		|| memory->entity_stride < sizeof(qcx_shared_entity_state_v1_t)
-		|| memory->entity_stride % _Alignof(qcx_shared_entity_state_v1_t) != 0U
+		|| memory->entity_stride < sizeof(entvars_t)
+		|| memory->entity_stride % _Alignof(entvars_t) != 0U
 		|| memory->max_entities == 0U
 		|| memory->max_entities > MAX_EDICTS
 		|| memory->shared_state_abi_version != QCX_SHARED_ENTITY_STATE_ABI_VERSION_V1
@@ -74,16 +75,16 @@ int QCX_BindEntities(void)
 	if (qcx_entity_memory == NULL || game == NULL || game->memory_view == NULL
 		|| span > UINT32_MAX
 		|| game->memory_view(game->context, qcx_entity_base, (qcx_byte_count_t)span,
-			_Alignof(qcx_shared_entity_state_v1_t), &storage) != QCX_PLUGIN_OK
+			_Alignof(entvars_t), &storage) != QCX_PLUGIN_OK
 		|| storage == NULL || sv.max_edicts <= 0
 		|| (uint32_t)sv.max_edicts > qcx_entity_capacity) {
 		return 0;
 	}
 	for (int slot = 0; slot < sv.max_edicts; ++slot) {
-		qcx_shared_entity_state_v1_t *const entity =
-			(qcx_shared_entity_state_v1_t *)((uint8_t *)storage
+		entvars_t *const entity =
+			(entvars_t *)((uint8_t *)storage
 				+ (size_t)slot * qcx_entity_stride);
-		sv.edicts[slot].v = (entvars_t *)entity;
+		sv.edicts[slot].v = entity;
 	}
 	return 1;
 }
@@ -100,7 +101,7 @@ void QCX_ClearEntities(void)
 	qcx_entity_field_error = NULL;
 }
 
-qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot)
+entvars_t *QCX_Entity(qcx_entity_id_t slot)
 {
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (qcx_entity_memory == NULL || game == NULL || slot >= qcx_entity_capacity) {
@@ -110,9 +111,9 @@ qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot)
 	if (offset > UINT64_MAX - qcx_entity_base) {
 		return NULL;
 	}
-	qcx_shared_entity_state_v1_t *entity = NULL;
+	entvars_t *entity = NULL;
 	if (game->memory_view(game->context, qcx_entity_base + offset, sizeof(*entity),
-		_Alignof(qcx_shared_entity_state_v1_t), (void **)&entity) != QCX_PLUGIN_OK) {
+		_Alignof(entvars_t), (void **)&entity) != QCX_PLUGIN_OK) {
 		return NULL;
 	}
 	return entity;

@@ -6,6 +6,15 @@
 #include "qcx/strings.h"
 #include "qcx/transport.h"
 
+_Static_assert(_Generic((entvars_t *)0,
+	qcx_shared_entity_state_v1_t *: 0,
+	default: 1),
+	"QCX must not replace MVDSV's entvars_t definition");
+_Static_assert(_Generic(QCX_Entity(0U),
+	entvars_t *: 1,
+	default: 0),
+	"QCX entity access must use MVDSV's entvars_t");
+
 static const qcx_game_api_v1_t *active_game;
 static qbool qcx_active;
 server_t sv;

@@ -280,7 +280,7 @@ void QCX_ClientPreThink(qcx_entity_id_t self, float time, float frametime,
 void QCX_ClientPostThink(qcx_entity_id_t self, float time, uint32_t spectator)
 {
 	const qcx_game_api_v1_t *const game = QCX_RequireGame("client postthink");
-	const qcx_shared_global_state_v1_t *const globals = QCX_Globals();
+	const globalvars_t *const globals = QCX_Globals();
 	if (globals == NULL) {
 		SV_Error("qc2cpp client postthink has no shared globals");
 	}

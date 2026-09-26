@@ -6,6 +6,11 @@
 #include "qcx/globals.h"
 #include "qcx/transport.h"
 
+_Static_assert(_Generic(QCX_Globals(),
+	globalvars_t *: 1,
+	default: 0),
+	"QCX global access must use MVDSV's globalvars_t");
+
 static const qcx_game_api_v1_t *active_game;
 static qbool qcx_active;
 static globalvars_t legacy_globals;
