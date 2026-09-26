@@ -1,4 +1,5 @@
 #include "qcx/globals.h"
+#include "qcx/layout_contract.h"
 
 #include "qwsvdef.h"
 #include "game/plugin_api.h"
@@ -8,7 +9,7 @@
 
 const qcx_game_api_v1_t *QCX_Game(void);
 
-static qcx_shared_global_state_v1_t *qcx_globals;
+static globalvars_t *qcx_globals;
 static int qcx_globals_available = 1;
 static qcx_guest_address_t qcx_global_object_base;
 static qcx_byte_count_t qcx_global_object_size;
@@ -81,7 +82,7 @@ static float *QCX_ResolveGlobalFloat(const qcx_game_api_v1_t *game,
 	return result;
 }
 
-qcx_shared_global_state_v1_t *QCX_Globals(void)
+globalvars_t *QCX_Globals(void)
 {
 	if (!qcx_globals_available) {
 		return NULL;
@@ -107,9 +108,9 @@ qcx_shared_global_state_v1_t *QCX_Globals(void)
 		|| memory->shared_state_abi_version != QCX_SHARED_GLOBAL_STATE_ABI_VERSION_V1) {
 		return NULL;
 	}
-	qcx_shared_global_state_v1_t *globals = NULL;
+	globalvars_t *globals = NULL;
 	if (game->memory_view(game->context, memory->shared_state_base, sizeof(*globals),
-		_Alignof(qcx_shared_global_state_v1_t), (void **)&globals) != QCX_PLUGIN_OK
+		_Alignof(globalvars_t), (void **)&globals) != QCX_PLUGIN_OK
 		|| globals == NULL) {
 		return NULL;
 	}
@@ -152,7 +153,7 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 	if (!qcx_globals_bound) {
 		qcx_previous_global_struct = pr_global_struct;
 		qcx_previous_globals = pr_globals;
-		pr_global_struct = (globalvars_t *)qcx_globals;
+		pr_global_struct = qcx_globals;
 		pr_globals = (float *)qcx_globals;
 		qcx_globals_bound = true;
 	}
