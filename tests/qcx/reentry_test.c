@@ -19,7 +19,7 @@ static qcx_entity_id_t observed_first;
 static qcx_entity_id_t observed_second;
 static float observed_time;
 static float observed_frametime;
-static qcx_shared_global_state_v1_t globals;
+static globalvars_t globals;
 static trace_t trace_result;
 static float observed_yaw;
 static float observed_distance;
@@ -112,7 +112,7 @@ edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 	return slot < 8U ? &entities[slot] : NULL;
 }
 
-qcx_shared_global_state_v1_t *QCX_Globals(void) { return &globals; }
+globalvars_t *QCX_Globals(void) { return &globals; }
 qbool QCX_Active(void) { return qcx_active; }
 const qcx_game_api_v1_t *QCX_Game(void) { return NULL; }
 
@@ -338,7 +338,7 @@ static void expect_pr2_client_command_route(void)
 
 int main(void)
 {
-	pr_global_struct = (globalvars_t *)&globals;
+	pr_global_struct = &globals;
 	pr_globals = (float *)&globals;
 	pr_edict_size = (int)sizeof(entvars_t);
 	for (int index = 0; index < 8; ++index) {
