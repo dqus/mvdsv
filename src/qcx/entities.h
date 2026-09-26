@@ -1,6 +1,7 @@
 #ifndef MVDSV_QC2CPP_ENTITIES_H
 #define MVDSV_QC2CPP_ENTITIES_H
 
+#include "qwsvdef.h"
 #include "game/plugin_api.h"
 #include "game/shared_entity_state.h"
 
@@ -13,7 +14,7 @@ struct edict_s;
 int QCX_ConfigureEntities(qcx_guest_address_t publication_address);
 int QCX_BindEntities(void);
 void QCX_ClearEntities(void);
-qcx_shared_entity_state_v1_t *QCX_Entity(qcx_entity_id_t slot);
+entvars_t *QCX_Entity(qcx_entity_id_t slot);
 uint32_t QCX_EntityCapacity(void);
 int QCX_ResolveEntityFields(void);
 const char *QCX_EntityFieldError(void);
