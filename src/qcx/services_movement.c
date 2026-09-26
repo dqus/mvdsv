@@ -60,7 +60,7 @@ static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 {
 	QCX_ObserveGameplayImport(context);
 	(void)self;
-	qcx_shared_global_state_v1_t *const globals = QCX_Globals();
+	globalvars_t *const globals = QCX_Globals();
 	if (globals == NULL) {
 		SV_Error("qc2cpp walkmove has no shared globals");
 	}
