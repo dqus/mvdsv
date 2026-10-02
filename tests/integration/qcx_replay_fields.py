@@ -8,7 +8,11 @@ import re
 
 
 def write_fields(game, destination):
-    root = pathlib.Path(game).resolve().parents[1] / "qwsp-native-generated"
+    cache = (pathlib.Path(game).resolve().parent / "CMakeCache.txt").read_text()
+    source = re.search(r"^CMAKE_HOME_DIRECTORY:INTERNAL=(.+)$", cache, re.M)
+    if not source:
+        raise ValueError("missing retained build source directory")
+    root = pathlib.Path(source[1])
     rows = []
     for scope, filename, owner in ((1, "globals", "Globals"), (2, "entity_data", "EntityData")):
         generated = (root / f"include/game/{filename}.hpp").read_text()
