@@ -124,6 +124,9 @@ angles and bad trails.
 */
 edict_t *ED_Alloc (void)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_ALLOC);
+#endif
 	int			i;
 	edict_t		*e;
 
@@ -167,6 +170,9 @@ FIXME: walk all entities and NULL out references to this entity
 */
 void ED_Free (edict_t *ed)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_FREE);
+#endif
 	SV_UnlinkEdict (ed);		// unlink from world bsp
 	memset(&ed->xv, 0, sizeof(ext_entvars_t));
 	ed->e.free = true;
