@@ -3,12 +3,14 @@
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
 #include "qcx/replay_checkpoint.h"
+#include <time.h>
 
 static int started, ready, frame_open, group_open, finishing, outer_active;
 static unsigned clients;
 static double last_begin, warmup;
 static char asset_identity[65];
 static unsigned checkpoint_frames;
+static uint8_t last_checkpoint[144];
 static void CheckpointRecord(void);
 extern void SV_PreRunCmd(void);
 extern void SV_PostRunCmd(void);
@@ -91,7 +93,7 @@ void SV_QCXReplayMapStart(const char *map, int restoring)
 	const char *names[] = {
 		"deathmatch", "sv_speedcheck", "sv_antilag", "sv_minping", "coop", "skill",
 		"registered", "pr_checkextension", "samelevel", "timelimit", "fraglimit", "teamplay",
-		"sv_mintic", "sv_maxtic", "sv_maxfps", "sv_maxspeed", "sv_gravity", "sv_accelerate",
+		"sv_mintic", "sv_maxtic", "maxfps", "sv_maxspeed", "sv_gravity", "sv_accelerate",
 		"sv_airaccelerate", "sv_wateraccelerate", "sv_waterfriction", "sv_friction",
 		"sv_stopspeed", "sv_maxvelocity", "sv_safestrafe",
 		"sv_minpitch", "sv_maxpitch", "pm_ktjump", "pm_slidefix", "pm_airstep", "pm_pground",
@@ -337,6 +339,13 @@ static void Status_f(void)
 {
 	char slots[256] = "";
 	int comma = 0;
+	unsigned spawns = 0;
+	for (int i = 0; i < sv.num_edicts; ++i) {
+		edict_t *edict = EDICT_NUM(i);
+		if (!edict->e.free && !strcmp(PR_GetEntityString(edict->v->classname), "info_player_deathmatch")) {
+			++spawns;
+		}
+	}
 	for (unsigned i = 0; i < clients; ++i) {
 		if (svs.clients[i].state == cs_spawned) {
 			size_t used = strlen(slots);
@@ -344,8 +353,8 @@ static void Status_f(void)
 			comma = 1;
 		}
 	}
-	Con_Printf("{\"qcx_probe_status\":{\"spawncount\":%u,\"clients\":%u,\"events\":%zu,\"spawned\":[%s]}}\n",
-		(unsigned)svs.spawncount, clients, QCX_ReplayCaptureCount(), slots);
+	Con_Printf("{\"qcx_probe_status\":{\"spawncount\":%u,\"clients\":%u,\"events\":%zu,\"spawn_points\":%u,\"spawned\":[%s]}}\n",
+		(unsigned)svs.spawncount, clients, QCX_ReplayCaptureCount(), spawns, slots);
 }
 
 void SV_QCXReplayInit(void)
@@ -484,6 +493,7 @@ static void Checkpoint(uint8_t out[CHECKPOINT_SIZE])
 	for (unsigned i = 0; i < QCX_WORK_COUNT; ++i) {
 		Store64(out+24+8*i, qcx_replay_work[i]);
 	}
+	memcpy(last_checkpoint, out, sizeof(last_checkpoint));
 }
 static void CheckpointRecord(void)
 {
@@ -710,6 +720,101 @@ int SV_QCXReplayDispatch(qcx_replay_event_t *event, const qcx_replay_tape_t *tap
 	return 1;
 }
 
+double SV_QCXReplayProcessCPU(void)
+{
+	struct timespec value;
+	if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &value)) {
+		SV_Error("QCX replay process CPU clock unavailable");
+	}
+	return (double)value.tv_sec + value.tv_nsec * 1e-9;
+}
+
+static uint64_t FileIdentity(const char *path)
+{
+	FILE *file = fopen(path, "rb");
+	if (!file) {
+		SV_Error("QCX replay cannot fingerprint %s", path);
+	}
+	uint64_t hash = UINT64_C(14695981039346656037);
+	uint8_t bytes[8192];
+	size_t size;
+	while ((size = fread(bytes, 1, sizeof(bytes), file)) != 0) {
+		hash = QCX_ReplayHashBytes(hash, bytes, size);
+	}
+	if (ferror(file)) {
+		SV_Error("QCX replay fingerprint read failed");
+	}
+	fclose(file);
+	return hash;
+}
+
+/* A validated schedule is specific to tape, game, inventory and this server.
+ * It carries work/state evidence; MEASURE never recomputes logical hashes. */
+static int ScheduleFile(const qcx_replay_tape_t *tape, int writing)
+{
+	int option = COM_CheckParm("-qcx-probe-schedule");
+	if (!option || option + 1 >= com_argc) {
+		return writing; /* Validation can be used without requesting timing. */
+	}
+	int fields = COM_CheckParm("-qcx-probe-fields");
+	char game[256];
+	snprintf(game, sizeof(game), "%s/%s.dylib", fs_gamedir, sv_progsname.string);
+	uint64_t identities[] = {FileIdentity(QCX_ReplayPath()), FileIdentity(game),
+		FileIdentity(com_argv[fields+1]), FileIdentity(com_argv[0])};
+	size_t size = 8 + 32 + 8 + sizeof(last_checkpoint) + 8*tape->count + 8;
+	uint8_t *bytes = calloc(size, 1);
+	if (!bytes) {
+		return 0;
+	}
+	FILE *file = fopen(com_argv[option+1], writing ? "wb" : "rb");
+	int result = file != NULL;
+	if (writing && result) {
+		memcpy(bytes, "QCRNG001", 8);
+		for (unsigned i = 0; i < 4; ++i) {
+			Store64(bytes+8+8*i, identities[i]);
+		}
+		Store64(bytes+40, tape->count);
+		memcpy(bytes+48, last_checkpoint, sizeof(last_checkpoint));
+		size_t count;
+		const uint64_t *skips = QCX_ReplaySchedule(&count);
+		result = count == tape->count;
+		for (size_t i = 0; result && i < count; ++i) {
+			Store64(bytes+192+8*i, skips[i]);
+		}
+		Store64(bytes+size-8, QCX_ReplayHashBytes(1, bytes, size-8));
+		result = result && fwrite(bytes, 1, size, file) == size;
+	}
+	else if (result) {
+		result = fread(bytes, 1, size, file) == size && fgetc(file) == EOF
+			&& !memcmp(bytes, "QCRNG001", 8) && Read64(bytes+40) == tape->count
+			&& Read64(bytes+size-8) == QCX_ReplayHashBytes(1, bytes, size-8);
+		for (unsigned i = 0; result && i < 4; ++i) {
+			result = Read64(bytes+8+8*i) == identities[i];
+		}
+		uint64_t *skips = malloc(8*tape->count);
+		if (!skips) {
+			result = 0;
+		}
+		for (size_t i = 0; result && i < tape->count; ++i) {
+			skips[i] = Read64(bytes+192+8*i);
+			result = skips[i] <= 10000000;
+		}
+		if (result) {
+			memcpy(last_checkpoint, bytes+48, sizeof(last_checkpoint));
+			result = QCX_ReplayInstallSchedule(skips, tape->count);
+		}
+		free(skips);
+	}
+	if (file && fclose(file)) {
+		result = 0;
+	}
+	free(bytes);
+	if (!result) {
+		Con_Printf("QCX replay invalid or artifact-mismatched validation schedule\n");
+	}
+	return result;
+}
+
 int SV_QCXReplayRun(void)
 {
 	qcx_replay_tape_t tape = {0};
@@ -735,16 +840,33 @@ int SV_QCXReplayRun(void)
 		QCX_ReplayTapeFree(&tape);
 		return 0;
 	}
-	int result = QCX_ReplayExecute(&tape, QCX_ReplayMode());
+	LoadFields();
+	int measuring = QCX_ReplayMode() == QCX_REPLAY_MEASURE;
+	int result = (!measuring || ScheduleFile(&tape, 0))
+		&& QCX_ReplayExecute(&tape, QCX_ReplayMode());
+	if (result && !measuring) {
+		result = ScheduleFile(&tape, 1);
+	}
 	char work[512] = "";
 	for (unsigned i = 0; i < QCX_WORK_COUNT; ++i) {
 		size_t used = strlen(work);
 		snprintf(work + used, sizeof(work)-used, "%s%llu", i ? "," : "",
-			(unsigned long long)qcx_replay_work[i]);
+			(unsigned long long)(measuring ? Read64(last_checkpoint+24+8*i) : qcx_replay_work[i]));
 	}
-	Con_Printf("{\"qcx_probe_execution\":{\"ok\":%s,\"events\":%zu,\"checkpoints\":%u,\"begin\":%llu,\"end\":%llu,\"work\":[%s]}}\n",
+	char divergence[32] = "null";
+	if (QCX_ReplayFailureEvent() != UINT64_MAX) {
+		snprintf(divergence, sizeof(divergence), "%llu", (unsigned long long)QCX_ReplayFailureEvent());
+	}
+	Con_Printf("{\"qcx_probe_execution\":{\"ok\":%s,\"events\":%zu,\"checkpoints\":%u,\"begin\":%llu,\"end\":%llu,\"work\":[%s],\"state_guest\":\"%llx\",\"state_engine\":\"%llx\",\"first_divergent_event\":%s}}\n",
 		result ? "true" : "false", tape.count, checkpoints,
-		(unsigned long long)tape.timed_begin, (unsigned long long)tape.timed_end, work);
+		(unsigned long long)tape.timed_begin, (unsigned long long)tape.timed_end, work,
+		(unsigned long long)Read64(last_checkpoint), (unsigned long long)Read64(last_checkpoint+8), divergence);
+	if (result && measuring) {
+		Con_Printf("{\"qcx_probe_measurement\":{\"cpu_seconds\":%.9f,\"simulated_seconds\":%.9f,\"begin\":%llu,\"end\":%llu,\"events\":%llu}}\n",
+			QCX_ReplayCPUSeconds(), tape.events[tape.timed_end].clock.sv_time - tape.events[tape.timed_begin].clock.sv_time,
+			(unsigned long long)tape.timed_begin, (unsigned long long)tape.timed_end,
+			(unsigned long long)(tape.timed_end-tape.timed_begin+1));
+	}
 	QCX_ReplayTapeFree(&tape);
 	return result;
 }

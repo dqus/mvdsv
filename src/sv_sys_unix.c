@@ -475,6 +475,11 @@ Sys_Printf
 */
 void Sys_Printf (char *fmt, ...)
 {
+#ifdef QCX_REPLAY_PROBE
+	if (qcx_replay_timed && !sv_error) {
+		return;
+	}
+#endif
 	va_list     argptr;
 	char        text[4096];
 	char*       startpos;
