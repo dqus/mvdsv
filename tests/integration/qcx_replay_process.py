@@ -5,6 +5,8 @@ import binascii
 import pathlib
 import re
 import struct
+import subprocess
+import json
 import sys
 import tempfile
 import time
@@ -14,6 +16,7 @@ sys.path.insert(0, str(SOURCE / "tools"))
 from profile_qcx import prepare_basedir, server_command, available_udp_port
 from qc2cpp_process import RunningProcess
 from qwsp_restore_auth_acceptance import QWConnection
+from qcx_replay_fields import write_fields
 
 
 def inspect_capture(path):
@@ -75,14 +78,17 @@ def capture(args):
     port = available_udp_port()
     args.output.mkdir(parents=True, exist_ok=True)
     tape = args.output.resolve() / "capture.tape"
+    fields = write_fields(args.game, args.output.resolve() / "fields.txt")
     if tape.exists():
         raise RuntimeError(f"refusing to overwrite {tape}")
     command = server_command(args, base, port)[:-2] + [
-        "-qcx-probe-record", str(tape), "+deathmatch", "4", "+sv_speedcheck", "0",
+        "-qcx-probe-record", str(tape), "-qcx-probe-fields", str(fields), "+deathmatch", "4", "+sv_speedcheck", "0",
         "+sv_antilag", "0", "+sv_minping", "0", "+sv_loadentfiles", "1", "+sv_getrealip", "0",
         "+sv_hashpasswords", "0", "+password", "probepass", "+map", "povdmm4"]
     if getattr(args, "reject_world_key", None):
         command[-2:-2] = ["+localinfo", args.reject_world_key, "1"]
+    if getattr(args, "detail", False):
+        command.insert(1, "-qcx-probe-detail")
     process = RunningProcess(command, args.output / "capture.log")
     clients = []
     try:
@@ -131,10 +137,62 @@ def capture(args):
         process.close()
 
 
+def event_offsets(data):
+    offset = 20
+    for _ in range(3):
+        size = struct.unpack_from("<I", data, offset)[0]
+        offset += 4 + size
+    count = struct.unpack_from("<Q", data, offset + 16)[0]
+    offset += 24
+    for _ in range(count):
+        kind = struct.unpack_from("<I", data, offset)[0]
+        yield kind, offset
+        offset += 48 + (21 if kind in (7, 8) else 0)
+        size = struct.unpack_from("<I", data, offset)[0]
+        offset += 4 + size
+
+
+def replay(args, tape, label, expected):
+    root = pathlib.Path(tempfile.mkdtemp(prefix="qcx-val-", dir="/tmp"))
+    base = prepare_basedir(args, root / "run")
+    command = server_command(args, base, available_udp_port())[:-2] + [
+        "-qcx-probe-replay", str(tape), "-qcx-probe-fields", str(args.output.resolve() / "fields.txt")]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=12)
+    log = result.stdout + result.stderr
+    (args.output / f"{label}.log").write_text(log)
+    rows = [json.loads(line[line.index('{'):]) for line in log.splitlines()
+            if '{"qcx_probe_execution"' in line]
+    ok = result.returncode == 0 and bool(rows) and rows[-1]["qcx_probe_execution"]["ok"]
+    if ok != expected:
+        raise RuntimeError(f"{label}: unexpected validation result, see log")
+    if not expected and "diverged" not in log and "valid tape" not in log:
+        raise RuntimeError(f"{label}: failed without input/state validation evidence")
+    return rows[-1] if rows else {"rejected": True}
+
+
+def integration(args):
+    tape = capture(args)
+    if tape is None:
+        return
+    print("capture-to-replay:", replay(args, tape, "replay", True))
+    data = bytearray(tape.read_bytes())
+    for kind, offset in event_offsets(data):
+        if kind == 7:
+            # Change accepted movement only. Order/clocks/checkpoints remain intact.
+            struct.pack_into("<h", data, offset + 53, -400)
+    changed = args.output.resolve() / "changed.tape"
+    changed.write_bytes(data)
+    print("changed command:", replay(args, changed, "changed", False))
+    truncated = args.output.resolve() / "truncated.tape"
+    truncated.write_bytes(tape.read_bytes()[:-7])
+    print("truncated input:", replay(args, truncated, "truncated", False))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("server", "game", "assets", "output"):
         parser.add_argument(f"--{name}", type=pathlib.Path, required=True)
     parser.add_argument("--reject-command", choices=("kill", "observe", "airstep"))
     parser.add_argument("--reject-world-key", choices=("axe", "dq", "dr"))
-    capture(parser.parse_args())
+    parser.add_argument("--detail", action="store_true")
+    integration(parser.parse_args())
