@@ -61,6 +61,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  * libc calls, and inactive diagnostic builds retain the same RNG sequence. */
 #if defined(QCX_REPLAY_PROBE)
 #include "qcx/replay_probe.h"
+#include "qcx/replay_engine.h"
 #define SV_QCX_RAND() QCX_ReplayRand()
 #else
 #define SV_QCX_RAND() rand()

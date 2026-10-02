@@ -444,6 +444,9 @@ or crashing.
 */
 void SV_DropClient(client_t* drop)
 {
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayUnsupported("client disconnect");
+#endif
 	qbool restoring_qcx_client = false;
 	SV_RD_ClearClient(drop);
 	//bliP: cuff, mute ->
@@ -1749,10 +1752,10 @@ static void SVC_DirectConnect (void)
 #endif
 
 	// call the progs to get default spawn parms for the new client
-	PR_GameSetNewParms();
-
-	for (i=0 ; i<NUM_SPAWN_PARMS ; i++)
-		newcl->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayBootstrapEvent(QCX_REPLAY_ACCEPT, newcl);
+#endif
+	SV_SetNewClientParms(newcl);
 
 	// mvd/qtv related stuff
 	// Well, here is a chance what player connect after demo recording started,
@@ -3565,6 +3568,9 @@ void SV_Frame (double time1)
 	svs.stats.idle += start - end;
 
 	// keep the random time dependent
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayFrameBegin();
+#endif
 	SV_QCX_RAND();
 
 	// decide the simulation time
@@ -3612,13 +3618,23 @@ void SV_Frame (double time1)
 
 	// move autonomous things around if enough time has passed
 	if (!sv.paused) {
+#ifdef QCX_REPLAY_PROBE
+		SV_QCXReplayPhysics();
+#endif
 		SV_Physics();
 #ifdef USE_PR2
 		SV_RunBots();
 #endif
 	}
-	else
+	else {
+#ifdef QCX_REPLAY_PROBE
+		SV_QCXReplayUnsupported("paused frame");
+#endif
 		PausedTic ();
+	}
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayFrameEnd();
+#endif
 
 	// send messages back to the clients that had packets read this frame
 	SV_SendClientMessages ();
@@ -3664,6 +3680,9 @@ SV_InitLocal
 */
 void SV_InitLocal (void)
 {
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayInit();
+#endif
 	int		i;
 	char	cmd_line[1024] = {0};
 
