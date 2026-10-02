@@ -812,6 +812,11 @@ int main (int argc, char *argv[])
 	COM_InitArgv (argc, argv);
 	SV_System_Init(); // daemonize and so...
 	Host_Init(argc, argv, DEFAULT_MEM_SIZE);
+#ifdef QCX_REPLAY_PROBE
+	if (QCX_ReplayMode() == QCX_REPLAY_VALIDATE || QCX_ReplayMode() == QCX_REPLAY_MEASURE) {
+		return SV_QCXReplayRun() ? 0 : 1;
+	}
+#endif
 
 	// run one frame immediately for first heartbeat
 	SV_Frame (0.1);

@@ -3622,6 +3622,21 @@ out:
 	SV_EndRedirect ();
 }
 
+#ifdef QCX_REPLAY_PROBE
+void SV_QCXReplayApplyUserinfo(const char *key, const char *value)
+{
+	char command[QCX_REPLAY_MAX_PAYLOAD];
+	if (strchr(key, '"') || strchr(value, '"')) {
+		SV_Error("QCX replay unsupported quoted setinfo");
+	}
+	int n = snprintf(command, sizeof(command), "setinfo \"%s\" \"%s\"", key, value);
+	if (n < 0 || (size_t)n >= sizeof(command)) {
+		SV_Error("QCX replay oversized setinfo");
+	}
+	SV_ExecuteUserCommand(command);
+}
+#endif
+
 /*
 ===========================================================================
 
@@ -3740,6 +3755,9 @@ static byte playertouch[(MAX_EDICTS+7)/8];
 
 void SV_PreRunCmd(void)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_GROUP);
+#endif
 	memset(playertouch, 0, sizeof(playertouch));
 }
 
@@ -3820,6 +3838,7 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 {
 #ifdef QCX_REPLAY_PROBE
 	if (!inside && !second_attempt) {
+		QCX_REPLAY_COUNT(QCX_WORK_COMMAND);
 		SV_QCXReplayCommand(ucmd);
 	}
 #endif
