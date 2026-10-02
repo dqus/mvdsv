@@ -1,7 +1,8 @@
-foreach(name tape clock_rng)
+foreach(name tape clock_rng capture)
 	add_executable(qcx_replay_${name}_test replay_${name}_test.c
 		${PROJECT_SOURCE_DIR}/src/qcx/replay_tape.c
-		${PROJECT_SOURCE_DIR}/src/qcx/replay_probe.c)
+		${PROJECT_SOURCE_DIR}/src/qcx/replay_probe.c
+		${PROJECT_SOURCE_DIR}/src/qcx/replay_capture.c)
 	set_target_properties(qcx_replay_${name}_test PROPERTIES
 		C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
 	target_include_directories(qcx_replay_${name}_test PRIVATE ${PROJECT_SOURCE_DIR}/src)

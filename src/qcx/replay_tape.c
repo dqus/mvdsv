@@ -80,7 +80,8 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 			return Fail("event clocks or RNG ordinals went backwards");
 		}
 		int client_event = (e->kind >= QCX_REPLAY_ACCEPT && e->kind <= QCX_REPLAY_BEGIN)
-			|| (e->kind >= QCX_REPLAY_GROUP_BEGIN && e->kind <= QCX_REPLAY_GROUP_END);
+			|| (e->kind >= QCX_REPLAY_GROUP_BEGIN && e->kind <= QCX_REPLAY_GROUP_END)
+			|| e->kind == QCX_REPLAY_USERINFO;
 		if ((client_event && e->slot >= tape->clients)
 			|| (!client_event && e->slot != QCX_REPLAY_NO_SLOT)) {
 			return Fail("invalid event client slot");
@@ -101,7 +102,9 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 		case QCX_REPLAY_ACCEPT: case QCX_REPLAY_SETUP: case QCX_REPLAY_BEGIN: {
 			unsigned next = e->kind - QCX_REPLAY_ACCEPT + 1;
 			if (!frame || physics || group != QCX_REPLAY_NO_SLOT || phase[e->slot] + 1 != next) {
-				return Fail("invalid bootstrap order");
+				snprintf(error, sizeof(error), "invalid bootstrap order at %zu kind %u slot %u phase %u frame %u physics %u",
+					i, (unsigned)e->kind, e->slot, phase[e->slot], frame, physics);
+				return 0;
 			}
 			phase[e->slot] = next;
 			break;
@@ -112,6 +115,11 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 			}
 			group = e->slot;
 			commands = 0;
+			break;
+		case QCX_REPLAY_USERINFO:
+			if (!frame || physics || group != QCX_REPLAY_NO_SLOT || phase[e->slot] == 0) {
+				return Fail("userinfo outside admitted-client input phase");
+			}
 			break;
 		case QCX_REPLAY_COMMAND:
 			if (group != e->slot) {
@@ -150,6 +158,11 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 		case QCX_REPLAY_END:
 			if (i + 1 != tape->count || frame || group != QCX_REPLAY_NO_SLOT) {
 				return Fail("missing frame end or trailing events");
+			}
+			for (uint32_t slot = 0; slot < tape->clients; ++slot) {
+				if (phase[slot] != 3) {
+					return Fail("incomplete client bootstrap");
+				}
 			}
 			break;
 		default:
@@ -290,7 +303,8 @@ static int Codec(FILE *f, qcx_replay_tape_t *tape, int w)
 			return Fail("truncated event boundary");
 		}
 		e->kind = (qcx_replay_kind_t)kind;
-		if (e->kind == QCX_REPLAY_COMMAND && !Command(f, &e->command, w)) {
+		if ((e->kind == QCX_REPLAY_COMMAND || e->kind == QCX_REPLAY_GROUP_END)
+			&& !Command(f, &e->command, w)) {
 			return Fail("truncated move command");
 		}
 		if (!U32(f, &e->payload_size, w) || e->payload_size > QCX_REPLAY_MAX_PAYLOAD) {
