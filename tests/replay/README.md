@@ -35,3 +35,20 @@ capture-to-replay validation, changed-movement rejection and truncated-input
 rejection. Its `qcx_replay_fields.py` helper writes `-qcx-probe-fields` input
 from the retained generated tree beside the game artifact. Raw logs/tapes are
 ignored external build artifacts, not committed captures.
+
+MEASURE requires a successful validation schedule bound to the tape, game,
+logical inventory and server binary. The schedule supplies omitted libc RNG
+draws and validated final state/work evidence. This evidence is not recomputed
+inside measurement: counts are cumulative and include the untimed prefix.
+Only one fixed FRAME_BEGIN..FRAME_END segment is timed, once per fresh world,
+using CLOCK_PROCESS_CPUTIME_ID. Detailed counters and logical checkpoints are
+off, and ordinary console/file printing is suppressed during that segment
+(fatal errors remain visible). No live outer server loop, network input,
+timeouts, outbound sends or RTX run during measurement. Common probe overhead
+remains: event/clock dispatch, omitted RNG advancement, inactive observer
+branches, real gameplay packet formatting and output-buffer cleanup.
+
+qc2cpp tools/experiments/qcx_command_replay.py records SHA256 provenance,
+checks retained artifacts, drives capture/validate/sequential pairs with a
+per-arm watchdog, and saves raw JSON/logs. analyze_qcx_command_replay.py refuses
+unequal input/state/work/segment evidence before calculating CPU deltas.
