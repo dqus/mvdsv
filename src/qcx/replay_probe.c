@@ -8,6 +8,7 @@ static const char *path;
 static char error[192];
 static uint64_t rng_draws;
 int qcx_replay_observe;
+int qcx_replay_timed;
 uint64_t qcx_replay_work[QCX_WORK_COUNT];
 
 static int Fail(const char *message)
@@ -25,6 +26,7 @@ int QCX_ReplayConfigure(int argc, char **argv)
 	path = NULL;
 	error[0] = 0;
 	qcx_replay_observe = 0;
+	qcx_replay_timed = 0;
 	memset(qcx_replay_work, 0, sizeof(qcx_replay_work));
 	for (int i = 1; i < argc; ++i) {
 		const char **value = NULL;
