@@ -888,6 +888,7 @@ void SV_RunNewmis (void);
 void SV_RunNQNewmis (void);
 void SV_Impact (edict_t *e1, edict_t *e2);
 void SV_SetMoveVars(void);
+void SV_SetNewClientParms(client_t *client);
 #ifdef USE_PR2
 void SV_RunBots(void);
 #endif

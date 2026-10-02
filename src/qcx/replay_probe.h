@@ -20,4 +20,12 @@ void QCX_ReplayApplyClock(const qcx_replay_clock_t *clock);
 /* Engine clock write, provided by sv_main.c; tests supply real scalar cells. */
 void SV_QCXReplayApplyClock(const qcx_replay_clock_t *clock);
 
+int QCX_ReplayCaptureStart(const qcx_replay_tape_t *header);
+void QCX_ReplayRecordEvent(const qcx_replay_event_t *event);
+int QCX_ReplayCaptureFinish(uint64_t timed_begin, uint64_t timed_end);
+size_t QCX_ReplayCaptureCount(void);
+const char *QCX_ReplayCaptureError(void);
+const qcx_replay_tape_t *QCX_ReplayCapturedTape(void);
+void QCX_ReplayCaptureIdentity(uint32_t clients, const char *asset_identity);
+
 #endif

@@ -946,6 +946,9 @@ static void Cmd_Spawn_f (void)
 	}
 	else
 	{
+#ifdef QCX_REPLAY_PROBE
+		SV_QCXReplayBootstrapEvent(QCX_REPLAY_SETUP, sv_client);
+#endif
 		SetUpClientEdict(sv_client, sv_client->edict);
 	}
 
@@ -1010,6 +1013,33 @@ static void SV_SpawnSpectator (void)
 Cmd_Begin_f
 ==================
 */
+/* The ordinary signon and diagnostic replay share only gameplay initialization,
+ * not password admission, downloads or reliable-channel bookkeeping. */
+void SV_SetNewClientParms(client_t *client)
+{
+	PR_GameSetNewParms();
+	for (int i = 0; i < NUM_SPAWN_PARMS; ++i) {
+		client->spawn_parms[i] = (&PR_GLOBAL(parm1))[i];
+	}
+}
+
+void SV_BeginClientGameplay(void)
+{
+	if (sv_client->spectator) {
+		SV_SpawnSpectator();
+	}
+	for (int i = 0; i < NUM_SPAWN_PARMS; ++i) {
+		(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
+	}
+	pr_global_struct->time = sv.time;
+	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	G_FLOAT(OFS_PARM0) = (float)sv_client->vip;
+	PR_GameClientConnect(sv_client->spectator);
+	pr_global_struct->time = sv.time;
+	pr_global_struct->self = EDICT_TO_PROG(sv_player);
+	PR_GamePutClientInServer(sv_client->spectator);
+}
+
 static void Cmd_Begin_f (void)
 {
 	unsigned pmodel = 0, emodel = 0;
@@ -1046,27 +1076,14 @@ static void Cmd_Begin_f (void)
 		return;
 	}
 #endif
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayBootstrapEvent(QCX_REPLAY_BEGIN, sv_client);
+#endif
 	sv_client->state = cs_spawned;
 
 	if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)
 	{
-		if (sv_client->spectator)
-			SV_SpawnSpectator ();
-
-		// copy spawn parms out of the client_t
-		for (i=0 ; i< NUM_SPAWN_PARMS ; i++)
-			(&PR_GLOBAL(parm1))[i] = sv_client->spawn_parms[i];
-
-		// call the spawn function
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
-		G_FLOAT(OFS_PARM0) = (float) sv_client->vip;
-		PR_GameClientConnect(sv_client->spectator);
-
-		// actually spawn the player
-		pr_global_struct->time = sv.time;
-		pr_global_struct->self = EDICT_TO_PROG(sv_player);
-		PR_GamePutClientInServer(sv_client->spectator);
+		SV_BeginClientGameplay();
 	}
 
 	// clear the net statistics, because connecting gives a bogus picture
@@ -2486,6 +2503,9 @@ static void Cmd_SetInfo_f (void)
 #endif
 
 	strlcpy(oldval, Info_Get(&sv_client->_userinfo_ctx_, Cmd_Argv(1)), sizeof(oldval));
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayUserinfo(Cmd_Argv(1), Cmd_Argv(2));
+#endif
 
 	pr_global_struct->time = sv.time;
 	pr_global_struct->self = EDICT_TO_PROG(sv_player);
@@ -2774,6 +2794,13 @@ static void SetUpClientEdict (client_t *cl, edict_t *ent)
 	// Reset safestrafe state on spawn/respawn
 	memset(&cl->safestrafe, 0, sizeof(cl->safestrafe));
 }
+
+#ifdef QCX_REPLAY_PROBE
+void SV_QCXReplaySetupClient(client_t *client)
+{
+	SetUpClientEdict(client, client->edict);
+}
+#endif
 
 extern cvar_t spectator_password, password;
 extern void MVD_PlayerReset(int player);
@@ -3551,6 +3578,9 @@ static void SV_ExecuteUserCommand (char *s)
 	ucmd_t *u;
 
 	Cmd_TokenizeString (s);
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayClientCommand(Cmd_Argv(0));
+#endif
 	sv_player = sv_client->edict;
 
 	SV_BeginRedirect (RD_CLIENT);
@@ -3773,6 +3803,11 @@ SV_RunCmd
 */
 void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/9
 {
+#ifdef QCX_REPLAY_PROBE
+	if (!inside && !second_attempt) {
+		SV_QCXReplayCommand(ucmd);
+	}
+#endif
 	int i, n;
 	vec3_t originalvel, offset;
 	qbool onground;
@@ -4406,6 +4441,9 @@ static void SV_ExecuteClientMove(client_t* cl, usercmd_t oldest, usercmd_t oldcm
 		return;
 	}
 
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayGroupBegin(cl);
+#endif
 	SV_PreRunCmd();
 
 	net_drop = cl->netchan.dropped;
@@ -4904,6 +4942,9 @@ void SV_ExecuteClientMessage (client_t *cl)
 
 			cl->lastcmd = newcmd;
 			cl->lastcmd.buttons = 0; // avoid multiple fires on lag
+#ifdef QCX_REPLAY_PROBE
+			SV_QCXReplayGroupEnd(cl);
+#endif
 
 			if (sv_antilag.value) {
 				if (cl->antilag_position_next == 0 || cl->antilag_positions[(cl->antilag_position_next - 1) % MAX_ANTILAG_POSITIONS].localtime < cl->localtime) {

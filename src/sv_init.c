@@ -390,6 +390,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	sv.num_signon_buffers = 1;
 
 	sv.time = 1.0;
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayMapStart(mapname, restoring_qc2cpp);
+#endif
 	if (sv.paused) sv.pausedsince = Sys_DoubleTime();
 
 #ifdef FTE_PEXT_CSQC
@@ -678,6 +681,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 
 	// we change map - clear whole demo struct and sent initial state to all dest if any (for QTV only I thought)
 	SV_MVD_Record(NULL, true);
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayMapReady(entitystring);
+#endif
 
 #ifndef SERVERONLY
 	CL_ClearState();
