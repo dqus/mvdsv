@@ -94,7 +94,7 @@ void Netchan_Init (void)
 #ifndef SERVERONLY
 	int		port = 0xffff;
 
-	port &= rand();
+	port &= SV_QCX_RAND();
 
 #endif // SERVERONLY
 

@@ -95,7 +95,7 @@ static void SV_MVD_InitPendingStream (int socket1, netadr_t na, qbool must_be_qi
 
 	strlcpy(dst->challenge, NET_AdrToString(dst->na), sizeof(dst->challenge));
 	for (i = strlen(dst->challenge); i < sizeof(dst->challenge)-1; i++)
-		dst->challenge[i] = rand()%(127-33) + 33;	//generate a random challenge
+		dst->challenge[i] = SV_QCX_RAND()%(127-33) + 33;	//generate a random challenge
 
 	dst->nextdest = demo.pendingdest;
 	demo.pendingdest = dst;

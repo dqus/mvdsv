@@ -57,6 +57,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakeasm.h"
 #include "bothdefs.h"
 
+/* Only diagnostic builds count host RNG draws. Ordinary builds keep direct
+ * libc calls, and inactive diagnostic builds retain the same RNG sequence. */
+#if defined(QCX_REPLAY_PROBE)
+#include "qcx/replay_probe.h"
+#define SV_QCX_RAND() QCX_ReplayRand()
+#else
+#define SV_QCX_RAND() rand()
+#endif
+
 #include "mathlib.h"
 #include "zone.h"
 #include "cvar.h"
