@@ -166,6 +166,9 @@ void QCX_LoadEntities(const char *data)
 
 void QCX_StartFrame(float time, float frametime, qbool is_bot_frame)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_STARTFRAME);
+#endif
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (game == NULL) {
 		SV_Error("qc2cpp game cannot start a frame");
@@ -181,6 +184,9 @@ void QCX_StartFrame(float time, float frametime, qbool is_bot_frame)
 void QCX_EdictTouch(qcx_entity_id_t touched, qcx_entity_id_t toucher, float time,
 	float frametime)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_TOUCH);
+#endif
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (game == NULL) {
 		SV_Error("qc2cpp game cannot dispatch edict touch");
@@ -192,6 +198,9 @@ void QCX_EdictTouch(qcx_entity_id_t touched, qcx_entity_id_t toucher, float time
 
 void QCX_EdictThink(qcx_entity_id_t self, float time, float frametime)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_THINK);
+#endif
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (game == NULL) {
 		SV_Error("qc2cpp game cannot dispatch edict think");
@@ -204,6 +213,9 @@ void QCX_EdictThink(qcx_entity_id_t self, float time, float frametime)
 void QCX_EdictBlocked(qcx_entity_id_t pusher, qcx_entity_id_t obstacle, float time,
 	float frametime)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_BLOCKED);
+#endif
 	const qcx_game_api_v1_t *game = QCX_Game();
 	if (game == NULL) {
 		SV_Error("qc2cpp game cannot dispatch edict blocked");
@@ -232,6 +244,9 @@ static const qcx_game_api_v1_t *QCX_RequireGame(const char *entry)
 
 void QCX_ClientConnect(qcx_entity_id_t self, uint32_t spectator)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_CONNECT);
+#endif
 	QCX_CALL_CLIENT("client connect", game->client_connect(game->context, self, spectator));
 #if defined(QCX_TESTS)
 	QCX_TestObserverClientConnect(self);
@@ -240,6 +255,9 @@ void QCX_ClientConnect(qcx_entity_id_t self, uint32_t spectator)
 
 void QCX_PutClientInServer(qcx_entity_id_t self, uint32_t spectator)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_PUT);
+#endif
 	QCX_CALL_CLIENT("put client in server", game->put_client_in_server(game->context, self, spectator));
 #if defined(QCX_TESTS)
 	QCX_TestObserverPutClientInServer(self, spectator);
@@ -300,6 +318,9 @@ uint32_t QCX_ClientSay(qcx_entity_id_t self, uint32_t team, const uint8_t *text,
 void QCX_ClientPreThink(qcx_entity_id_t self, float time, float frametime,
 	uint32_t spectator)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_PRETHINK);
+#endif
 	QCX_CALL_CLIENT("client prethink", game->client_prethink(game->context, self,
 		time, frametime, spectator));
 #if defined(QCX_TESTS)
@@ -309,6 +330,9 @@ void QCX_ClientPreThink(qcx_entity_id_t self, float time, float frametime,
 
 void QCX_ClientPostThink(qcx_entity_id_t self, float time, uint32_t spectator)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_POSTTHINK);
+#endif
 	const qcx_game_api_v1_t *const game = QCX_RequireGame("client postthink");
 	const globalvars_t *const globals = QCX_Globals();
 	if (globals == NULL) {
@@ -328,6 +352,9 @@ void QCX_ClientPostThink(qcx_entity_id_t self, float time, uint32_t spectator)
 
 void QCX_SetNewParms(float out_parms[16])
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_NEWPARMS);
+#endif
 	QCX_CALL_CLIENT("set new parms", game->set_new_parms(game->context, out_parms));
 }
 
