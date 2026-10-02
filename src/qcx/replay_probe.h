@@ -12,6 +12,7 @@ enum qcx_replay_work_kind { QCX_WORK_FRAME, QCX_WORK_GROUP, QCX_WORK_COMMAND,
 	QCX_WORK_THINK, QCX_WORK_TOUCH, QCX_WORK_BLOCKED, QCX_WORK_CONNECT,
 	QCX_WORK_PUT, QCX_WORK_ALLOC, QCX_WORK_FREE, QCX_WORK_NEWPARMS, QCX_WORK_COUNT };
 extern int qcx_replay_observe;
+extern int qcx_replay_timed;
 extern uint64_t qcx_replay_work[QCX_WORK_COUNT];
 #define QCX_REPLAY_COUNT(kind) do { if (qcx_replay_observe) { ++qcx_replay_work[kind]; } } while (0)
 
@@ -36,6 +37,11 @@ const char *QCX_ReplayCaptureError(void);
 const qcx_replay_tape_t *QCX_ReplayCapturedTape(void);
 void QCX_ReplayCaptureIdentity(uint32_t clients, const char *asset_identity);
 int QCX_ReplayExecute(const qcx_replay_tape_t *tape, qcx_replay_mode_t mode);
+double SV_QCXReplayProcessCPU(void);
+double QCX_ReplayCPUSeconds(void);
+uint64_t QCX_ReplayFailureEvent(void);
+const uint64_t *QCX_ReplaySchedule(size_t *count);
+int QCX_ReplayInstallSchedule(const uint64_t *skips, size_t count);
 /* The engine dispatches existing gameplay paths; standalone tests use a trace. */
 int SV_QCXReplayDispatch(qcx_replay_event_t *event, const qcx_replay_tape_t *tape);
 
