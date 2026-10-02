@@ -20,5 +20,9 @@ void SV_QCXReplayUnsupported(const char *reason);
 void SV_QCXReplayClientCommand(const char *name);
 void SV_BeginClientGameplay(void);
 void SV_QCXReplaySetupClient(struct client_s *client);
+int SV_QCXReplayRun(void);
+void SV_QCXReplayOutputEvent(struct client_s *client, unsigned fields);
+void SV_QCXReplayApplyOutput(struct client_s *client, unsigned fields);
+void SV_QCXReplayApplyUserinfo(const char *key, const char *value);
 
 #endif

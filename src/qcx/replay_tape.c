@@ -81,7 +81,7 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 		}
 		int client_event = (e->kind >= QCX_REPLAY_ACCEPT && e->kind <= QCX_REPLAY_BEGIN)
 			|| (e->kind >= QCX_REPLAY_GROUP_BEGIN && e->kind <= QCX_REPLAY_GROUP_END)
-			|| e->kind == QCX_REPLAY_USERINFO;
+			|| e->kind == QCX_REPLAY_USERINFO || e->kind == QCX_REPLAY_OUTPUT;
 		if ((client_event && e->slot >= tape->clients)
 			|| (!client_event && e->slot != QCX_REPLAY_NO_SLOT)) {
 			return Fail("invalid event client slot");
@@ -150,8 +150,14 @@ int QCX_ReplayTapeValidate(const qcx_replay_tape_t *tape)
 			}
 			frame = 0;
 			break;
+		case QCX_REPLAY_OUTPUT:
+			if (!frame || !physics || group != QCX_REPLAY_NO_SLOT || phase[e->slot] != 3
+				|| e->payload_size != 1 || e->payload[0] < 1 || e->payload[0] > 2) {
+				return Fail("invalid client output bookkeeping");
+			}
+			break;
 		case QCX_REPLAY_CHECKPOINT:
-			if (!i || group != QCX_REPLAY_NO_SLOT) {
+			if (!i || group != QCX_REPLAY_NO_SLOT || e->payload_size != 144) {
 				return Fail("checkpoint inside move group");
 			}
 			break;

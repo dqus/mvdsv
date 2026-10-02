@@ -147,6 +147,8 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 	if(MVDSV_QCX_REPLAY_PROBE)
 		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/replay_tape.c" "${DIR_SRC}/qcx/replay_probe.c"
 			"${DIR_SRC}/qcx/replay_capture.c" "${DIR_SRC}/qcx/replay_engine.c")
+		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/replay_execution.c")
+		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/replay_checkpoint.c")
 	endif()
 endif()
 

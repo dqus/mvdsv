@@ -3579,12 +3579,11 @@ void SV_Frame (double time1)
 #endif
 		PausedTic ();
 	}
+	// send messages back to the clients that had packets read this frame
+	SV_SendClientMessages ();
 #ifdef QCX_REPLAY_PROBE
 	SV_QCXReplayFrameEnd();
 #endif
-
-	// send messages back to the clients that had packets read this frame
-	SV_SendClientMessages ();
 
 #if defined(SERVERONLY) && defined(WWW_INTEGRATION)
 	Central_ProcessResponses();
@@ -4257,6 +4256,12 @@ void Host_Init (int argc, char **argv, int default_memsize)
 	Cbuf_Execute ();
 
 	host_everything_loaded = true;
+#ifdef QCX_REPLAY_PROBE
+	/* Replay owns the MAP event. Do not spawn fallback/default maps first. */
+	if (QCX_ReplayMode() == QCX_REPLAY_VALIDATE || QCX_ReplayMode() == QCX_REPLAY_MEASURE) {
+		return;
+	}
+#endif
 
 	SV_Map(true);
 

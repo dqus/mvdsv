@@ -949,6 +949,9 @@ SV_Physics
 */
 void SV_Physics (void)
 {
+#ifdef QCX_REPLAY_PROBE
+	QCX_REPLAY_COUNT(QCX_WORK_PHYSICS);
+#endif
 	int i;
 	client_t *cl,*savehc;
 	edict_t *savesvpl;

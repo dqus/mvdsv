@@ -712,6 +712,27 @@ SV_WriteClientdataToMessage
  
 ==================
 */
+static void SV_ConsumeClientdata(client_t *client, unsigned fields)
+{
+#ifdef QCX_REPLAY_PROBE
+	SV_QCXReplayOutputEvent(client, fields);
+#endif
+	if (fields == 1) {
+		client->edict->v->dmg_take = 0;
+		client->edict->v->dmg_save = 0;
+	}
+	else if (fields == 2) {
+		client->edict->v->fixangle = 0;
+	}
+}
+
+#ifdef QCX_REPLAY_PROBE
+void SV_QCXReplayApplyOutput(client_t *client, unsigned fields)
+{
+	SV_ConsumeClientdata(client, fields);
+}
+#endif
+
 void SV_WriteClientdataToMessage (client_t *client, sizebuf_t *msg)
 {
 	int		i, clnum;
@@ -740,8 +761,7 @@ void SV_WriteClientdataToMessage (client_t *client, sizebuf_t *msg)
 		for (i=0 ; i<3 ; i++)
 			MSG_WriteCoord (msg, other->v->origin[i] + 0.5*(other->v->mins[i] + other->v->maxs[i]));
 
-		ent->v->dmg_take = 0;
-		ent->v->dmg_save = 0;
+		SV_ConsumeClientdata(client, 1);
 	}
 
 	// add this to server demo
@@ -756,7 +776,7 @@ void SV_WriteClientdataToMessage (client_t *client, sizebuf_t *msg)
 	// a fixangle might get lost in a dropped packet.  Oh well.
 	if (ent->v->fixangle)
 	{
-		ent->v->fixangle = 0;
+		SV_ConsumeClientdata(client, 2);
 		demo.fixangle[clnum] = true;
 
 		MSG_WriteByte(msg, svc_setangle);
