@@ -77,8 +77,13 @@ void QCX_InitProg(void)
 	QCX_TestObserverInitBegin();
 #endif
 	QCX_AdapterStateEnter(&qcx_state);
+#if defined(QCX_REPLAY_PROBE)
+	unsigned guest_seed = QCX_ReplayGuestSeed((uint32_t)time(NULL) & 0x00ffffffU);
+#else
+	unsigned guest_seed = (uint32_t)time(NULL) & 0x00ffffffU;
+#endif
 	const qcx_guest_address_t entity_publication = game->init(game->context,
-		(int32_t)(sv.time * 1000.0), (uint32_t)time(NULL) & 0x00ffffffU);
+		(int32_t)(sv.time * 1000.0), guest_seed);
 	QCX_AdapterStateLeave(&qcx_state);
 #if defined(QCX_TESTS)
 	QCX_TestObserverInitEnd();

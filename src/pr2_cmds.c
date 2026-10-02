@@ -963,7 +963,7 @@ void PF2_MoveToGoal(float dist)
 	oldself = pr_global_struct->self;
 
 	// bump around...
-	if ( (rand()&3)==1 || !SV_StepDirection (ent, ent->v->ideal_yaw, dist))
+	if ( (SV_QCX_RAND()&3)==1 || !SV_StepDirection (ent, ent->v->ideal_yaw, dist))
 	{
 		SV_NewChaseDir (ent, goal, dist);
 	}
@@ -2006,7 +2006,7 @@ static uint32_t GetExtFieldCookie(void)
 	static uint32_t cookie = 0;
 	while (cookie == 0)
 	{
-		cookie = ((uint32_t)(rand() & 0xFFFF)) << 16;
+		cookie = ((uint32_t)(SV_QCX_RAND() & 0xFFFF)) << 16;
 	}
 	return cookie;
 }

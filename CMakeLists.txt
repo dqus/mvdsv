@@ -8,6 +8,7 @@ project(mvdsv C)
 option(MVDSV_QC2CPP_NATIVE "Enable the qc2cpp native game transport" OFF)
 option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
 option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
+option(MVDSV_QCX_REPLAY_PROBE "Build the isolated QCX command replay diagnostic" OFF)
 option(USE_PR2 "Enable PR2 program dispatch" ON)
 set(QC2CPP_COMPILER "" CACHE FILEPATH
 	"Optional qc2cpp compiler used by external generated-fixture tests")
@@ -36,6 +37,10 @@ endif()
 
 if(MVDSV_QC2CPP_TESTS AND NOT MVDSV_QC2CPP_NATIVE)
 	message(FATAL_ERROR "MVDSV_QC2CPP_TESTS requires MVDSV_QC2CPP_NATIVE=ON")
+endif()
+
+if(MVDSV_QCX_REPLAY_PROBE AND NOT MVDSV_QC2CPP_NATIVE)
+	message(FATAL_ERROR "MVDSV_QCX_REPLAY_PROBE requires MVDSV_QC2CPP_NATIVE=ON")
 endif()
 
 
@@ -138,6 +143,9 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 	)
 	if(MVDSV_QC2CPP_TESTS)
 		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/test_observer.c")
+	endif()
+	if(MVDSV_QCX_REPLAY_PROBE)
+		list(APPEND SRC_COMMON "${DIR_SRC}/qcx/replay_tape.c" "${DIR_SRC}/qcx/replay_probe.c")
 	endif()
 endif()
 
@@ -289,6 +297,12 @@ if(MVDSV_QC2CPP_TESTS)
 	enable_testing()
 	add_subdirectory(tests/qcx)
 	add_subdirectory(tests/integration)
+endif()
+
+if(MVDSV_QCX_REPLAY_PROBE)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_REPLAY_PROBE=1)
+	enable_testing()
+	add_subdirectory(tests/replay)
 endif()
 
 

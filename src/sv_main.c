@@ -39,6 +39,15 @@ double      realtime;			// affected by pause, you should not use it unless it so
 
 static int  host_hunklevel;
 
+#if defined(QCX_REPLAY_PROBE)
+void SV_QCXReplayApplyClock(const qcx_replay_clock_t *clock)
+{
+	sv.time = clock->sv_time;
+	realtime = clock->realtime;
+	curtime = clock->curtime;
+}
+#endif
+
 #else
 
 qbool       server_cfg_done = false;
@@ -881,7 +890,7 @@ static void SVC_GetChallenge (void)
 	if (i == MAX_CHALLENGES)
 	{
 		// overwrite the oldest
-		svs.challenges[oldest].challenge = (rand() << 16) ^ rand();
+		svs.challenges[oldest].challenge = (SV_QCX_RAND() << 16) ^ SV_QCX_RAND();
 		svs.challenges[oldest].adr = net_from;
 		svs.challenges[oldest].time = realtime;
 		i = oldest;
@@ -1672,7 +1681,7 @@ static void SVC_DirectConnect (void)
 	newcl->lockedtill = 0;
 	newcl->disable_updates_stop = -1.0; // Vladis
 
-	newcl->realip_num = rand();
+	newcl->realip_num = SV_QCX_RAND();
 
 	// Reset safestrafe state
 	memset(&newcl->safestrafe, 0, sizeof(newcl->safestrafe));
@@ -3503,7 +3512,7 @@ void SV_Frame (double time1)
 	svs.stats.idle += start - end;
 
 	// keep the random time dependent
-	rand ();
+	SV_QCX_RAND();
 
 	// decide the simulation time
 	if (!sv.paused)
@@ -4170,7 +4179,14 @@ void Host_Init (int argc, char **argv, int default_memsize)
 	extern int		hunk_size;
 	cvar_t			*v;
 
+#if defined(QCX_REPLAY_PROBE)
+	if (!QCX_ReplayConfigure(argc, argv)) {
+		Sys_Error("QCX replay: %s", QCX_ReplayProbeError());
+	}
+	QCX_ReplaySeedHost(QCX_ReplayMode() == QCX_REPLAY_OFF ? (unsigned)time(NULL) : 1U);
+#else
 	srand((unsigned)time(NULL));
+#endif
 
 	COM_InitArgv (argc, argv);
 
