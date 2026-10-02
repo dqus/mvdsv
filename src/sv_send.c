@@ -145,6 +145,11 @@ Handles cursor positioning, line wrapping, etc
 #define	MAXPRINTMSG	4096
 void Con_Printf (char *fmt, ...)
 {
+#ifdef QCX_REPLAY_PROBE
+	if (qcx_replay_timed && !sv_error) {
+		return;
+	}
+#endif
 	va_list argptr;
 	char msg[MAXPRINTMSG];
 
