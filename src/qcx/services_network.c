@@ -13,12 +13,6 @@ enum {
 	QCX_MSG_MULTICAST = 4,
 };
 
-enum {
-	QCX_SPECPRINT_CENTERPRINT = 0x1,
-	QCX_SPECPRINT_SPRINT = 0x2,
-	QCX_SPECPRINT_STUFFCMD = 0x4,
-};
-
 static edict_t *QCX_RequireNetworkEdict(qcx_entity_id_t slot)
 {
 	edict_t *const entity = QCX_SlotToEdict(slot);
@@ -103,21 +97,11 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (QCX_CopyText(text, text_size, local, sizeof(local), "sprint")) {
-		client_t *const client = QCX_RequireClient(entity);
-		SV_ClientPrintf(client, (int)level, "%s", local);
-		if ((int)sv_specprint.value & QCX_SPECPRINT_SPRINT) {
-			const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity));
-			for (int index = 0; index < MAX_CLIENTS; ++index) {
-				client_t *const spectator = &svs.clients[index];
-				if (client->state && spectator->spectator
-					&& spectator->spec_track == entnum
-					&& (client->spec_print & QCX_SPECPRINT_SPRINT)) {
-					SV_ClientPrintf(spectator, (int)level, "%s", local);
-				}
-			}
-		}
+	if (!QCX_CopyText(text, text_size, local, sizeof(local), "sprint")) {
+		return;
 	}
+	(void)QCX_RequireClient(entity);
+	PF2_sprint(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), (int)level, local, 0);
 }
 
 static void QCX_WriteByte(void *context, float destination, float value,

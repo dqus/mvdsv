@@ -293,7 +293,7 @@ set_target_properties(qcx_client_test PROPERTIES
 target_include_directories(qcx_client_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
-target_compile_options(qcx_client_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_client_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_client_test PRIVATE
 	QCX_ENABLED=1
 	SERVERONLY
@@ -301,6 +301,25 @@ target_compile_definitions(qcx_client_test PRIVATE
 	__LITTLE_ENDIAN__Q__)
 target_link_libraries(qcx_client_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_client COMMAND qcx_client_test)
+
+add_executable(qcx_sprint_test sprint_test.c ${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
+set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/pr2_cmds.c APPEND PROPERTY
+	COMPILE_OPTIONS -Wno-sign-compare -Wno-unused-parameter -Wno-unused-but-set-variable)
+set_target_properties(qcx_sprint_test PROPERTIES
+	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(qcx_sprint_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_sprint_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_sprint_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_sprint_test PRIVATE Qc2cppHost::native)
+if(APPLE)
+	target_link_options(qcx_sprint_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_sprint_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_sprint COMMAND qcx_sprint_test)
 
 add_executable(qcx_client_command_payload_test
 	client_command_payload_test.c
@@ -659,6 +678,7 @@ foreach(test_name IN ITEMS
 	qcx_entities
 	qcx_services_world
 	qcx_client
+	qcx_sprint
 	qcx_client_command_payload
 	qcx_client_routes
 	qcx_pr2_api_routes

@@ -80,6 +80,15 @@ void PF2_stuffcmd(int entnum, char *text, int flags)
 	++stuffcmd_calls;
 }
 
+void PF2_sprint(int entnum, int level, char *text, int flags)
+{
+	assert(entnum == 1);
+	assert(level == 1);
+	assert(!strcmp(text, "client"));
+	assert(flags == 0);
+	strlcpy(printed, text, sizeof(printed));
+}
+
 void PF2_centerprint(int entnum, char *text)
 {
 	assert(entnum == 1);

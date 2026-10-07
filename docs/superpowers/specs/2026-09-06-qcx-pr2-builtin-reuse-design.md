@@ -63,6 +63,12 @@ Movement services:
 Network services:
 
 - `stuffcmd` -> `PF2_stuffcmd(entnum, text, 0)` after QCX validation
+- `sprint` -> `PF2_sprint(entnum, level, text, 0)` after QCX validation.
+  QCX intentionally adopts PR2's suppression below `cs_connected` and its
+  per-observer `state`, `spec_track`, and `spec_print` routing. Engine-owned
+  sign-on/restore messages continue to use `SV_ClientPrintf` directly; they
+  do not require a separate early-output QCX builtin path. Flags remain zero
+  so ordinary demo-recorded printing is preserved.
 - `centerprint` -> `PF2_centerprint`
 - `logfrag` -> `PF2_logfrag`
 - `multicast` -> `PF2_multicast`
@@ -79,7 +85,6 @@ Keep the existing QCX implementation when the PR2 helper is VM-output-specific, 
 - `remove`
 - `traceline`
 - `bprint`
-- `sprint` (PR2 suppresses output below `cs_connected`)
 - `dprint` (PR2 uses `Con_DPrintf`, QCX currently uses `Con_Printf`)
 - `checkbottom`
 - `aim`
