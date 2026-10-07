@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-06-qcx-pr2-builtin-reuse-design.md`
 
+**Follow-up (2026-10-08):** The historical decision below to keep `sprint`
+separate is superseded by the spec's direct `PF2_sprint(..., 0)` reuse. QCX
+adopts the `cs_connected` guard and per-observer routing; `qcx_sprint` tests
+link the real PR2 implementation. The completed original steps are retained
+as implementation history.
+
 ## Global Constraints
 
 - Code baseline is commit `c354f68a7c2ceb60ae9098b53018956ab82f2d61`; it must remain an ancestor of the implementation branch.
