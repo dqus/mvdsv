@@ -126,6 +126,7 @@ int		PF2_walkmove(edict_t *entity, float yaw, float distance);
 int		PF2_droptofloor(edict_t *entity);
 int		PF2_pointcontents(float x, float y, float z);
 void		PF2_stuffcmd(int entnum, char *text, int flags);
+void		PF2_sprint(int entnum, int level, char *text, int flags);
 void		PF2_centerprint(int entnum, char *text);
 void		PF2_logfrag(int killer_entnum, int victim_entnum);
 void		PF2_multicast(float x, float y, float z, int destination);
