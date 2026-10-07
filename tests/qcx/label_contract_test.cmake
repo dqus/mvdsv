@@ -26,6 +26,7 @@ set(expected_fast
 	qcx_entities
 	qcx_services_world
 	qcx_client
+	qcx_sprint
 	qcx_client_command_payload
 	qcx_client_routes
 	qcx_pr2_api_routes
