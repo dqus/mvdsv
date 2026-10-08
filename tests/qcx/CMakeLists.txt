@@ -79,9 +79,7 @@ target_compile_options(qcx_transport_test PRIVATE
 	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_transport_test PRIVATE QCX_NATIVE=1)
 if(MVDSV_QC2CPP_WASM)
-	target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
-	set_property(TARGET qcx_transport_test APPEND PROPERTY BUILD_RPATH
-		"${MVDSV_WASMTIME_ROOT}/lib")
+	target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::wasmtime)
 	target_compile_definitions(qcx_transport_test PRIVATE QCX_WASM=1)
 endif()
 target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::contract ${CMAKE_DL_LIBS})
