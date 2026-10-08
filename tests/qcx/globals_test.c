@@ -66,6 +66,67 @@ static void assert_invalid_globals_fixture(const char *directory, const char *na
 	QCX_TransportClose(transport);
 }
 
+static void assert_global_field_validation(void)
+{
+	qcx_engine_field_exports_v1_t *fields = NULL;
+	assert(active_game->memory_view(active_game->context,
+		active_game->engine_fields(active_game->context), sizeof(*fields),
+		_Alignof(qcx_engine_field_exports_v1_t), (void **)&fields) == QCX_PLUGIN_OK);
+	qcx_engine_field_descriptor_v1_t *descriptors = NULL;
+	assert(active_game->memory_view(active_game->context,
+		fields->global_fields.descriptors, 3U * sizeof(*descriptors),
+		_Alignof(qcx_engine_field_descriptor_v1_t), (void **)&descriptors) == QCX_PLUGIN_OK);
+	const qcx_engine_field_descriptor_v1_t saved_coop = descriptors[1];
+	const qcx_engine_field_table_v1_t saved_table = fields->global_fields;
+
+	fields->reserved0 = 1U;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	fields->reserved0 = 0U;
+	descriptors[1].access_flags |= UINT32_C(4);
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[1] = saved_coop;
+	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[1] = saved_coop;
+	descriptors[1].offset = fields->globals_size;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[1] = saved_coop;
+	descriptors[1].name = descriptors[0].name;
+	descriptors[1].type_id = 0U;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[1] = saved_coop;
+	descriptors[1].name.reserved0 = 1U;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[1] = saved_coop;
+	fields->global_fields.descriptor_stride = sizeof(*descriptors) - 1U;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	fields->global_fields = saved_table;
+	fields->global_fields.count = UINT32_MAX;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	fields->global_fields = saved_table;
+	fields->global_fields.count = 0U;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	fields->global_fields = saved_table;
+
+	/* No failed configuration may write the requested values into the game. */
+	active_game->start_frame(active_game->context, 17.0f, 0.1f, 0U);
+	assert(QCX_Globals()->parm1 == 1.0f);
+	assert(QCX_Globals()->parm2 == 2.0f);
+	assert(QCX_Globals()->parm3 == 3.0f);
+
+	/* Rename coop to an unknown, valid name: coop is genuinely optional. */
+	descriptors[1].name = descriptors[0].name;
+	descriptors[1].name.size = 4U; /* "deat" */
+	descriptors[1].type_id = 0U;
+	assert(QCX_ConfigureGlobals(4.0f, 5.0f, 6.0f));
+	active_game->start_frame(active_game->context, 17.0f, 0.1f, 0U);
+	assert(QCX_Globals()->parm1 == 4.0f);
+	assert(QCX_Globals()->parm2 == 2.0f);
+	assert(QCX_Globals()->parm3 == 6.0f);
+	descriptors[1] = saved_coop;
+	assert(QCX_ConfigureGlobals(1.0f, 2.0f, 3.0f));
+}
+
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
@@ -76,6 +137,7 @@ int main(int argc, char **argv)
 	active_game = QCX_TransportGame(transport);
 	assert(active_game->init(active_game->context, 0, 1U) != 0U);
 	assert(QCX_ConfigureGlobals(1.0f, 2.0f, 3.0f));
+	assert_global_field_validation();
 	assert(pr_global_struct == (globalvars_t *)QCX_Globals());
 	assert(pr_globals == (float *)QCX_Globals());
 	legacy_globals.time = 101.0f;
