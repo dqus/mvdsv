@@ -252,7 +252,7 @@ set_target_properties(qcx_entities_test PROPERTIES
 target_include_directories(qcx_entities_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
-target_compile_options(qcx_entities_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_entities_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_entities_test PRIVATE
 	QCX_ENABLED=1
 	QCX_NATIVE=1
