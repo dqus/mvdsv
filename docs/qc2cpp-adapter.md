@@ -14,8 +14,10 @@ This is the MVDSV operations guide; it does not redefine either contract.
 ## Prerequisites
 
 Build and install the qc2cpp host SDK. Native needs only its C host SDK; Wasm
-also needs the qc2cpp Wasmtime component, a Wasmtime C API SDK, and the WASI
-SDK used to compile the game.
+also needs the qc2cpp Wasmtime component and the WASI SDK used to compile the
+game. Building the host component requires a Wasmtime C API SDK; its selected
+runtime library is bundled in the installed qc2cpp SDK, so MVDSV needs no
+separate Wasmtime installation.
 
 ```sh
 # In the qc2cpp checkout.
@@ -61,7 +63,6 @@ cmake -S . -B build/qc2cpp-wasm -G Ninja \
   -DCMAKE_PREFIX_PATH=/path/to/qc2cpp-sdk \
   -DMVDSV_QC2CPP_NATIVE=ON -DMVDSV_QC2CPP_WASM=ON \
   -DMVDSV_QC2CPP_TESTS=ON \
-  -DMVDSV_WASMTIME_ROOT=/path/to/wasmtime-sdk \
   -DQC2CPP_WASI_SDK_ROOT=/path/to/wasi-sdk \
   -DQC2CPP_COMPILER=/path/to/qc2cpp \
   -DQC2CPP_CHECKER=/path/to/qc2cpp-check \

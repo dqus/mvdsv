@@ -23,8 +23,6 @@ set(QC2CPP_ASSET_DIR "" CACHE PATH
 	"Local QW acceptance assets (PAKs and/or maps); never modified by the build")
 set(QC2CPP_FTE_CLIENT "" CACHE FILEPATH
 	"Optional FTE client with qc2cpp acceptance observations")
-set(MVDSV_WASMTIME_ROOT "" CACHE PATH
-	"Root of the Wasmtime C API SDK required by MVDSV_QC2CPP_WASM")
 
 if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM OR MVDSV_QC2CPP_TESTS)
 	if(NOT USE_PR2)
@@ -33,11 +31,6 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM OR MVDSV_QC2CPP_TESTS)
 	find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS contract)
 	if(MVDSV_QC2CPP_WASM)
 		find_package(Qc2cppHost CONFIG REQUIRED COMPONENTS wasmtime)
-		find_library(MVDSV_WASMTIME_LIBRARY NAMES wasmtime
-			HINTS "${MVDSV_WASMTIME_ROOT}/lib" NO_DEFAULT_PATH)
-		if(NOT MVDSV_WASMTIME_LIBRARY)
-			message(FATAL_ERROR "MVDSV_QC2CPP_WASM requires MVDSV_WASMTIME_ROOT with lib/libwasmtime")
-		endif()
 	endif()
 endif()
 
@@ -285,9 +278,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_NATIVE=1)
 	endif()
 	if(MVDSV_QC2CPP_WASM)
-		target_link_libraries(${PROJECT_NAME} Qc2cppHost::wasmtime ${MVDSV_WASMTIME_LIBRARY})
-		set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY BUILD_RPATH
-			"${MVDSV_WASMTIME_ROOT}/lib")
+		target_link_libraries(${PROJECT_NAME} Qc2cppHost::wasmtime)
 		target_compile_definitions(${PROJECT_NAME} PRIVATE QCX_WASM=1)
 	endif()
 endif()

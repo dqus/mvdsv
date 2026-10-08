@@ -18,8 +18,8 @@ them. The coverage ledger is `tests/qcx/host-imports.tsv`.
   before the legacy VM/PR1 path. A selected qc2cpp transport load failure is a
   server error; it does not fall through to PR1.
 - Native-only builds use the installed C host SDK and have no Wasmtime link.
-- Wasm builds additionally require `-DMVDSV_WASMTIME_ROOT=/path/to/wasmtime-sdk`;
-  it provides the runtime library required by the optional SDK facade.
+- Wasm builds use the SDK's Wasmtime component, which bundles its selected
+  runtime library. MVDSV does not separately discover or link Wasmtime.
 - A qc2cpp game publishes one ABI-validated shared globals block. Common QW
   scalar reads and writes use typed accessors into that block; the old VM
   globals remain only on the legacy/NQ path.
