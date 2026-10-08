@@ -1,10 +1,10 @@
 #include "qcx/globals.h"
+#include "qcx/engine_fields.h"
 #include "qcx/layout_contract.h"
 
 #include "qwsvdef.h"
 #include "game/plugin_api.h"
 
-#include <limits.h>
 #include <string.h>
 
 const qcx_game_api_v1_t *QCX_Game(void);
@@ -19,68 +19,6 @@ static float *qcx_teamplay;
 static globalvars_t *qcx_previous_global_struct;
 static float *qcx_previous_globals;
 static qbool qcx_globals_bound;
-
-static qcx_engine_type_id_t QCX_EngineTypeId(const char *name)
-{
-	qcx_engine_type_id_t result = UINT64_C(14695981039346656037);
-	while (*name != '\0') {
-		result ^= (uint8_t)*name++;
-		result *= UINT64_C(1099511628211);
-	}
-	return result;
-}
-
-static float *QCX_ResolveGlobalFloat(const qcx_game_api_v1_t *game,
-	const qcx_engine_field_table_v1_t *table, const char *name)
-{
-	if (table->count == 0U || table->descriptors == 0U
-		|| table->descriptor_stride < sizeof(qcx_engine_field_descriptor_v1_t)
-		|| table->descriptor_stride % _Alignof(qcx_engine_field_descriptor_v1_t) != 0U) {
-		return NULL;
-	}
-	const uint64_t last = (uint64_t)(table->count - 1U) * table->descriptor_stride;
-	const uint64_t envelope = last + sizeof(qcx_engine_field_descriptor_v1_t);
-	if (last > UINT32_MAX || envelope > UINT32_MAX) {
-		return NULL;
-	}
-	void *table_view = NULL;
-	if (game->memory_view(game->context, table->descriptors, (qcx_byte_count_t)envelope,
-		_Alignof(qcx_engine_field_descriptor_v1_t), &table_view) != QCX_PLUGIN_OK
-		|| table_view == NULL) {
-		return NULL;
-	}
-	float *result = NULL;
-	for (uint32_t index = 0U; index < table->count; ++index) {
-		const qcx_engine_field_descriptor_v1_t *descriptor =
-			(const qcx_engine_field_descriptor_v1_t *)((const uint8_t *)table_view
-				+ (size_t)index * table->descriptor_stride);
-		if (descriptor->name.data == 0U || descriptor->name.size == 0U
-			|| descriptor->name.reserved0 != 0U || descriptor->type_id != QCX_EngineTypeId("qc.f32")
-			|| descriptor->size != sizeof(float) || descriptor->alignment != _Alignof(float)
-			|| descriptor->offset % descriptor->alignment != 0U
-			|| (descriptor->access_flags & QCX_ENGINE_FIELD_HOST_WRITE) == 0U
-			|| qcx_global_object_size < descriptor->size
-			|| descriptor->offset > qcx_global_object_size - descriptor->size
-			|| qcx_global_object_base > UINT64_MAX - descriptor->offset) {
-			continue;
-		}
-		void *name_view = NULL;
-		if (game->memory_view(game->context, descriptor->name.data, descriptor->name.size,
-			1U, &name_view) != QCX_PLUGIN_OK || name_view == NULL
-			|| strlen(name) != descriptor->name.size
-			|| memcmp(name_view, name, descriptor->name.size) != 0) {
-			continue;
-		}
-		void *field_view = NULL;
-		if (game->memory_view(game->context, qcx_global_object_base + descriptor->offset,
-			descriptor->size, descriptor->alignment, &field_view) != QCX_PLUGIN_OK
-			|| field_view == NULL || result != NULL) {
-			return NULL;
-		}
-		result = field_view;
-	}
-	return result;
-}
 
 globalvars_t *QCX_Globals(void)
 {
@@ -127,24 +65,31 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 	if (game == NULL || QCX_Globals() == NULL) {
 		return 0;
 	}
-	const qcx_guest_address_t address = game->engine_fields(game->context);
-	qcx_engine_field_exports_v1_t *fields = NULL;
-	if (address == 0U
-		|| game->memory_view(game->context, address, sizeof(*fields),
-			_Alignof(qcx_engine_field_exports_v1_t), (void **)&fields) != QCX_PLUGIN_OK
-		|| fields == NULL
-		|| fields->abi_version != QCX_ENGINE_FIELD_EXPORTS_ABI_VERSION_V1
-		|| fields->struct_size < sizeof(*fields)
-		|| fields->globals_base != qcx_global_object_base
-		|| fields->globals_size != qcx_global_object_size) {
+	qcx_engine_field_exports_v1_t fields;
+	qcx_engine_field_table_view_t table;
+	if (!QCX_ReadEngineFieldExports(game, &fields)
+		|| fields.globals_base != qcx_global_object_base
+		|| fields.globals_size != qcx_global_object_size
+		|| !QCX_OpenEngineFieldTable(game, &fields.global_fields, &table)) {
 		return 0;
 	}
-	qcx_deathmatch = QCX_ResolveGlobalFloat(game, &fields->global_fields, "deathmatch");
-	qcx_coop = QCX_ResolveGlobalFloat(game, &fields->global_fields, "coop");
-	qcx_teamplay = QCX_ResolveGlobalFloat(game, &fields->global_fields, "teamplay");
-	if (qcx_deathmatch == NULL || qcx_teamplay == NULL) {
-		return 0;
+	const qcx_engine_field_spec_t specs[] = {
+		{"deathmatch", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
+		{"coop", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
+		{"teamplay", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
+	};
+	qcx_engine_field_binding_t bindings[3];
+	for (size_t index = 0U; index < sizeof(specs) / sizeof(specs[0]); ++index) {
+		const qcx_engine_field_result_t result = QCX_ResolveEngineField(&table, &specs[index],
+			qcx_global_object_base, qcx_global_object_size, &bindings[index]);
+		if (result == QCX_ENGINE_FIELD_INVALID
+			|| (result == QCX_ENGINE_FIELD_ABSENT && index != 1U)) {
+			return 0;
+		}
 	}
+	qcx_deathmatch = bindings[0].address;
+	qcx_coop = bindings[1].address;
+	qcx_teamplay = bindings[2].address;
 	*qcx_deathmatch = deathmatch;
 	if (qcx_coop != NULL) {
 		*qcx_coop = coop;

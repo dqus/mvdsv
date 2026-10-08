@@ -130,6 +130,21 @@ duration across runs. The tool stores raw samples only; decide whether a
 difference is meaningful from repeated comparable captures rather than a
 single CPU percentage.
 
+## Engine field descriptors
+
+Entity and global engine fields use the same reader in `src/qcx/engine_fields.c`.
+It accepts only the current export size and descriptor stride; an empty table
+is zero-initialized. Table envelopes and field addresses are mapped through the
+game's `memory_view`, and descriptor names must be readable, nonempty and NUL-free.
+
+For fields used by MVDSV, duplicate names, incompatible types/layouts, unknown
+access bits, missing required access or out-of-bounds storage reject startup.
+`deathmatch` and `teamplay` are required; `coop` and the optional entity fields
+may be absent. Additional names are allowed without imposing MVDSV's known
+field types on them. An invalid published optional field is not silently
+treated as absent. Configuration validates the complete requested set before
+publishing entity offsets or writing global values.
+
 ## Legacy entity strings
 
 The generated game publishes fixed read-only projections for the data and

@@ -33,6 +33,7 @@ static qcx_engine_field_descriptor_v1_t descriptors[optional_field_count];
 static char names[optional_field_count][32];
 static fixture_entity_t entities[2];
 static int reject_whole_storage;
+static qcx_guest_address_t rejected_address;
 
 void SV_Error(char *error, ...)
 {
@@ -51,8 +52,11 @@ static qcx_plugin_status_t memory_view(void *context, qcx_guest_address_t addres
 	qcx_byte_count_t size, uint32_t alignment, void **out)
 {
 	(void)context;
-	if (address == 0U || size == 0U || alignment == 0U) {
+	if (address == 0U || size == 0U || alignment == 0U || address % alignment != 0U) {
 		return QCX_PLUGIN_BAD_ARGUMENT;
+	}
+	if (address == rejected_address) {
+		return QCX_PLUGIN_UNAVAILABLE;
 	}
 	if (reject_whole_storage
 		&& address == (qcx_guest_address_t)(uintptr_t)entities
@@ -172,47 +176,105 @@ int main(void)
 
 	reset_offsets();
 	descriptors[1].offset = 0U;
-	assert(QCX_ResolveEntityFields());
-	assert(fofs_maxspeed == 0 && fofs_items2 == 4 && fofs_hideentity == 32);
+	assert(!QCX_ResolveEntityFields());
+	assert(strcmp(QCX_EntityFieldError(), "maxspeed") == 0);
 	descriptors[1].offset = 8U;
 
 	reset_offsets();
 	descriptors[1].type_id = type_id("qc.entity");
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].type_id = type_id("qc.f32");
 	reset_offsets();
 	descriptors[1].size = 8U;
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].size = sizeof(float);
 	reset_offsets();
 	descriptors[1].alignment = 8U;
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_trackent == 36);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].alignment = _Alignof(float);
 	reset_offsets();
 	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ;
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_items2 == 4);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE;
 	reset_offsets();
 	descriptors[1].offset = memory.entity_stride;
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].offset = 8U;
 	reset_offsets();
 	descriptors[1].access_flags |= UINT32_C(4);
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_gravity == 12);
+	assert(!QCX_ResolveEntityFields());
 	descriptors[1].access_flags = QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE;
 	reset_offsets();
 	descriptors[9].name = descriptors[1].name;
-	assert(QCX_ResolveEntityFields() && fofs_maxspeed == 0 && fofs_hideentity == 32);
+	assert(!QCX_ResolveEntityFields());
+	/* An invalid duplicate must not turn into an absent optional field. */
+	descriptors[9].type_id = 0U;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[9].type_id = type_id("qc.f32");
 	descriptors[9].name = (qcx_abi_string_ref_v1_t){
 		(qcx_guest_address_t)(uintptr_t)names[9], (uint32_t)strlen(names[9]), 0U};
+
+	descriptors[1].name.reserved0 = 1U;
+	assert(!QCX_ResolveEntityFields());
+	descriptors[1].name.reserved0 = 0U;
+	names[1][3] = '\0';
+	assert(!QCX_ResolveEntityFields());
+	names[1][3] = 's';
+	exports.reserved0 = 1U;
+	assert(!QCX_ResolveEntityFields());
+	exports.reserved0 = 0U;
+	exports.struct_size += 8U;
+	assert(!QCX_ResolveEntityFields());
+	exports.struct_size = sizeof(exports);
+	exports.entity_fields.descriptor_stride = sizeof(descriptors[0]) - 1U;
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields.descriptor_stride = sizeof(descriptors[0]);
+	exports.entity_fields.descriptor_stride += 8U;
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields.descriptor_stride = sizeof(descriptors[0]);
+	exports.entity_fields.count = UINT32_MAX;
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields.count = optional_field_count;
+
+	rejected_address = exports.entity_fields.descriptors;
+	assert(!QCX_ResolveEntityFields());
+	rejected_address = descriptors[1].name.data;
+	assert(!QCX_ResolveEntityFields());
+	rejected_address = memory.entity_object_base + descriptors[1].offset;
+	assert(!QCX_ResolveEntityFields());
+	rejected_address = 0U;
+
+	/* Unknown names do not need to match one of MVDSV's field types. */
+	descriptor(9U, "custom_mask", "qc.custom", 48U, sizeof(float),
+		QCX_ENGINE_FIELD_HOST_READ);
+	reset_offsets();
+	assert(QCX_ResolveEntityFields());
+	assert(fofs_maxspeed == 8 && fofs_teleported == 0);
+	descriptor(9U, "teleported", "qc.f32", 48U, sizeof(float),
+		QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE);
+	assert(QCX_ResolveEntityFields());
+	assert(fofs_teleported == 48);
+	/* A bad final field must not partially replace the published offsets. */
+	descriptors[1].offset = 52U;
+	descriptors[9].access_flags = QCX_ENGINE_FIELD_HOST_READ;
+	assert(!QCX_ResolveEntityFields());
+	assert(fofs_maxspeed == 8 && fofs_teleported == 48);
+	descriptors[1].offset = 8U;
+	descriptors[9].access_flags = QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE;
 
 	reject_whole_storage = 1;
 	assert(!QCX_BindEntities());
 	reject_whole_storage = 0;
 	assert(QCX_BindEntities());
-	exports.entity_fields.count = 0U;
+	exports.entity_fields = (qcx_engine_field_table_v1_t){.descriptor_stride = 1U};
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields = (qcx_engine_field_table_v1_t){
+		.descriptors = (qcx_guest_address_t)(uintptr_t)descriptors};
+	assert(!QCX_ResolveEntityFields());
+	exports.entity_fields = (qcx_engine_field_table_v1_t){0};
+	reset_offsets();
 	assert(QCX_ResolveEntityFields());
-	exports.entity_fields.count = optional_field_count;
+	assert(fofs_maxspeed == 0 && fofs_teleported == 0);
 	QCX_ClearEntities();
 	return 0;
 }
