@@ -133,6 +133,7 @@ if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 		"${DIR_SRC}/qcx/strings.c"
 		"${DIR_SRC}/qcx/globals.c"
 		"${DIR_SRC}/qcx/entries.c"
+		"${DIR_SRC}/qcx/service_support.c"
 		"${DIR_SRC}/qcx/services_movement.c"
 		"${DIR_SRC}/qcx/services_network.c"
 		"${DIR_SRC}/qcx/services_world.c"

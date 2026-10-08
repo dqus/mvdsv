@@ -2,31 +2,10 @@
 
 #include "progs.h"
 #include "qcx/entities.h"
+#include "qcx/service_support.h"
 #include "qcx/services.h"
 
 #include <stdint.h>
-
-static edict_t *QCX_RequireEdict(qcx_entity_id_t slot)
-{
-	edict_t *const entity = QCX_SlotToEdict(slot);
-	if (entity == NULL || entity->v == NULL) {
-		SV_Error("qc2cpp invalid entity slot %u", slot);
-	}
-	return entity;
-}
-
-static int QCX_CopyText(const uint8_t *bytes, qcx_byte_count_t size, char *out,
-	size_t capacity, const char *what)
-{
-	if ((bytes == NULL && size != 0U) || size >= capacity
-		|| (size != 0U && memchr(bytes, '\0', size) != NULL)) {
-		SV_Error("qc2cpp invalid %s string", what);
-		return 0;
-	}
-	memcpy(out, bytes, size);
-	out[size] = '\0';
-	return 1;
-}
 
 static char *QCX_CopyPersistentText(const uint8_t *bytes, qcx_byte_count_t size,
 	const char *what)
@@ -46,7 +25,7 @@ static void QCX_SetOrigin(void *context, qcx_entity_id_t slot, const float origi
 	if (origin == NULL) {
 		SV_Error("qc2cpp setorigin requires origin");
 	}
-	edict_t *const entity = QCX_RequireEdict(slot);
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	PF2_setorigin(entity, origin[0], origin[1], origin[2]);
 }
 
@@ -55,7 +34,7 @@ static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *nam
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
-	edict_t *const entity = QCX_RequireEdict(slot);
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	if (!QCX_CopyText(name, name_size, local, sizeof(local), "model")) {
 		SV_Error("qc2cpp setmodel failed for %s", local);
 	}
@@ -69,7 +48,7 @@ static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3]
 	if (mins == NULL || maxs == NULL) {
 		SV_Error("qc2cpp setsize requires bounds");
 	}
-	edict_t *const entity = QCX_RequireEdict(slot);
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	PF2_setsize(entity,
 		mins[0], mins[1], mins[2], maxs[0], maxs[1], maxs[2]);
 }
@@ -87,7 +66,7 @@ static qcx_entity_id_t QCX_Spawn(void *context)
 static void QCX_Remove(void *context, qcx_entity_id_t slot)
 {
 	QCX_ObserveGameplayImport(context);
-	ED_Free(QCX_RequireEdict(slot));
+	ED_Free(QCX_RequireServiceEdict(slot, "entity"));
 }
 
 static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
@@ -95,7 +74,7 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 	qcx_byte_count_t value_size)
 {
 	QCX_ObserveGameplayImport(context);
-	(void)QCX_RequireEdict(slot);
+	(void)QCX_RequireServiceEdict(slot, "entity");
 	if ((key == NULL && key_size != 0U) || (value == NULL && value_size != 0U)
 		|| (key_size != 0U && memchr(key, '\0', key_size) != NULL)
 		|| (value_size != 0U && memchr(value, '\0', value_size) != NULL)) {
@@ -107,7 +86,7 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 		|| !QCX_CopyText(value, value_size, local_value, sizeof(local_value), "map value")) {
 		return QCX_MAP_METADATA_ERROR;
 	}
-	edict_t *const entity = QCX_RequireEdict(slot);
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	if (!strcmp(local_key, "alpha")) {
 		entity->xv.alpha = bound(0.0f, atof(local_value), 1.0f);
 		return QCX_MAP_METADATA_HANDLED;
@@ -127,7 +106,7 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 static uint32_t QCX_MapAdmit(void *context, qcx_entity_id_t slot, float spawnflags)
 {
 	QCX_ObserveGameplayImport(context);
-	(void)QCX_RequireEdict(slot);
+	(void)QCX_RequireServiceEdict(slot, "entity");
 	const int flags = (int)spawnflags;
 	if ((int)deathmatch.value != 0) {
 		return (flags & SPAWNFLAG_NOT_DEATHMATCH) != 0 ? QCX_MAP_REJECT : QCX_MAP_ACCEPT;
@@ -149,7 +128,7 @@ static float QCX_MapTime(void *context)
 static void QCX_MapPostSpawn(void *context, qcx_entity_id_t slot)
 {
 	QCX_ObserveGameplayImport(context);
-	(void)QCX_RequireEdict(slot);
+	(void)QCX_RequireServiceEdict(slot, "entity");
 	SV_FlushSignon();
 }
 
@@ -244,7 +223,7 @@ static void QCX_DPrint(void *context, const uint8_t *text, qcx_byte_count_t text
 static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
 {
 	QCX_ObserveGameplayImport(context);
-	edict_t *const entity = QCX_RequireEdict(slot);
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	PF2_makestatic(entity);
 }
 
