@@ -208,6 +208,7 @@ add_test(NAME qcx_pr2_introspection COMMAND qcx_pr2_introspection_test)
 add_executable(qcx_globals_test
 	globals_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/globals.c
+	${PROJECT_SOURCE_DIR}/src/qcx/engine_fields.c
 	${PROJECT_SOURCE_DIR}/src/qcx/transport.c
 	${PROJECT_SOURCE_DIR}/src/qcx/native.c
 	${PROJECT_SOURCE_DIR}/src/qcx/wasm.c)
@@ -218,7 +219,7 @@ set_target_properties(qcx_globals_test PROPERTIES
 target_include_directories(qcx_globals_test PRIVATE
 	${PROJECT_SOURCE_DIR}/src
 	${PROJECT_SOURCE_DIR}/src/qwprot/src)
-target_compile_options(qcx_globals_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+target_compile_options(qcx_globals_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_globals_test PRIVATE
 	QCX_ENABLED=1
 	QCX_NATIVE=1
@@ -239,6 +240,7 @@ add_test(NAME qcx_globals_boundary
 add_executable(qcx_entities_test
 	entities_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entities.c
+	${PROJECT_SOURCE_DIR}/src/qcx/engine_fields.c
 	${PROJECT_SOURCE_DIR}/src/qcx/strings.c
 ${PROJECT_SOURCE_DIR}/src/qcx/transport.c
 ${PROJECT_SOURCE_DIR}/src/qcx/native.c
@@ -478,6 +480,7 @@ qcx_add_model_presence_test(qcx_model_presence_qcx USE_PR2=1 QCX_ENABLED=1)
 add_executable(qcx_optional_fields_test
 	optional_fields_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entities.c
+	${PROJECT_SOURCE_DIR}/src/qcx/engine_fields.c
 	${PROJECT_SOURCE_DIR}/src/qcx/strings.c)
 set_target_properties(qcx_optional_fields_test PROPERTIES
 	C_STANDARD 11
