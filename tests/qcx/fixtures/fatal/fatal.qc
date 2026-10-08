@@ -64,16 +64,18 @@ void() fatal_outer =
 void() worldspawn =
 {
 	precache_model("progs/player.mdl");
+    // Use e1m1's player-start position, where walkmove can reach the trigger.
+    // The map origin is inside solid world geometry and rejects the move.
     trigger_entity = spawn();
     trigger_entity.solid = 1;
     trigger_entity.touch = fatal_touch;
     setsize(trigger_entity, '-16 -16 -16', '16 16 16');
-    setorigin(trigger_entity, '0 0 0');
+    setorigin(trigger_entity, '480 -352 88');
 
     actor_entity = spawn();
     actor_entity.flags = 512;
     actor_entity.solid = 2;
     actor_entity.think = fatal_outer;
     setsize(actor_entity, '-8 -8 -8', '8 8 8');
-    setorigin(actor_entity, '0 0 0');
+    setorigin(actor_entity, '480 -352 88');
 };
