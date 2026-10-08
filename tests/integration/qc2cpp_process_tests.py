@@ -24,6 +24,7 @@ from qc2cpp_acceptance import (
     network_client_command,
     prepare_game_directory,
     server_command,
+    wait_events,
 )
 
 
@@ -104,6 +105,50 @@ class ProcessRunnerTests(unittest.TestCase):
             finally:
                 process.close()
             self.assertIn("startup failed", output.read_text())
+
+    def test_wait_events_allows_an_observation_to_take_more_than_one_second(self):
+        command = (
+            "import sys, time\n"
+            "for line in sys.stdin:\n"
+            "    if line.strip() == 'quit':\n"
+            "        break\n"
+            "    time.sleep(1.2)\n"
+            "    print('{\"qc2cpp_test_events\":{\"ready\":true}}', flush=True)\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            process = RunningProcess(
+                [sys.executable, "-c", command],
+                pathlib.Path(directory) / "server.log",
+            )
+            try:
+                observation = wait_events(
+                    process, lambda events: events["ready"],
+                    timeout=4, description="waiting for ready",
+                )
+                self.assertTrue(observation["ready"])
+            finally:
+                process.close()
+
+    def test_wait_events_still_times_out_when_the_server_does_not_respond(self):
+        command = (
+            "import sys\n"
+            "for line in sys.stdin:\n"
+            "    if line.strip() == 'quit':\n"
+            "        break\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            process = RunningProcess(
+                [sys.executable, "-c", command],
+                pathlib.Path(directory) / "server.log",
+            )
+            try:
+                with self.assertRaisesRegex(ProcessFailure, "timed out.*qc2cpp_test_events"):
+                    wait_events(
+                        process, lambda events: True,
+                        timeout=0.2, description="waiting for ready",
+                    )
+            finally:
+                process.close()
 
     def test_prefixed_server_json_is_decoded(self):
         observation = parse_json_observation(
