@@ -33,9 +33,14 @@ static int write_string_calls;
 static int write_entity_calls;
 static int setspawnparms_calls;
 static int infokey_calls;
+static unsigned int slot_lookups;
 
 void SV_Error(char *error, ...) { (void)error; abort(); }
-edict_t *QCX_SlotToEdict(qcx_entity_id_t slot) { return slot < 2U ? &entities[slot] : NULL; }
+edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
+{
+	++slot_lookups;
+	return slot < 2U ? &entities[slot] : NULL;
+}
 int NUM_FOR_EDICT(edict_t *entity) { return entity->e.entnum; }
 void SV_StartSound(edict_t *entity, int channel, char *sample, int volume, float attenuation)
 { assert(entity == &entities[0]); assert(channel == 2); assert(!strcmp(sample, "misc/test.wav")); assert(volume == 127); assert(attenuation == 1.0f); }
@@ -209,11 +214,17 @@ int main(void)
 	host.sound(host.context, 0U, 2.0f, (const uint8_t *)"misc/test.wav", 13U, 0.5f, 1.0f);
 	host.bprint(host.context, 2.0f, (const uint8_t *)"hello", 5U);
 	assert(!strcmp(printed, "hello"));
+	slot_lookups = 0U;
 	host.sprint(host.context, 0U, 1.0f, (const uint8_t *)"client", 6U);
+	assert(slot_lookups == 1U);
 	assert(!strcmp(printed, "client"));
+	slot_lookups = 0U;
 	host.stuffcmd(host.context, 0U, (const uint8_t *)"cmd\n", 4U);
+	assert(slot_lookups == 1U);
 	assert(stuffcmd_calls == 1);
+	slot_lookups = 0U;
 	host.centerprint(host.context, 0U, (const uint8_t *)"center", 6U);
+	assert(slot_lookups == 1U);
 	assert(centerprint_calls == 1);
 	host.logfrag(host.context, 0U, 1U);
 	assert(logfrag_calls == 1);
