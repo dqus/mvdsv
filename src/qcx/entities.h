@@ -14,7 +14,6 @@ struct edict_s;
 int QCX_ConfigureEntities(qcx_guest_address_t publication_address);
 int QCX_BindEntities(void);
 void QCX_ClearEntities(void);
-entvars_t *QCX_Entity(qcx_entity_id_t slot);
 uint32_t QCX_EntityCapacity(void);
 int QCX_ResolveEntityFields(void);
 const char *QCX_EntityFieldError(void);

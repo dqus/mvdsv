@@ -88,24 +88,6 @@ void QCX_ClearEntities(void)
 	qcx_entity_field_error = NULL;
 }
 
-entvars_t *QCX_Entity(qcx_entity_id_t slot)
-{
-	const qcx_game_api_v1_t *game = QCX_Game();
-	if (qcx_entity_memory == NULL || game == NULL || slot >= qcx_entity_capacity) {
-		return NULL;
-	}
-	const uint64_t offset = (uint64_t)slot * qcx_entity_stride;
-	if (offset > UINT64_MAX - qcx_entity_base) {
-		return NULL;
-	}
-	entvars_t *entity = NULL;
-	if (game->memory_view(game->context, qcx_entity_base + offset, sizeof(*entity),
-		_Alignof(entvars_t), (void **)&entity) != QCX_PLUGIN_OK) {
-		return NULL;
-	}
-	return entity;
-}
-
 uint32_t QCX_EntityCapacity(void)
 {
 	return qcx_entity_capacity;

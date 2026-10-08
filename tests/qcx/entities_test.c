@@ -10,7 +10,7 @@ _Static_assert(_Generic((entvars_t *)0,
 	qcx_shared_entity_state_v1_t *: 0,
 	default: 1),
 	"QCX must not replace MVDSV's entvars_t definition");
-_Static_assert(_Generic(QCX_Entity(0U),
+_Static_assert(_Generic(sv.edicts[0].v,
 	entvars_t *: 1,
 	default: 0),
 	"QCX entity access must use MVDSV's entvars_t");
@@ -65,20 +65,27 @@ int main(int argc, char **argv)
 	sv.edicts[7].e.entnum = 77;
 	sv.edicts[7].e.area.ed = &sv.edicts[2];
 	assert(QCX_BindEntities());
-	assert((void *)sv.edicts[7].v == (void *)QCX_Entity(7U));
+	qcx_game_entity_memory_v1_t *memory = NULL;
+	assert(active_game->memory_view(active_game->context, publication, sizeof(*memory),
+		_Alignof(qcx_game_entity_memory_v1_t), (void **)&memory) == QCX_PLUGIN_OK);
+	assert(memory != NULL);
+	for (int slot = 0; slot < sv.max_edicts; ++slot) {
+		assert((uintptr_t)sv.edicts[slot].v == memory->shared_state_base
+			+ (uint64_t)slot * memory->entity_stride);
+	}
 	assert(sv.edicts[7].e.entnum == 77);
 	assert(sv.edicts[7].e.area.ed == &sv.edicts[2]);
 	assert(QCX_EdictToSlot(&sv.edicts[0]) == 0U);
 	assert(QCX_EdictToSlot(&sv.edicts[7]) == 7U);
 	assert(QCX_SlotToEdict(7U) == &sv.edicts[7]);
-	assert(QCX_Entity(10U) != NULL);
-	assert(QCX_Entity(11U) == NULL);
-	QCX_Entity(7U)->enemy = 3;
-	assert(QCX_Entity(7U)->enemy == 3);
-	assert(QCX_SlotToEdict((qcx_entity_id_t)QCX_Entity(7U)->enemy) == &sv.edicts[3]);
-	QCX_Entity(7U)->health = 99.0f;
+	assert(QCX_SlotToEdict(10U) == &sv.edicts[10]);
+	assert(sv.edicts[10].v != NULL);
+	assert(QCX_SlotToEdict(11U) == NULL);
+	sv.edicts[7].v->enemy = 3;
+	assert(QCX_SlotToEdict((qcx_entity_id_t)sv.edicts[7].v->enemy) == &sv.edicts[3]);
+	sv.edicts[7].v->health = 99.0f;
 	QCX_ClearEdict(&sv.edicts[7]);
-	assert(QCX_Entity(7U)->health == 0.0f);
+	assert(sv.edicts[7].v->health == 0.0f);
 	assert(QCX_SetEntityString(&sv.edicts[7], "model", "progs/dog.mdl"));
 	char copied_model[32] = {0};
 	qcx_string_view_t view;
@@ -101,7 +108,10 @@ int main(int argc, char **argv)
 	assert(view.size == 0U && strcmp(QCX_BorrowStringView(&view), "") == 0);
 	assert(strcmp(copied_model, "progs/dog.mdl") == 0);
 	QCX_ClearEntities();
-	assert(QCX_Entity(7U) == NULL);
+	for (int slot = 0; slot < sv.max_edicts; ++slot) {
+		assert(sv.edicts[slot].v == NULL);
+	}
+	assert(QCX_SlotToEdict(7U) == NULL);
 	active_game->shutdown(active_game->context);
 	QCX_TransportClose(transport);
 	assert_invalid_entities_fixture(argv[1], "bad_entities_capacity");
