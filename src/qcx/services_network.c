@@ -1,6 +1,7 @@
 #include "qwsvdef.h"
 
 #include "qcx/entities.h"
+#include "qcx/service_support.h"
 #include "qcx/services.h"
 
 #include <stdint.h>
@@ -13,35 +14,13 @@ enum {
 	QCX_MSG_MULTICAST = 4,
 };
 
-static edict_t *QCX_RequireNetworkEdict(qcx_entity_id_t slot)
+static int QCX_RequireClientNumber(qcx_entity_id_t slot)
 {
-	edict_t *const entity = QCX_SlotToEdict(slot);
-	if (entity == NULL || entity->v == NULL) {
-		SV_Error("qc2cpp invalid network entity slot %u", slot);
-	}
-	return entity;
-}
-
-static client_t *QCX_RequireClient(qcx_entity_id_t slot)
-{
-	const int entnum = NUM_FOR_EDICT(QCX_RequireNetworkEdict(slot));
+	const int entnum = NUM_FOR_EDICT(QCX_RequireServiceEdict(slot, "network entity"));
 	if (entnum < 1 || entnum > MAX_CLIENTS) {
 		SV_Error("qc2cpp network entity %d is not a client", entnum);
 	}
-	return &svs.clients[entnum - 1];
-}
-
-static int QCX_CopyText(const uint8_t *bytes, qcx_byte_count_t size, char *out,
-	size_t capacity, const char *what)
-{
-	if ((bytes == NULL && size != 0U) || size >= capacity
-		|| (size != 0U && memchr(bytes, '\0', size) != NULL)) {
-		SV_Error("qc2cpp invalid %s string", what);
-		return 0;
-	}
-	memcpy(out, bytes, size);
-	out[size] = '\0';
-	return 1;
+	return entnum;
 }
 
 static int QCX_MessageDestination(float destination)
@@ -55,7 +34,8 @@ static int QCX_MessageDestination(float destination)
 
 static edict_t *QCX_MessageEntity(int destination, qcx_entity_id_t msg_entity)
 {
-	return destination == QCX_MSG_ONE ? QCX_RequireNetworkEdict(msg_entity) : NULL;
+	return destination == QCX_MSG_ONE
+		? QCX_RequireServiceEdict(msg_entity, "network entity") : NULL;
 }
 
 static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
@@ -65,7 +45,7 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	if (QCX_CopyText(sample, sample_size, local, sizeof(local), "sound")) {
-		SV_StartSound(QCX_RequireNetworkEdict(entity), (int)channel, local,
+		SV_StartSound(QCX_RequireServiceEdict(entity, "network entity"), (int)channel, local,
 			(int)(volume * 255.0f), attenuation);
 	}
 }
@@ -78,8 +58,8 @@ static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *t
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "stuffcmd")) {
 		return;
 	}
-	(void)QCX_RequireClient(entity);
-	PF2_stuffcmd(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local, 0);
+	const int clientnum = QCX_RequireClientNumber(entity);
+	PF2_stuffcmd(clientnum, local, 0);
 }
 
 static void QCX_BPrint(void *context, float level, const uint8_t *text,
@@ -100,8 +80,8 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "sprint")) {
 		return;
 	}
-	(void)QCX_RequireClient(entity);
-	PF2_sprint(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), (int)level, local, 0);
+	const int clientnum = QCX_RequireClientNumber(entity);
+	PF2_sprint(clientnum, (int)level, local, 0);
 }
 
 static void QCX_WriteByte(void *context, float destination, float value,
@@ -169,7 +149,7 @@ static void QCX_WriteEntity(void *context, float destination, qcx_entity_id_t va
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteEntity(to, NUM_FOR_EDICT(QCX_RequireNetworkEdict(value)),
+	PF2_WriteEntity(to, NUM_FOR_EDICT(QCX_RequireServiceEdict(value, "network entity")),
 		QCX_MessageEntity(to, msg_entity));
 }
 
@@ -181,8 +161,8 @@ static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,
 	if (!QCX_CopyText(text, text_size, local, sizeof(local), "centerprint")) {
 		return;
 	}
-	(void)QCX_RequireClient(entity);
-	PF2_centerprint(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local);
+	const int clientnum = QCX_RequireClientNumber(entity);
+	PF2_centerprint(clientnum, local);
 }
 
 static void QCX_AmbientSound(void *context, const float origin[3],
@@ -218,14 +198,14 @@ static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
 	if (out_parms == NULL || out_parms_size < sizeof(float) * 16U) {
 		SV_Error("qc2cpp setspawnparms requires sixteen floats");
 	}
-	PF2_setspawnparms(NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), out_parms);
+	PF2_setspawnparms(NUM_FOR_EDICT(QCX_RequireServiceEdict(entity, "network entity")), out_parms);
 }
 
 static void QCX_LogFrag(void *context, qcx_entity_id_t killer, qcx_entity_id_t victim)
 {
 	QCX_ObserveGameplayImport(context);
-	PF2_logfrag(NUM_FOR_EDICT(QCX_RequireNetworkEdict(killer)),
-		NUM_FOR_EDICT(QCX_RequireNetworkEdict(victim)));
+	PF2_logfrag(NUM_FOR_EDICT(QCX_RequireServiceEdict(killer, "network entity")),
+		NUM_FOR_EDICT(QCX_RequireServiceEdict(victim, "network entity")));
 }
 
 static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
@@ -238,7 +218,7 @@ static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
 		return 0U;
 	}
 	const char *const value = PF2_infokey(
-		NUM_FOR_EDICT(QCX_RequireNetworkEdict(entity)), local);
+		NUM_FOR_EDICT(QCX_RequireServiceEdict(entity, "network entity")), local);
 	const qcx_byte_count_t required = (qcx_byte_count_t)strlen(value);
 	if (out != NULL && out_capacity != 0U) {
 		const qcx_byte_count_t copied = required < out_capacity ? required : out_capacity;
