@@ -252,8 +252,11 @@ def wait_events(process, predicate, *, timeout, description):
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
+        # Map startup can delay a console response beyond one second. Each
+        # observation shares the overall deadline, rather than a shorter cap
+        # whose timeout would abort the entire wait prematurely.
         last = process.observe("qc2cpp_test_events", "qc2cpp_test_events",
-            timeout=min(1, deadline - time.monotonic()))
+            timeout=deadline - time.monotonic())
         if predicate(last):
             return last
         time.sleep(0.05)

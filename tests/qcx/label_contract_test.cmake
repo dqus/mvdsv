@@ -50,6 +50,7 @@ set(expected_fast
 	qcx_restore_roster
 	qcx_restore_session
 	qcx_restore_routes
+	qc2cpp_process_runner
 	qc2cpp_profile_tool
 	qcx_label_contract)
 
