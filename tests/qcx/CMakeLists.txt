@@ -13,7 +13,7 @@ set_target_properties(qcx_fixture_plugin PROPERTIES
 if(APPLE)
 	set_target_properties(qcx_fixture_plugin PROPERTIES SUFFIX ".dylib")
 endif()
-target_link_libraries(qcx_fixture_plugin PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_fixture_plugin PRIVATE Qc2cppHost::contract)
 
 add_library(qcx_bad_abi_plugin MODULE fixture_plugin.c)
 set_target_properties(qcx_bad_abi_plugin PROPERTIES
@@ -23,7 +23,7 @@ set_target_properties(qcx_bad_abi_plugin PROPERTIES
 	PREFIX ""
 	OUTPUT_NAME "bad")
 target_compile_definitions(qcx_bad_abi_plugin PRIVATE QC2CPP_FIXTURE_BAD_ABI=1)
-target_link_libraries(qcx_bad_abi_plugin PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_bad_abi_plugin PRIVATE Qc2cppHost::contract)
 
 function(qcx_add_bad_globals_fixture target output definition)
 	add_library(${target} MODULE fixture_plugin.c)
@@ -37,7 +37,7 @@ function(qcx_add_bad_globals_fixture target output definition)
 		set_target_properties(${target} PROPERTIES SUFFIX ".dylib")
 	endif()
 	target_compile_definitions(${target} PRIVATE ${definition}=1)
-	target_link_libraries(${target} PRIVATE Qc2cppHost::native)
+	target_link_libraries(${target} PRIVATE Qc2cppHost::contract)
 endfunction()
 
 qcx_add_bad_globals_fixture(qcx_bad_globals_abi_plugin bad_globals_abi
@@ -84,7 +84,7 @@ if(MVDSV_QC2CPP_WASM)
 		"${MVDSV_WASMTIME_ROOT}/lib")
 	target_compile_definitions(qcx_transport_test PRIVATE QCX_WASM=1)
 endif()
-target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+target_link_libraries(qcx_transport_test PRIVATE Qc2cppHost::contract ${CMAKE_DL_LIBS})
 add_dependencies(qcx_transport_test qcx_fixture_plugin qcx_bad_abi_plugin qcx_no_query_plugin)
 add_test(NAME qcx_transport COMMAND qcx_transport_test $<TARGET_FILE_DIR:qcx_fixture_plugin>)
 
@@ -97,7 +97,7 @@ set_target_properties(qcx_adapter_state_test PROPERTIES
 	C_EXTENSIONS OFF)
 target_include_directories(qcx_adapter_state_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qcx_adapter_state_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
-target_link_libraries(qcx_adapter_state_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_adapter_state_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_adapter_state COMMAND qcx_adapter_state_test)
 
 add_test(NAME qcx_program_type_routes
@@ -126,7 +126,7 @@ target_compile_definitions(qcx_terminal_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_terminal_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_terminal_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_terminal COMMAND qcx_terminal_test)
 
 add_executable(qcx_startup_failure_test
@@ -146,7 +146,7 @@ target_compile_definitions(qcx_startup_failure_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_startup_failure_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_startup_failure_test PRIVATE Qc2cppHost::contract)
 if(APPLE)
 	target_link_options(qcx_startup_failure_test PRIVATE -Wl,-dead_strip)
 elseif(UNIX)
@@ -171,7 +171,7 @@ target_compile_definitions(qcx_start_frame_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_start_frame_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_start_frame_test PRIVATE Qc2cppHost::contract)
 if(APPLE)
 	target_link_options(qcx_start_frame_test PRIVATE -Wl,-dead_strip)
 elseif(UNIX)
@@ -197,7 +197,7 @@ target_compile_definitions(qcx_pr2_introspection_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_pr2_introspection_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_pr2_introspection_test PRIVATE Qc2cppHost::contract)
 if(APPLE)
 	target_link_options(qcx_pr2_introspection_test PRIVATE -Wl,-dead_strip)
 elseif(UNIX)
@@ -226,7 +226,7 @@ target_compile_definitions(qcx_globals_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_globals_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+target_link_libraries(qcx_globals_test PRIVATE Qc2cppHost::contract ${CMAKE_DL_LIBS})
 add_dependencies(qcx_globals_test qcx_fixture_plugin
 	qcx_bad_globals_abi_plugin qcx_bad_globals_offset_plugin
 	qcx_bad_globals_size_plugin)
@@ -259,7 +259,7 @@ target_compile_definitions(qcx_entities_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_entities_test PRIVATE Qc2cppHost::native ${CMAKE_DL_LIBS})
+target_link_libraries(qcx_entities_test PRIVATE Qc2cppHost::contract ${CMAKE_DL_LIBS})
 add_dependencies(qcx_entities_test qcx_fixture_plugin
 	qcx_bad_entities_capacity_plugin qcx_bad_entities_stride_plugin
 	qcx_bad_entities_overflow_plugin)
@@ -282,7 +282,7 @@ target_compile_definitions(qcx_services_world_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_services_world_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_services_world_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_services_world COMMAND qcx_services_world_test)
 
 add_executable(qcx_client_test
@@ -303,7 +303,7 @@ target_compile_definitions(qcx_client_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_client_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_client_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_client COMMAND qcx_client_test)
 
 add_executable(qcx_sprint_test sprint_test.c
@@ -319,7 +319,7 @@ target_compile_options(qcx_sprint_test PRIVATE
 	-Wall -Wextra -Wpedantic -Werror -UNDEBUG -ffunction-sections -fdata-sections)
 target_compile_definitions(qcx_sprint_test PRIVATE
 	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_sprint_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_sprint_test PRIVATE Qc2cppHost::contract)
 if(APPLE)
 	target_link_options(qcx_sprint_test PRIVATE -Wl,-dead_strip)
 elseif(UNIX)
@@ -341,7 +341,7 @@ target_compile_options(qcx_client_command_payload_test PRIVATE
 	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_compile_definitions(qcx_client_command_payload_test PRIVATE
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_client_command_payload_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_client_command_payload_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_client_command_payload COMMAND qcx_client_command_payload_test)
 
 add_test(NAME qcx_client_routes
@@ -384,7 +384,7 @@ target_compile_definitions(qcx_reentry_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_reentry_test PRIVATE Qc2cppHost::native m)
+target_link_libraries(qcx_reentry_test PRIVATE Qc2cppHost::contract m)
 if(APPLE)
 	target_link_options(qcx_reentry_test PRIVATE -Wl,-dead_strip)
 elseif(UNIX)
@@ -470,7 +470,7 @@ function(qcx_add_model_presence_test target)
 		SERVERONLY
 		__LITTLE_ENDIAN__Q__
 		${ARGN})
-	target_link_libraries(${target} PRIVATE Qc2cppHost::native)
+	target_link_libraries(${target} PRIVATE Qc2cppHost::contract)
 	if(APPLE)
 		target_link_options(${target} PRIVATE -Wl,-dead_strip)
 	elseif(UNIX)
@@ -500,7 +500,7 @@ target_compile_definitions(qcx_optional_fields_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_optional_fields_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_optional_fields_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_optional_fields COMMAND qcx_optional_fields_test)
 
 add_test(NAME qcx_optional_field_routes
@@ -524,7 +524,7 @@ target_compile_definitions(qcx_legacy_strings_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_legacy_strings_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_legacy_strings_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_legacy_strings COMMAND qcx_legacy_strings_test)
 
 add_test(NAME qcx_string_routes
@@ -560,7 +560,7 @@ set_target_properties(qcx_save_format_test PROPERTIES
 	C_EXTENSIONS OFF)
 target_include_directories(qcx_save_format_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qcx_save_format_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
-target_link_libraries(qcx_save_format_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_save_format_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_save_format COMMAND qcx_save_format_test)
 
 add_executable(qcx_restore_test
@@ -580,7 +580,7 @@ target_compile_definitions(qcx_restore_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_restore_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_restore_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_restore COMMAND qcx_restore_test)
 
 add_executable(qcx_restore_roster_test
@@ -594,7 +594,7 @@ set_target_properties(qcx_restore_roster_test PROPERTIES
 target_include_directories(qcx_restore_roster_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qcx_restore_roster_test PRIVATE
 	-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
-target_link_libraries(qcx_restore_roster_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_restore_roster_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_restore_roster COMMAND qcx_restore_roster_test)
 
 add_executable(qcx_restore_session_test
@@ -619,7 +619,7 @@ target_compile_definitions(qcx_restore_session_test PRIVATE
 	SERVERONLY
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
-target_link_libraries(qcx_restore_session_test PRIVATE Qc2cppHost::native)
+target_link_libraries(qcx_restore_session_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_restore_session COMMAND qcx_restore_session_test)
 
 add_test(NAME qcx_restore_routes
