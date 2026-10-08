@@ -15,6 +15,7 @@ static edict_t player;
 static unsigned int deliveries[MAX_CLIENTS];
 static jmp_buf validation_error;
 static qbool expect_error;
+static unsigned int slot_lookups;
 
 void SV_Error(char *error, ...)
 {
@@ -25,6 +26,7 @@ void SV_Error(char *error, ...)
 
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
+	++slot_lookups;
 	return slot == 1U ? &player : NULL;
 }
 
@@ -68,7 +70,9 @@ void SV_ClientPrintf2(client_t *client, int level, char *format, ...)
 static void check_delivery(unsigned int player_count, unsigned int spectator_count)
 {
 	memset(deliveries, 0, sizeof(deliveries));
+	slot_lookups = 0U;
 	QCX_SPrint(NULL, 1U, PRINT_HIGH, (const uint8_t *)"hello%world", 11U);
+	assert(slot_lookups == 1U);
 	assert(deliveries[0] == player_count);
 	assert(deliveries[1] == spectator_count);
 	for (int index = 2; index < MAX_CLIENTS; ++index) {
@@ -124,6 +128,17 @@ static void test_invalid_arguments(void)
 		QCX_SPrint(NULL, 2U, PRINT_HIGH, (const uint8_t *)"hello%world", 11U);
 		assert(!"invalid slot accepted");
 	}
+	player.v = NULL;
+	if (setjmp(validation_error) == 0) {
+		QCX_SPrint(NULL, 1U, PRINT_HIGH, (const uint8_t *)"hello%world", 11U);
+		assert(!"entity without shared state accepted");
+	}
+	player.v = &player_state;
+	player.e.entnum = 0;
+	if (setjmp(validation_error) == 0) {
+		QCX_SPrint(NULL, 1U, PRINT_HIGH, (const uint8_t *)"hello%world", 11U);
+		assert(!"world accepted as client");
+	}
 	player.e.entnum = MAX_CLIENTS + 1;
 	if (setjmp(validation_error) == 0) {
 		QCX_SPrint(NULL, 1U, PRINT_HIGH, (const uint8_t *)"hello%world", 11U);
@@ -132,10 +147,34 @@ static void test_invalid_arguments(void)
 	expect_error = false;
 }
 
+static void test_text_copy(void)
+{
+	char output[4] = "xxx";
+	assert(QCX_CopyText(NULL, 0U, output, sizeof(output), "test"));
+	assert(output[0] == '\0');
+	assert(QCX_CopyText((const uint8_t *)"abc", 3U, output, sizeof(output), "test"));
+	assert(!strcmp(output, "abc"));
+	expect_error = true;
+	if (setjmp(validation_error) == 0) {
+		QCX_CopyText(NULL, 1U, output, sizeof(output), "test");
+		assert(!"NULL nonempty string accepted");
+	}
+	if (setjmp(validation_error) == 0) {
+		QCX_CopyText((const uint8_t *)"abcd", 4U, output, sizeof(output), "test");
+		assert(!"string without space for terminator accepted");
+	}
+	if (setjmp(validation_error) == 0) {
+		QCX_CopyText((const uint8_t *)"a\0b", 3U, output, sizeof(output), "test");
+		assert(!"embedded NUL accepted");
+	}
+	expect_error = false;
+}
+
 int main(void)
 {
 	player.v = &player_state;
 	player.e.entnum = 1;
+	test_text_copy();
 	test_spectator_routing();
 	test_invalid_arguments();
 	return 0;

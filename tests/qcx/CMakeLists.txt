@@ -267,6 +267,7 @@ add_test(NAME qcx_entities COMMAND qcx_entities_test $<TARGET_FILE_DIR:qcx_fixtu
 
 add_executable(qcx_services_world_test
 	services_world_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_world.c)
 set_target_properties(qcx_services_world_test PROPERTIES
 	C_STANDARD 11
@@ -287,6 +288,7 @@ add_test(NAME qcx_services_world COMMAND qcx_services_world_test)
 add_executable(qcx_client_test
 
 	client_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_network.c)
 set_target_properties(qcx_client_test PROPERTIES
 	C_STANDARD 11
@@ -304,7 +306,9 @@ target_compile_definitions(qcx_client_test PRIVATE
 target_link_libraries(qcx_client_test PRIVATE Qc2cppHost::native)
 add_test(NAME qcx_client COMMAND qcx_client_test)
 
-add_executable(qcx_sprint_test sprint_test.c ${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
+add_executable(qcx_sprint_test sprint_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
+	${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
 set_property(SOURCE ${PROJECT_SOURCE_DIR}/src/pr2_cmds.c APPEND PROPERTY
 	COMPILE_OPTIONS -Wno-sign-compare -Wno-unused-parameter -Wno-unused-but-set-variable)
 set_target_properties(qcx_sprint_test PROPERTIES
@@ -354,6 +358,7 @@ add_executable(qcx_reentry_test
 	reentry_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/client_command.c
 	${PROJECT_SOURCE_DIR}/src/qcx/entries.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_movement.c
 	${PROJECT_SOURCE_DIR}/src/qcx/strings.c
 	${PROJECT_SOURCE_DIR}/src/pr_edict.c
