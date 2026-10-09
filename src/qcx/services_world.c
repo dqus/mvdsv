@@ -56,6 +56,9 @@ static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3]
 static qcx_entity_id_t QCX_Spawn(void *context)
 {
 	QCX_ObserveGameplayImport(context);
+	/* host.spawn returns fully reset game state. ED_Alloc -> ED_ClearEdict
+	 * invokes game.clear_edict, including private QC fields and owned strings;
+	 * the guest must not repeat that reset after this allocation returns. */
 	const qcx_entity_id_t slot = QCX_EdictToSlot(ED_Alloc());
 	if (slot == QCX_INVALID_ENTITY_ID) {
 		SV_Error("qc2cpp spawn returned invalid entity");
