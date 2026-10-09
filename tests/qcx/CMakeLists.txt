@@ -583,6 +583,7 @@ add_test(NAME qcx_save_format COMMAND qcx_save_format_test)
 
 add_executable(qcx_restore_test
 	restore_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c
 	${PROJECT_SOURCE_DIR}/src/qcx/world_text.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save.c)
 set_target_properties(qcx_restore_test PROPERTIES
@@ -600,7 +601,8 @@ target_compile_definitions(qcx_restore_test PRIVATE
 	USE_PR2
 	__LITTLE_ENDIAN__Q__)
 target_link_libraries(qcx_restore_test PRIVATE Qc2cppHost::contract)
-add_test(NAME qcx_restore COMMAND qcx_restore_test)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/restore-fixture/save")
+add_test(NAME qcx_restore COMMAND qcx_restore_test "${CMAKE_CURRENT_BINARY_DIR}/restore-fixture")
 
 add_executable(qcx_restore_roster_test
 	restore_roster_test.c

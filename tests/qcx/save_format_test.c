@@ -26,6 +26,7 @@ typedef struct save_bytes_s {
 } save_bytes_t;
 
 typedef struct v2_offsets_s {
+	uint32_t world_entity_flags;
 	uint32_t client_slot_capacity;
 	uint32_t player_entity_flags;
 	uint32_t saved_slot;
@@ -101,16 +102,23 @@ static void append_metadata_v2(save_bytes_t *metadata, v2_offsets_t *offsets)
 	append_u32(metadata, fixture_client_slot_capacity);
 }
 
-static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets)
+static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
+	uint32_t lightstyle_count, const char *model, const char *sound)
 {
 	uint32_t entity;
 	append_u32(engine, engine_version_v2);
 	append_f64(engine, 1.25);
 	append_u32(engine, 7);
-	append_u32(engine, 0);
-	append_u32(engine, 0);
+	append_u32(engine, lightstyle_count);
+	for (entity = 0U; entity < lightstyle_count; ++entity) {
+		append_string(engine, "m");
+	}
+	append_u32(engine, 2);
+	append_string(engine, model);
+	append_string(engine, sound);
 	append_u32(engine, fixture_entity_capacity);
 	for (entity = 0U; entity < fixture_entity_capacity; ++entity) {
+		if (entity == 0U) offsets->world_entity_flags = engine->size;
 		if (entity == 1U) offsets->player_entity_flags = engine->size;
 		if (entity == 2U) offsets->second_player_entity_flags = engine->size;
 		append_u32(engine, entity < 2U ? 1U : 0U);
@@ -141,7 +149,8 @@ static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
 	}
 }
 
-static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
+static save_bytes_t make_v2_with_engine(const char *team, v2_offsets_t *offsets,
+	uint32_t lightstyle_count, const char *model, const char *sound)
 {
 	save_bytes_t out = {0};
 	save_bytes_t metadata = {0};
@@ -153,7 +162,7 @@ static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
 	uint32_t roster_payload;
 	memset(offsets, 0, sizeof(*offsets));
 	append_metadata_v2(&metadata, offsets);
-	append_engine_v2(&engine, offsets);
+	append_engine_v2(&engine, offsets, lightstyle_count, model, sound);
 	append_roster_v1(&roster, offsets, team);
 	append_bytes(&guest, "QC", 2);
 	append_bytes(&out, "QCMS", 4);
@@ -165,6 +174,7 @@ static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
 	append_section(&out, roster_section, &roster, &roster_payload);
 	append_section(&out, guest_section, &guest, NULL);
 	offsets->client_slot_capacity += metadata_payload;
+	offsets->world_entity_flags += engine_payload;
 	offsets->player_entity_flags += engine_payload;
 	offsets->saved_slot += roster_payload;
 	offsets->spawned += roster_payload;
@@ -176,6 +186,12 @@ static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
 	offsets->roster_payload_size = roster.size;
 	offsets->second_player_entity_flags += engine_payload;
 	return out;
+}
+
+static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
+{
+	return make_v2_with_engine(team, offsets, 64U, "M:1:progs/player.mdl",
+		"S:1:misc/menu.wav");
 }
 
 static void append_roster_record(save_bytes_t *record, uint32_t saved_slot,
@@ -260,7 +276,16 @@ static void test_parses_and_reencodes_v2_with_a_roster(void)
 	assert(image->metadata.map_bsp_checksum == UINT32_C(0x11223344));
 	assert(image->metadata.entity_capacity == fixture_entity_capacity);
 	assert(image->metadata.client_slot_capacity == fixture_client_slot_capacity);
-	assert(image->engine_state.size > 0U);
+	assert(image->engine.time == 1.25);
+	assert(image->engine.serverflags == 7U);
+	assert(strcmp(image->engine.lightstyles[63], "m") == 0);
+	assert(image->engine.precache_count == 2U);
+	assert(image->engine.precaches[0].kind == 'M');
+	assert(image->engine.precaches[0].slot == 1U);
+	assert(strcmp(image->engine.precaches[0].name, "progs/player.mdl") == 0);
+	assert(image->engine.precaches[1].kind == 'S');
+	assert(image->engine.precaches[1].slot == 1U);
+	assert(image->engine.edicts[0].state == QCX_SAVE_ACTIVE_EDICT);
 	assert(image->roster_count == 1U);
 	assert(image->roster[0].saved_slot == 0U);
 	assert(image->roster[0].spawned == 1U);
@@ -390,8 +415,58 @@ static void test_rejects_trailing_bytes(void)
 	require_rejected(input.bytes, input.size);
 }
 
+static void test_rejects_engine_errors_during_initial_parse(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_v2_with_engine("red", &offsets, 0U,
+		"M:1:progs/player.mdl", "S:1:misc/menu.wav");
+	require_rejected(input.bytes, input.size);
+	const char *invalid_resources[] = {
+		"progs/player.mdl", "X:1:progs/player.mdl", "M:0:progs/player.mdl",
+		"M:4096:progs/player.mdl", "S:256:misc/menu.wav", "M:1:"
+	};
+	for (uint32_t index = 0U; index < sizeof(invalid_resources) / sizeof(invalid_resources[0]); ++index) {
+		input = make_v2_with_engine("red", &offsets, 64U, invalid_resources[index],
+			"S:1:misc/menu.wav");
+		require_rejected(input.bytes, input.size);
+	}
+	input = make_v2_with_engine("red", &offsets, 64U,
+		"M:1:progs/player.mdl", "M:1:progs/other.mdl");
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.world_entity_flags, 2U);
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	overwrite_u32(&input, offsets.second_player_entity_flags + 8U, 2U);
+	require_rejected(input.bytes, input.size);
+}
+
+static void test_encode_validates_constructed_engine_state(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t encoded_size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	image->engine.precaches[1] = image->engine.precaches[0];
+	assert(QCX_SaveEncode(image, &encoded, &encoded_size) == QCX_PLUGIN_BAD_ARGUMENT);
+	assert(encoded == NULL && encoded_size == 0U);
+	QCX_SaveImageFree(image);
+}
+
+static void test_rejects_truncated_engine_and_other_sections(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	for (uint32_t size = 0U; size < input.size; ++size) {
+		require_rejected(input.bytes, size);
+	}
+}
+
 int main(void)
 {
+	test_rejects_engine_errors_during_initial_parse();
 	test_parses_and_reencodes_v2_with_a_roster();
 	test_accepts_an_empty_roster_team();
 	test_rejects_a_complete_v1_container();
@@ -403,5 +478,7 @@ int main(void)
 	test_rejects_duplicate_slots_and_canonical_names();
 	test_compares_names_like_quake();
 	test_rejects_trailing_bytes();
+	test_encode_validates_constructed_engine_state();
+	test_rejects_truncated_engine_and_other_sections();
 	return 0;
 }
