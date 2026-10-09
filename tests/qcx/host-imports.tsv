@@ -39,8 +39,6 @@ qcx_import_changelevel_v1	world	qc2cpp_services_world	queues one normal map comm
 qcx_import_cvar_set_v1	world	qc2cpp_services_world	sets an existing named M cvar
 qcx_import_centerprint_v1	network	qc2cpp_client	writes a checked centerprint to the selected client
 qcx_import_ambientsound_v1	network	qc2cpp_client	writes a checked precached ambient sound to normal signon state
-qcx_import_precache_model2_v1	world	qc2cpp_services_world	uses the model precache operation
-qcx_import_precache_sound2_v1	world	qc2cpp_services_world	uses the sound precache operation
 qcx_import_setspawnparms_v1	network	qc2cpp_client	writes sixteen spawn parameters for the selected client
 qcx_import_logfrag_v1	network	qc2cpp_client	writes a normal QW frag log record for two selected clients
 qcx_import_infokey_v1	network	qc2cpp_client	reads userinfo through semantic client selection, not string offsets
