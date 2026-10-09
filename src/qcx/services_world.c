@@ -4,20 +4,9 @@
 #include "qcx/entities.h"
 #include "qcx/service_support.h"
 #include "qcx/services.h"
+#include "qcx/world_text.h"
 
 #include <stdint.h>
-
-static char *QCX_CopyPersistentText(const uint8_t *bytes, qcx_byte_count_t size,
-	const char *what)
-{
-	char local[MAX_QPATH];
-	if (!QCX_CopyText(bytes, size, local, sizeof(local), what)) {
-		return NULL;
-	}
-	char *const result = Hunk_AllocName((int)size + 1, "qc2cpp");
-	memcpy(result, local, (size_t)size + 1U);
-	return result;
-}
 
 static void QCX_SetOrigin(void *context, qcx_entity_id_t slot, const float origin[3])
 {
@@ -137,13 +126,23 @@ static void QCX_MapPostSpawn(void *context, qcx_entity_id_t slot)
 
 static qcx_byte_count_t QCX_Precache(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity,
-	void (*operation)(char *), const char *what)
+	void (*operation)(char *), char *const *precache, int capacity, const char *what)
 {
 	QCX_ObserveGameplayImport(context);
-	char *const persistent = QCX_CopyPersistentText(name, name_size, what);
-	if (persistent == NULL) {
-		SV_Error("qc2cpp %s precache failed", what);
+	char local[MAX_QPATH];
+	QCX_CopyText(name, name_size, local, sizeof(local), what);
+	char *persistent = NULL;
+	for (int index = 0; index < capacity && precache[index] != NULL; ++index) {
+		if (!strcmp(precache[index], local)) {
+			persistent = precache[index];
+			break;
+		}
 	}
+	if (persistent == NULL) {
+		persistent = Hunk_AllocName((int)name_size + 1, "qc2cpp");
+		memcpy(persistent, local, (size_t)name_size + 1U);
+	}
+	/* Even duplicates go through PF2: loading-state and name checks still apply. */
 	operation(persistent);
 	if (out != NULL && out_capacity >= name_size) {
 		memcpy(out, name, name_size);
@@ -155,28 +154,28 @@ static qcx_byte_count_t QCX_PrecacheModel(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
 {
 	return QCX_Precache(context, name, name_size, out, out_capacity,
-		PF2_precache_model, "model");
+		PF2_precache_model, sv.model_precache, MAX_MODELS, "model");
 }
 
 static qcx_byte_count_t QCX_PrecacheSound(void *context, const uint8_t *name,
 	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
 {
 	return QCX_Precache(context, name, name_size, out, out_capacity,
-		PF2_precache_sound, "sound");
+		PF2_precache_sound, sv.sound_precache, MAX_SOUNDS, "sound");
 }
 
 static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 	qcx_byte_count_t value_size)
 {
 	QCX_ObserveGameplayImport(context);
-	if (style < 0.0f || style >= (float)MAX_LIGHTSTYLES) {
+	if (!isfinite(style) || style < 0.0f || style >= (float)MAX_LIGHTSTYLES) {
 		SV_Error("qc2cpp lightstyle index out of range");
 	}
-	char *const persistent = QCX_CopyPersistentText(value, value_size, "lightstyle");
-	if (persistent == NULL) {
+	char local[MAX_QPATH];
+	if (!QCX_CopyText(value, value_size, local, sizeof(local), "lightstyle")) {
 		return;
 	}
-	PF2_lightstyle((int)style, persistent);
+	PF2_lightstyle((int)style, QCX_StoreLightstyle((unsigned int)style, local));
 }
 
 static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_size)

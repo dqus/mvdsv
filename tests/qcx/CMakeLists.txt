@@ -265,6 +265,7 @@ add_test(NAME qcx_entities COMMAND qcx_entities_test $<TARGET_FILE_DIR:qcx_fixtu
 
 add_executable(qcx_services_world_test
 	services_world_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/world_text.c
 	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
 	${PROJECT_SOURCE_DIR}/src/qcx/services_world.c)
 set_target_properties(qcx_services_world_test PROPERTIES
@@ -582,6 +583,7 @@ add_test(NAME qcx_save_format COMMAND qcx_save_format_test)
 
 add_executable(qcx_restore_test
 	restore_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/world_text.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save.c)
 set_target_properties(qcx_restore_test PROPERTIES
 	C_STANDARD 11
