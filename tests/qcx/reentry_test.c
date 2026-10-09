@@ -219,12 +219,15 @@ edict_t *PF2_checkclient(edict_t *self)
 int PF2_walkmove(edict_t *entity, float yaw, float distance)
 {
 	assert(entity == &entities[3]);
+	const int caller_self = globals.self;
 	observed_yaw = yaw;
 	observed_distance = distance;
+	/* Match PF2_walkmove: movement may reenter QC, then only self is restored. */
 	globals.self = 6U;
 	globals.other = 7U;
 	globals.time = 29.0f;
 	++walkmove_calls;
+	globals.self = caller_self;
 	return 1;
 }
 
@@ -423,6 +426,11 @@ int main(void)
 	assert(host.walkmove(NULL, 3U, 45.0f, 12.0f) == 1.0f);
 	assert(observed_yaw == 45.0f && observed_distance == 12.0f);
 	assert(walkmove_calls == 1 && globals.self == 3U && globals.other == 7U
+		&& globals.time == 29.0f);
+	/* The explicit movement target is independent of the caller's live self. */
+	globals.self = 5U;
+	assert(host.walkmove(NULL, 3U, 45.0f, 12.0f) == 1.0f);
+	assert(walkmove_calls == 2 && globals.self == 5U && globals.other == 7U
 		&& globals.time == 29.0f);
 	assert(host.droptofloor(NULL, 3U) == 1.0f && droptofloor_calls == 1);
 	bottom_result = true;

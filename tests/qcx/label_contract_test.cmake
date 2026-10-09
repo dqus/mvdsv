@@ -32,6 +32,7 @@ set(expected_fast
 	qcx_client_routes
 	qcx_pr2_api_routes
 	qcx_reentry
+	qcx_walkmove
 	qcx_touch_links
 	qcx_entry_routes
 	qcx_startup_routes
