@@ -175,20 +175,7 @@ static void QCX_AmbientSound(void *context, const float origin[3],
 		"ambient sound")) {
 		return;
 	}
-	int soundnum;
-	for (soundnum = 0; sv.sound_precache[soundnum] != NULL; ++soundnum) {
-		if (!strcmp(sv.sound_precache[soundnum], local)) {
-			MSG_WriteByte(&sv.signon, svc_spawnstaticsound);
-			MSG_WriteCoord(&sv.signon, origin[0]);
-			MSG_WriteCoord(&sv.signon, origin[1]);
-			MSG_WriteCoord(&sv.signon, origin[2]);
-			MSG_WriteByte(&sv.signon, soundnum);
-			MSG_WriteByte(&sv.signon, volume * 255.0f);
-			MSG_WriteByte(&sv.signon, attenuation * 64.0f);
-			return;
-		}
-	}
-	SV_Error("qc2cpp ambient sound is not precached: %s", local);
+	PF2_ambientsound(origin[0], origin[1], origin[2], local, volume, attenuation);
 }
 
 static void QCX_SetSpawnParms(void *context, qcx_entity_id_t entity,
