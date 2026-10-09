@@ -325,6 +325,25 @@ elseif(UNIX)
 endif()
 add_test(NAME qcx_sprint COMMAND qcx_sprint_test)
 
+add_executable(qcx_ambient_sound_test ambient_sound_test.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
+	${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
+set_target_properties(qcx_ambient_sound_test PROPERTIES
+	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(qcx_ambient_sound_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_ambient_sound_test PRIVATE
+	-Wall -Wextra -Wpedantic -Werror -UNDEBUG -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_ambient_sound_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_ambient_sound_test PRIVATE Qc2cppHost::contract)
+if(APPLE)
+	target_link_options(qcx_ambient_sound_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_ambient_sound_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_ambient_sound COMMAND qcx_ambient_sound_test)
+
 add_executable(qcx_client_command_payload_test
 	client_command_payload_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/client_command.c)
@@ -685,6 +704,7 @@ foreach(test_name IN ITEMS
 	qcx_services_world
 	qcx_client
 	qcx_sprint
+	qcx_ambient_sound
 	qcx_client_command_payload
 	qcx_client_routes
 	qcx_pr2_api_routes

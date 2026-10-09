@@ -101,6 +101,19 @@ void PF2_centerprint(int entnum, char *text)
 	++centerprint_calls;
 }
 
+void PF2_ambientsound(float x, float y, float z, char *sample, float volume,
+	float attenuation)
+{
+	(void)x;
+	(void)y;
+	(void)z;
+	(void)sample;
+	(void)volume;
+	(void)attenuation;
+	/* Ambient sound is exercised with the real PF2 implementation separately. */
+	abort();
+}
+
 void PF2_logfrag(int killer_entnum, int victim_entnum)
 {
 	assert(killer_entnum == 1);

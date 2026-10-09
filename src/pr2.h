@@ -128,6 +128,8 @@ int		PF2_pointcontents(float x, float y, float z);
 void		PF2_stuffcmd(int entnum, char *text, int flags);
 void		PF2_sprint(int entnum, int level, char *text, int flags);
 void		PF2_centerprint(int entnum, char *text);
+void		PF2_ambientsound(float x, float y, float z, char *sample, float volume,
+			float attenuation);
 void		PF2_logfrag(int killer_entnum, int victim_entnum);
 void		PF2_multicast(float x, float y, float z, int destination);
 void		PF2_WriteByte(int to, int value, edict_t *msg_entity);
