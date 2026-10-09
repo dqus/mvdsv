@@ -166,6 +166,12 @@ when logical game, map, entity capacity, and engine-state identity match.
 QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
 rejected: create a new save after upgrading.
 
+`qcx/save_format` owns the engine-section codec. A parsed image contains typed
+time, lightstyles, indexed precaches, and edict records, not opaque engine bytes.
+Malformed engine and roster structure is rejected before restarting the map.
+Resource preparation and restore consume that same parsed state; restore still
+checks it against the selected game's capacity, map checksum, and world resources.
+
 A QCMS load always creates a fresh map session before restoring its logical
 state. It can therefore load an e1m2 save after a single-player death/restart,
 after changing to another map, or at server startup with +load; it is not

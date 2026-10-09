@@ -69,35 +69,6 @@ qcx_restore_status_t QCX_RestoreGuest(const uint8_t *data, qcx_byte_count_t size
 	++guest_restore_calls;
 	return QCX_RESTORE_OK;
 }
-qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,
-	uint32_t *size)
-{
-	(void)image;
-	(void)out;
-	(void)size;
-	return QCX_PLUGIN_BAD_ARGUMENT;
-}
-qcx_plugin_status_t QCX_SaveParse(const uint8_t *bytes, uint32_t size,
-	qcx_save_image_t **out)
-{
-	(void)bytes;
-	(void)size;
-	*out = NULL;
-	return QCX_PLUGIN_BAD_ARGUMENT;
-}
-bool QCX_SaveClientNameEqual(const char *left, const char *right)
-{
-	if (left == NULL || right == NULL) return false;
-	for (;;) {
-		uint8_t left_byte = (uint8_t)*left++ & 0x7fU;
-		uint8_t right_byte = (uint8_t)*right++ & 0x7fU;
-		if (left_byte >= 'A' && left_byte <= 'Z') left_byte += 'a' - 'A';
-		if (right_byte >= 'A' && right_byte <= 'Z') right_byte += 'a' - 'A';
-		if (left_byte != right_byte) return false;
-		if (left_byte == 0U) return true;
-	}
-}
-void QCX_SaveImageFree(qcx_save_image_t *image) { (void)image; }
 void FS_CreatePath(char *path) { (void)path; }
 void FS_FlushFSHash(void) {}
 void *Hunk_Alloc(int size) { return malloc((size_t)size); }
@@ -126,73 +97,24 @@ void Con_Printf(char *fmt, ...)
 	va_end(arguments);
 }
 
-typedef struct byte_writer_s {
-	uint8_t bytes[1024];
-	uint32_t size;
-} byte_writer_t;
-
-static void write_u32(byte_writer_t *writer, uint32_t value)
-{
-	assert(writer->size + 4U <= sizeof(writer->bytes));
-	writer->bytes[writer->size++] = (uint8_t)value;
-	writer->bytes[writer->size++] = (uint8_t)(value >> 8U);
-	writer->bytes[writer->size++] = (uint8_t)(value >> 16U);
-	writer->bytes[writer->size++] = (uint8_t)(value >> 24U);
-}
-
-static void write_f32(byte_writer_t *writer, float value)
-{
-	uint32_t bits;
-	memcpy(&bits, &value, sizeof(bits));
-	write_u32(writer, bits);
-}
-
-static void write_f64(byte_writer_t *writer, double value)
-{
-	uint64_t bits;
-	uint32_t index;
-	memcpy(&bits, &value, sizeof(bits));
-	assert(writer->size + 8U <= sizeof(writer->bytes));
-	for (index = 0U; index < 8U; ++index) {
-		writer->bytes[writer->size++] = (uint8_t)(bits >> (8U * index));
-	}
-}
-
-static void write_resource(byte_writer_t *writer, const char *value)
-{
-	const uint32_t size = (uint32_t)strlen(value);
-	assert(writer->size + 4U + size <= sizeof(writer->bytes));
-	write_u32(writer, size);
-	memcpy(writer->bytes + writer->size, value, size);
-	writer->size += size;
-}
-
-static qcx_save_image_t make_valid_image(byte_writer_t *engine, uint32_t world_flags,
-	qbool restored_client)
+static qcx_save_image_t make_valid_image(uint32_t world_flags, qbool restored_client)
 {
 	qcx_save_image_t image = {0};
 	uint32_t index;
-	write_u32(engine, 2U);
-	write_f64(engine, 42.5);
-	write_u32(engine, 17U);
-	write_u32(engine, MAX_LIGHTSTYLES);
-	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) write_resource(engine, "m");
-	write_u32(engine, 0U);
-	write_u32(engine, test_entity_capacity);
-	write_u32(engine, world_flags);
-	write_f32(engine, 0.0f);
-	write_u32(engine, world_flags != 1U ? 0U : restored_client ? 1U : 2U);
-	write_f32(engine, restored_client ? 0.0f : 3.0f);
-	write_u32(engine, 0U);
-	write_f32(engine, 0.0f);
-	write_u32(engine, 0U);
-	write_f32(engine, 0.0f);
+	image.engine.time = 42.5;
+	image.engine.serverflags = 17U;
+	for (index = 0U; index < QCX_SAVE_LIGHTSTYLE_COUNT; ++index) {
+		strcpy(image.engine.lightstyles[index], "m");
+	}
+	image.engine.edicts[0].state = (qcx_save_edict_state_t)world_flags;
+	image.engine.edicts[1].state = world_flags != 1U ? QCX_SAVE_UNUSED_EDICT
+		: restored_client ? QCX_SAVE_ACTIVE_EDICT : QCX_SAVE_FREE_EDICT;
+	image.engine.edicts[1].freetime = restored_client ? 0.0f : 3.0f;
 	strcpy(image.metadata.logical_game, "game");
 	strcpy(image.metadata.map_name, "e1m1");
 	image.metadata.map_bsp_checksum = UINT32_C(0x12345678);
 	image.metadata.entity_capacity = test_entity_capacity;
 	image.metadata.client_slot_capacity = 3U;
-	image.engine_state = (qcx_save_bytes_t){engine->bytes, engine->size};
 	image.roster_count = restored_client ? 1U : 0U;
 	if (restored_client) {
 		image.roster[0].saved_slot = 0U;
@@ -233,10 +155,9 @@ static void reset_live_engine(void)
 
 static void test_invalid_image_is_rejected_before_guest_or_host_mutation(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
-	image = make_valid_image(&engine, true, false);
+	image = make_valid_image(true, false);
 	strcpy(image.metadata.map_name, "e1m2");
 	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
@@ -249,10 +170,9 @@ static void test_invalid_image_is_rejected_before_guest_or_host_mutation(void)
 
 static void test_valid_image_validates_then_applies_in_place(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
-	image = make_valid_image(&engine, true, false);
+	image = make_valid_image(true, false);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
@@ -274,14 +194,13 @@ static void test_valid_image_validates_then_applies_in_place(void)
 
 static void test_roster_restore_defers_client_replication_until_session_completion(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].edict = &sv.edicts[1];
 	svs.clients[0].delta_sequence = 23;
 	expected_validation_selection = 3U;
-	image = make_valid_image(&engine, true, true);
+	image = make_valid_image(true, true);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	QCX_ApplySaveGame(&image);
 	assert(client_replication_updates == 0U);
@@ -290,11 +209,10 @@ static void test_roster_restore_defers_client_replication_until_session_completi
 
 static void test_rejects_a_save_without_an_active_world_slot(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
 	expected_validation_selection = 0U;
-	image = make_valid_image(&engine, false, false);
+	image = make_valid_image(false, false);
 	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
 	assert(guest_restore_calls == 0U);
@@ -303,12 +221,11 @@ static void test_rejects_a_save_without_an_active_world_slot(void)
 
 static void test_fresh_restore_does_not_require_current_client_lifecycle(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].edict = &sv.edicts[1];
-	image = make_valid_image(&engine, true, false);
+	image = make_valid_image(true, false);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
@@ -316,13 +233,12 @@ static void test_fresh_restore_does_not_require_current_client_lifecycle(void)
 
 static void test_fresh_restore_does_not_require_matching_current_slot_state(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
 	svs.clients[0].state = cs_connected;
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
-	image = make_valid_image(&engine, true, true);
+	image = make_valid_image(true, true);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
@@ -330,14 +246,13 @@ static void test_fresh_restore_does_not_require_matching_current_slot_state(void
 
 static void test_fresh_restore_does_not_require_matching_current_role(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].spectator = 1;
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
-	image = make_valid_image(&engine, true, true);
+	image = make_valid_image(true, true);
 	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
@@ -345,10 +260,9 @@ static void test_fresh_restore_does_not_require_matching_current_role(void)
 
 static void test_rejects_a_roster_client_without_an_active_player_entity(void)
 {
-	byte_writer_t engine = {0};
 	qcx_save_image_t image;
 	reset_live_engine();
-	image = make_valid_image(&engine, true, true);
+	image = make_valid_image(true, true);
 	image.roster[0].saved_slot = 1U;
 	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
@@ -356,8 +270,75 @@ static void test_rejects_a_roster_client_without_an_active_player_entity(void)
 	assert(sv.time == 7.0);
 }
 
-int main(void)
+static void test_prepared_resources_survive_image_disposal(const char *directory)
 {
+	qcx_save_precache_t precaches[] = {
+		{.kind = 'M', .slot = 7U, .name = "progs/player.mdl"},
+		{.kind = 'S', .slot = 19U, .name = "misc/menu.wav"}
+	};
+	char path[MAX_OSPATH];
+	char map_name[QCX_SAVE_NAME_CAPACITY];
+	uint8_t *encoded = NULL;
+	uint32_t encoded_size = 0U;
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	image.engine.precache_count = 2U;
+	image.engine.precaches = precaches;
+	assert(QCX_SaveEncode(&image, &encoded, &encoded_size) == QCX_PLUGIN_OK);
+	assert(strlcpy(fs_gamedir, directory, sizeof(fs_gamedir)) < sizeof(fs_gamedir));
+	assert(snprintf(path, sizeof(path), "%s/save/prepared.sav", directory) > 0);
+	FILE *file = fopen(path, "wb");
+	assert(file != NULL);
+	assert(fwrite(encoded, 1U, encoded_size, file) == encoded_size);
+	assert(fclose(file) == 0);
+	free(encoded);
+	assert(QCX_PrepareLoadGame("prepared", map_name, sizeof(map_name)));
+	assert(strcmp(map_name, "e1m1") == 0);
+	assert(QCX_HasPreparedLoadGame());
+	assert(sv.model_precache[7] == NULL && sv.sound_precache[19] == NULL);
+	assert(sv.time == 7.0 && guest_restore_calls == 0U);
+	assert(QCX_PrepareLoadResources());
+	assert(strcmp(sv.model_precache[0], "") == 0);
+	assert(strcmp(sv.sound_precache[0], "") == 0);
+	assert(QCX_CommitPreparedLoadGame());
+	assert(!QCX_HasPreparedLoadGame());
+	assert(strcmp(sv.model_precache[7], "progs/player.mdl") == 0);
+	assert(strcmp(sv.sound_precache[19], "misc/menu.wav") == 0);
+	assert(strcmp(sv.lightstyles[63], "m") == 0);
+	assert(sv.time == 42.5 && guest_restore_calls == 1U);
+	free(sv.model_precache[7]);
+	free(sv.sound_precache[19]);
+	assert(remove(path) == 0);
+}
+
+static void test_checks_parsed_precaches_against_the_current_world(void)
+{
+	qcx_save_precache_t precaches[] = {
+		{.kind = 'M', .slot = 7U, .name = "progs/player.mdl"},
+		{.kind = 'S', .slot = 19U, .name = "misc/menu.wav"}
+	};
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	image.engine.precache_count = 2U;
+	image.engine.precaches = precaches;
+	sv.model_precache[7] = "progs/player.mdl";
+	sv.sound_precache[19] = "misc/menu.wav";
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(guest_validation_calls == 1U);
+	sv.sound_precache[19] = "misc/other.wav";
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert(guest_validation_calls == 1U);
+	sv.sound_precache[19] = "misc/menu.wav";
+	sv.model_precache[8] = "progs/extra.mdl";
+	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert(guest_validation_calls == 1U);
+	assert(guest_restore_calls == 0U);
+	assert(sv.time == 7.0);
+}
+
+int main(int argc, char **argv)
+{
+	assert(argc == 2);
 	test_invalid_image_is_rejected_before_guest_or_host_mutation();
 	test_valid_image_validates_then_applies_in_place();
 	test_roster_restore_defers_client_replication_until_session_completion();
@@ -366,5 +347,7 @@ int main(void)
 	test_fresh_restore_does_not_require_matching_current_slot_state();
 	test_fresh_restore_does_not_require_matching_current_role();
 	test_rejects_a_roster_client_without_an_active_player_entity();
+	test_checks_parsed_precaches_against_the_current_world();
+	test_prepared_resources_survive_image_disposal(argv[1]);
 	return 0;
 }
