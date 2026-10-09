@@ -29,6 +29,7 @@ static int setmodel_calls;
 static int lightstyle_calls;
 static int makestatic_calls;
 static int changelevel_calls;
+static int persistent_allocations;
 
 void SV_Error(char *error, ...)
 {
@@ -89,19 +90,25 @@ void PF2_setmodel(edict_t *entity, char *name)
 void PF2_precache_sound(char *name)
 {
 	assert(!strcmp(name, "sound/test.wav"));
+	if (sv.sound_precache[0] == NULL) {
+		sv.sound_precache[0] = name;
+	}
 	++precached_sound;
 }
 
 void PF2_precache_model(char *name)
 {
 	assert(!strcmp(name, "progs/test.mdl"));
+	if (sv.model_precache[0] == NULL) {
+		sv.model_precache[0] = name;
+	}
 	++precached_model;
 }
 
 void PF2_lightstyle(int style, char *value)
 {
-	assert(style == 2);
-	assert(!strcmp(value, "abc"));
+	assert(style == 2 || style == 3);
+	sv.lightstyles[style] = value;
 	++lightstyle_calls;
 }
 
@@ -120,7 +127,14 @@ void PF2_changelevel(const char *map, const char *entfile)
 edict_t *ED_Alloc(void) { test_spawned.e.free = false; return &test_spawned; }
 void ED_Free(edict_t *entity) { assert(entity == &test_spawned); entity->e.free = true; ++freed; }
 int QCX_SetEntityString(edict_t *entity, const char *field, const char *value) { assert(entity == &test_entity); assert(!strcmp(field, "model")); strlcpy(entity_model, value, sizeof(entity_model)); return 1; }
-void *Hunk_AllocName(int size, const char *name) { static char storage[4][MAX_QPATH]; static int next; assert(size <= MAX_QPATH); assert(!strcmp(name, "qc2cpp")); return storage[next++ % 4]; }
+void *Hunk_AllocName(int size, const char *name)
+{
+	static char storage[4][MAX_QPATH];
+	assert(size <= MAX_QPATH);
+	assert(!strcmp(name, "qc2cpp"));
+	++persistent_allocations;
+	return storage[(persistent_allocations - 1) % 4];
+}
 void SV_FlushSignon(void) { }
 float Cvar_Value(const char *name) { assert(!strcmp(name, "skill")); return 2.0f; }
 cvar_t *Cvar_Find(const char *name) { assert(!strcmp(name, "skill")); return &deathmatch; }
@@ -191,8 +205,31 @@ int main(void)
 	assert(host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U, NULL, 0U) == 14U);
 	assert(host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U, NULL, 0U) == 14U);
 	assert(precached_model == 1 && precached_sound == 1);
+	const int precache_allocations = persistent_allocations;
+	for (int iteration = 0; iteration < 100; ++iteration) {
+		host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U, NULL, 0U);
+		host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U, NULL, 0U);
+	}
+	assert(persistent_allocations == precache_allocations);
+	assert(precached_model == 101 && precached_sound == 101);
+	assert(!strcmp(sv.model_precache[0], "progs/test.mdl"));
+	assert(!strcmp(sv.sound_precache[0], "sound/test.wav"));
 	host.lightstyle(host.context, 2.0f, (const uint8_t *)"abc", 3U);
 	assert(lightstyle_calls == 1);
+	char *const lightstyle_storage = sv.lightstyles[2];
+	host.lightstyle(host.context, 3.0f, (const uint8_t *)"xyz", 3U);
+	for (int iteration = 0; iteration < 1000; ++iteration) {
+		host.lightstyle(host.context, 2.0f, (const uint8_t *)"m", 1U);
+		host.lightstyle(host.context, 2.0f, (const uint8_t *)"abc", 3U);
+	}
+	assert(persistent_allocations == precache_allocations);
+	assert(sv.lightstyles[2] == lightstyle_storage);
+	assert(!strcmp(sv.lightstyles[2], "abc"));
+	assert(!strcmp(sv.lightstyles[3], "xyz"));
+	char transient_style[] = "def";
+	host.lightstyle(host.context, 2.0f, (const uint8_t *)transient_style, 3U);
+	memset(transient_style, 'x', 3U);
+	assert(!strcmp(sv.lightstyles[2], "def"));
 	assert(host.cvar(host.context, (const uint8_t *)"skill", 5U) == 2.0f);
 	host.cvar_set(host.context, (const uint8_t *)"skill", 5U, (const uint8_t *)"3", 1U);
 	assert(cvar_set == 1);
