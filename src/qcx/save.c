@@ -4,261 +4,108 @@
 #include "qcx/entities.h"
 #include "qcx/restore_session.h"
 #include "qcx/world_text.h"
-#if defined(QCX_TESTS)
-#include "qcx/test_observer.h"
-#endif
-
-#include <limits.h>
-#include <math.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-enum {
-	QCX_SAVE_ENGINE_VERSION = 2U,
-	QCX_SAVE_MAX_GUEST_BYTES = 8U * 1024U * 1024U,
-	QCX_SAVE_MAX_RESOURCE_BYTES = 255U,
-	QCX_SAVE_ACTIVE_EDICT = 1U,
-	QCX_SAVE_FREE_EDICT = 2U
-};
-
-typedef struct qcx_save_writer_s {
-	uint8_t *cursor;
-	const uint8_t *end;
-} qcx_save_writer_t;
-
 static qcx_save_image_t *qcx_prepared_image;
-
-typedef struct qcx_save_reader_s {
-	const uint8_t *cursor;
-	const uint8_t *end;
-} qcx_save_reader_t;
 
 typedef struct qcx_restore_plan_s {
 	const qcx_save_image_t *image;
-	double time;
-	uint32_t serverflags;
 	uint32_t num_edicts;
 	uint8_t selection[(QCX_SAVE_MAX_ENTITY_CAPACITY + 7U) / 8U];
-	uint32_t edict_flags[QCX_SAVE_MAX_ENTITY_CAPACITY];
-	float freetimes[QCX_SAVE_MAX_ENTITY_CAPACITY];
-	char lightstyles[MAX_LIGHTSTYLES][QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
 } qcx_restore_plan_t;
 
 static qcx_restore_plan_t qcx_restore_plan;
 _Static_assert(QCX_SAVE_MAX_RESOURCE_BYTES == QCX_MAX_LIGHTSTYLE_BYTES,
 	"lightstyle storage must hold validated save resources");
-
+_Static_assert(QCX_SAVE_LIGHTSTYLE_COUNT == MAX_LIGHTSTYLES,
+	"QCMS lightstyle count must match the engine");
+_Static_assert(QCX_SAVE_MODEL_CAPACITY == MAX_MODELS && QCX_SAVE_SOUND_CAPACITY == MAX_SOUNDS,
+	"QCMS precache bounds must match the engine");
+_Static_assert(QCX_SAVE_MAX_ENTITY_CAPACITY == MAX_EDICTS,
+	"QCMS entity capacity must match the engine");
 _Static_assert(NUM_SPAWN_PARMS == QCX_SAVE_SPAWN_PARM_COUNT,
 	"QCMS spawn parameter count");
-
-static qbool QCX_SaveRead(qcx_save_reader_t *reader, void *out, uint32_t size)
-{
-	if ((size_t)(reader->end - reader->cursor) < size) return false;
-	if (size != 0U) { memcpy(out, reader->cursor, size); reader->cursor += size; }
-	return true;
-}
-
-static qbool QCX_SaveReadU32(qcx_save_reader_t *reader, uint32_t *out)
-{
-	uint8_t bytes[4];
-	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) return false;
-	*out = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16)
-		| ((uint32_t)bytes[3] << 24);
-	return true;
-}
-
-static qbool QCX_SaveReadF32(qcx_save_reader_t *reader, float *out)
-{
-	uint32_t bits;
-	if (!QCX_SaveReadU32(reader, &bits)) return false;
-	memcpy(out, &bits, sizeof(bits));
-	return isfinite(*out);
-}
-
-static qbool QCX_SaveReadF64(qcx_save_reader_t *reader, double *out)
-{
-	uint8_t bytes[8];
-	uint64_t bits = 0U;
-	uint32_t index;
-	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) return false;
-	for (index = 0U; index < sizeof(bytes); ++index) bits |= (uint64_t)bytes[index] << (8U * index);
-	memcpy(out, &bits, sizeof(bits));
-	return isfinite(*out);
-}
-
-static qbool QCX_SaveReadResource(qcx_save_reader_t *reader, char *out, uint32_t capacity)
-{
-	uint32_t size;
-	uint32_t index;
-	if (!QCX_SaveReadU32(reader, &size) || size == 0U || size >= capacity
-		|| (size_t)(reader->end - reader->cursor) < size) return false;
-	for (index = 0U; index < size; ++index) {
-		const uint8_t byte = reader->cursor[index];
-		if (byte < 32U || byte > 126U || byte == '\\') return false;
-	}
-	memcpy(out, reader->cursor, size);
-	out[size] = '\0';
-	reader->cursor += size;
-	return true;
-}
-
-static qbool QCX_SaveWrite(qcx_save_writer_t *writer, const void *bytes, uint32_t size)
-{
-	if ((size_t)(writer->end - writer->cursor) < size) return false;
-	if (size != 0U) { memcpy(writer->cursor, bytes, size); writer->cursor += size; }
-	return true;
-}
-
-static qbool QCX_SaveWriteU32(qcx_save_writer_t *writer, uint32_t value)
-{
-	const uint8_t bytes[4] = {(uint8_t)value, (uint8_t)(value >> 8),
-		(uint8_t)(value >> 16), (uint8_t)(value >> 24)};
-	return QCX_SaveWrite(writer, bytes, sizeof(bytes));
-}
-
-static qbool QCX_SaveWriteF32(qcx_save_writer_t *writer, float value)
-{
-	uint32_t bits;
-	memcpy(&bits, &value, sizeof(bits));
-	return QCX_SaveWriteU32(writer, bits);
-}
-
-static qbool QCX_SaveWriteF64(qcx_save_writer_t *writer, double value)
-{
-	uint64_t bits;
-	uint8_t bytes[8];
-	uint32_t index;
-	memcpy(&bits, &value, sizeof(bits));
-	for (index = 0U; index < sizeof(bytes); ++index) bytes[index] = (uint8_t)(bits >> (8U * index));
-	return QCX_SaveWrite(writer, bytes, sizeof(bytes));
-}
 
 static uint32_t QCX_SaveBoundedStringLength(const char *value, uint32_t limit)
 {
 	uint32_t length;
-	if (value == NULL) return 0U;
-	for (length = 0U; length <= limit; ++length) if (value[length] == '\0') return length;
+	if (value == NULL) {
+		return 0U;
+	}
+	for (length = 0U; length <= limit; ++length) {
+		if (value[length] == '\0') {
+			return length;
+		}
+	}
 	return limit + 1U;
 }
 
-static qbool QCX_SaveWriteResource(qcx_save_writer_t *writer, const char *prefix,
-	const char *value)
+static qbool QCX_SaveCapturePrecache(qcx_save_engine_t *engine, char kind,
+	uint32_t slot, const char *name)
 {
-	const uint32_t prefix_size = QCX_SaveBoundedStringLength(prefix, 16U);
-	const uint32_t value_size = QCX_SaveBoundedStringLength(value, QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size);
-	const uint32_t size = prefix_size + value_size;
-	uint32_t index;
-	if (prefix_size == 0U || prefix_size > 16U || value_size == 0U
-		|| value_size > QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size) return false;
-	for (index = 0U; index < value_size; ++index) {
-		const uint8_t byte = (uint8_t)value[index];
-		if (byte < 32U || byte > 126U || byte == '\\') return false;
-	}
-	return QCX_SaveWriteU32(writer, size) && QCX_SaveWrite(writer, prefix, prefix_size)
-		&& QCX_SaveWrite(writer, value, value_size);
+	qcx_save_precache_t *entry = &engine->precaches[engine->precache_count++];
+	entry->kind = kind;
+	entry->slot = slot;
+	return strlcpy(entry->name, name, sizeof(entry->name)) < sizeof(entry->name);
 }
 
-static uint32_t QCX_SaveResourcePrefixSize(uint32_t index)
+static qbool QCX_SaveCaptureEngine(uint32_t entity_capacity, qcx_save_engine_t *engine)
 {
-	uint32_t digits = 1U;
-	while (index >= 10U) {
-		index /= 10U;
-		++digits;
-	}
-	return digits + 3U;
-}
-
-static qbool QCX_SaveWriteIndexedResource(qcx_save_writer_t *writer, char kind,
-	uint32_t index, const char *value)
-{
-	char prefix[16];
-	const int written = snprintf(prefix, sizeof(prefix), "%c:%u:", kind, index);
-	return written > 0 && (size_t)written < sizeof(prefix)
-		&& QCX_SaveWriteResource(writer, prefix, value);
-}
-
-static qbool QCX_SaveWriteLightstyle(qcx_save_writer_t *writer, const char *value)
-{
-	const char *const saved = value == NULL ? "m" : value;
-	const uint32_t size = QCX_SaveBoundedStringLength(saved, QCX_SAVE_MAX_RESOURCE_BYTES);
-	uint32_t index;
-	if (size == 0U || size > QCX_SAVE_MAX_RESOURCE_BYTES) return false;
-	for (index = 0U; index < size; ++index) {
-		const uint8_t byte = (uint8_t)saved[index];
-		if (byte < 32U || byte > 126U || byte == '\\') return false;
-	}
-	return QCX_SaveWriteU32(writer, size) && QCX_SaveWrite(writer, saved, size);
-}
-
-static qbool QCX_SaveAppendSize(uint32_t *size, uint32_t add)
-{
-	if (*size > UINT32_MAX - add) return false;
-	*size += add;
-	return true;
-}
-
-static qbool QCX_SaveEngineSize(uint32_t entity_capacity, uint32_t *out_size,
-	uint32_t *out_precache_count)
-{
-	uint32_t size = 4U + 8U + 4U + 4U;
 	uint32_t precache_count = 0U;
 	int index;
+	if (sv.max_edicts <= 0 || entity_capacity == 0U
+		|| entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY
+		|| (uint32_t)sv.max_edicts > entity_capacity || sv.num_edicts <= 0
+		|| sv.num_edicts > sv.max_edicts) {
+		return false;
+	}
+	engine->time = sv.time;
+	engine->serverflags = svs.serverflags;
 	for (index = 0; index < MAX_LIGHTSTYLES; ++index) {
-		const uint32_t length = QCX_SaveBoundedStringLength(sv.lightstyles[index] == NULL ? "m" : sv.lightstyles[index], QCX_SAVE_MAX_RESOURCE_BYTES);
-		if (length == 0U || length > QCX_SAVE_MAX_RESOURCE_BYTES || !QCX_SaveAppendSize(&size, 4U + length)) return false;
+		const char *value = sv.lightstyles[index] == NULL ? "m" : sv.lightstyles[index];
+		if (strlcpy(engine->lightstyles[index], value, sizeof(engine->lightstyles[index]))
+			>= sizeof(engine->lightstyles[index])) {
+			return false;
+		}
 	}
-	if (!QCX_SaveAppendSize(&size, 4U)) return false;
-	for (index = 1; index < MAX_MODELS; ++index) if (sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0') {
-		const uint32_t prefix_size = QCX_SaveResourcePrefixSize((uint32_t)index);
-		const uint32_t length = QCX_SaveBoundedStringLength(sv.model_precache[index], QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size);
-		if (length == 0U || length > QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size || !QCX_SaveAppendSize(&size, 4U + prefix_size + length)) return false;
-		++precache_count;
+	for (index = 1; index < MAX_MODELS; ++index) {
+		if (sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0') {
+			++precache_count;
+		}
 	}
-	for (index = 1; index < MAX_SOUNDS; ++index) if (sv.sound_precache[index] != NULL && sv.sound_precache[index][0] != '\0') {
-		const uint32_t prefix_size = QCX_SaveResourcePrefixSize((uint32_t)index);
-		const uint32_t length = QCX_SaveBoundedStringLength(sv.sound_precache[index], QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size);
-		if (length == 0U || length > QCX_SAVE_MAX_RESOURCE_BYTES - prefix_size || !QCX_SaveAppendSize(&size, 4U + prefix_size + length)) return false;
-		++precache_count;
+	for (index = 1; index < MAX_SOUNDS; ++index) {
+		if (sv.sound_precache[index] != NULL && sv.sound_precache[index][0] != '\0') {
+			++precache_count;
+		}
 	}
-	if (precache_count > MAX_MODELS + MAX_SOUNDS || !QCX_SaveAppendSize(&size, 4U)
-		|| !QCX_SaveAppendSize(&size, entity_capacity * 8U)) return false;
-	*out_size = size; *out_precache_count = precache_count;
-	return true;
-}
-
-static qbool QCX_SaveBuildEngine(uint32_t entity_capacity, qcx_save_bytes_t *out)
-{
-	uint32_t size, precache_count;
-	qcx_save_writer_t writer;
-	int index;
-	if (sv.max_edicts <= 0 || entity_capacity == 0U || entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY
-		|| (uint32_t)sv.max_edicts > entity_capacity
-		|| !QCX_SaveEngineSize(entity_capacity, &size, &precache_count)) return false;
-	out->data = malloc(size); out->size = 0U;
-	if (out->data == NULL) return false;
-	writer = (qcx_save_writer_t){out->data, out->data + size};
-	if (!QCX_SaveWriteU32(&writer, QCX_SAVE_ENGINE_VERSION) || !QCX_SaveWriteF64(&writer, sv.time)
-		|| !QCX_SaveWriteU32(&writer, svs.serverflags) || !QCX_SaveWriteU32(&writer, MAX_LIGHTSTYLES)) goto fail;
-	for (index = 0; index < MAX_LIGHTSTYLES; ++index) if (!QCX_SaveWriteLightstyle(&writer, sv.lightstyles[index])) goto fail;
-	if (!QCX_SaveWriteU32(&writer, precache_count)) goto fail;
-	for (index = 1; index < MAX_MODELS; ++index) if (sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0'
-		&& !QCX_SaveWriteIndexedResource(&writer, 'M', (uint32_t)index,
-			sv.model_precache[index])) goto fail;
-	for (index = 1; index < MAX_SOUNDS; ++index) if (sv.sound_precache[index] != NULL && sv.sound_precache[index][0] != '\0'
-		&& !QCX_SaveWriteIndexedResource(&writer, 'S', (uint32_t)index,
-			sv.sound_precache[index])) goto fail;
-	if (!QCX_SaveWriteU32(&writer, entity_capacity)) goto fail;
+	if (precache_count != 0U) {
+		engine->precaches = calloc(precache_count, sizeof(*engine->precaches));
+		if (engine->precaches == NULL) {
+			return false;
+		}
+	}
+	for (index = 1; index < MAX_MODELS; ++index) {
+		if (sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0'
+			&& !QCX_SaveCapturePrecache(engine, 'M', (uint32_t)index, sv.model_precache[index])) {
+			return false;
+		}
+	}
+	for (index = 1; index < MAX_SOUNDS; ++index) {
+		if (sv.sound_precache[index] != NULL && sv.sound_precache[index][0] != '\0'
+			&& !QCX_SaveCapturePrecache(engine, 'S', (uint32_t)index, sv.sound_precache[index])) {
+			return false;
+		}
+	}
 	for (index = 0; index < (int)entity_capacity; ++index) {
-		const uint32_t flags = index >= sv.num_edicts ? 0U : sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
-		if (!QCX_SaveWriteU32(&writer, flags) || !QCX_SaveWriteF32(&writer, sv.edicts[index].e.freetime)) goto fail;
+		engine->edicts[index].state = index >= sv.num_edicts ? QCX_SAVE_UNUSED_EDICT
+			: sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
+		engine->edicts[index].freetime = sv.edicts[index].e.freetime;
 	}
-	if (writer.cursor != writer.end) goto fail;
-	out->size = size; return true;
-fail:
-	free(out->data); out->data = NULL; return false;
+	return true;
 }
 
 static qbool QCX_SaveBuildRoster(qcx_save_image_t *image)
@@ -343,42 +190,15 @@ static qbool QCX_SaveWriteFile(const char *name, const uint8_t *bytes, uint32_t 
 	FS_FlushFSHash(); return true;
 }
 
-static qbool QCX_SaveParseIndexedResource(const char *resource, char *kind,
-	uint32_t *index, const char **name)
+static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *image)
 {
-	const char *cursor;
-	uint32_t value = 0U;
-	if ((resource[0] != 'M' && resource[0] != 'S') || resource[1] != ':') return false;
-	cursor = resource + 2;
-	if (*cursor < '0' || *cursor > '9') return false;
-	while (*cursor >= '0' && *cursor <= '9') {
-		if (value > (UINT32_MAX - (uint32_t)(*cursor - '0')) / 10U) return false;
-		value = value * 10U + (uint32_t)(*cursor - '0');
-		++cursor;
-	}
-	if (*cursor != ':' || cursor[1] == '\0') return false;
-	*kind = resource[0];
-	*index = value;
-	*name = cursor + 1;
-	return true;
-}
-
-static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
-{
-	qcx_save_reader_t reader;
 	uint8_t models[MAX_MODELS] = {0};
 	uint8_t sounds[MAX_SOUNDS] = {0};
-	uint32_t version;
-	uint32_t count;
 	uint32_t index;
-	qbool unused_slot = false;
-	char resource[QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
-
-	if (image == NULL || image->engine_state.data == NULL || image->engine_state.size == 0U
-		|| image->metadata.entity_capacity != QCX_EntityCapacity()
-		|| image->metadata.client_slot_capacity == 0U
-		|| image->metadata.client_slot_capacity > MAX_CLIENTS
-		|| image->metadata.client_slot_capacity >= image->metadata.entity_capacity
+	if (!QCX_SaveImageValid(image)) {
+		return QCX_RESTORE_MALFORMED_CHUNK;
+	}
+	if (image->metadata.entity_capacity != QCX_EntityCapacity()
 		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| strcmp(image->metadata.map_name, sv.mapname) != 0
 		|| image->metadata.map_bsp_checksum != sv.map_checksum) {
@@ -386,96 +206,47 @@ static qcx_restore_status_t QCX_SaveDecodeEngine(const qcx_save_image_t *image)
 			sv_progsname.string, sv.mapname, QCX_EntityCapacity(), sv.map_checksum);
 		return QCX_RESTORE_ENTITY_SET_MISMATCH;
 	}
-	reader = (qcx_save_reader_t){image->engine_state.data,
-		image->engine_state.data + image->engine_state.size};
-	if (!QCX_SaveReadU32(&reader, &version) || version != QCX_SAVE_ENGINE_VERSION
-		|| !QCX_SaveReadF64(&reader, &qcx_restore_plan.time)
-		|| !QCX_SaveReadU32(&reader, &qcx_restore_plan.serverflags)
-		|| !QCX_SaveReadU32(&reader, &count) || count != MAX_LIGHTSTYLES) return QCX_RESTORE_MALFORMED_CHUNK;
-	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) {
-		if (!QCX_SaveReadResource(&reader, qcx_restore_plan.lightstyles[index],
-			sizeof(qcx_restore_plan.lightstyles[index]))) return QCX_RESTORE_MALFORMED_CHUNK;
-	}
-	if (!QCX_SaveReadU32(&reader, &count) || count > MAX_MODELS + MAX_SOUNDS) return QCX_RESTORE_MALFORMED_CHUNK;
-	for (index = 0U; index < count; ++index) {
-		char kind;
-		uint32_t slot;
-		const char *name;
-		if (!QCX_SaveReadResource(&reader, resource, sizeof(resource))
-			|| !QCX_SaveParseIndexedResource(resource, &kind, &slot, &name)) return QCX_RESTORE_MALFORMED_CHUNK;
-		if (kind == 'M') {
-			if (slot == 0U || slot >= MAX_MODELS || models[slot] != 0U
-				|| sv.model_precache[slot] == NULL || strcmp(name, sv.model_precache[slot]) != 0) {
-				Con_Printf("qc2cpp restore model mismatch at %u: expected %s, got %s.\n", slot,
-					name, slot < MAX_MODELS && sv.model_precache[slot] != NULL ? sv.model_precache[slot] : "<none>");
-				return QCX_RESTORE_ENTITY_SET_MISMATCH;
-			}
-			models[slot] = 1U;
+	/* Structural validation belongs to save_format. Here compare the parsed
+	 * resources with the world that will receive the saved gameplay state. */
+	for (index = 0U; index < image->engine.precache_count; ++index) {
+		const qcx_save_precache_t *entry = &image->engine.precaches[index];
+		const char *actual = entry->kind == 'M' ? sv.model_precache[entry->slot]
+			: sv.sound_precache[entry->slot];
+		if (actual == NULL || strcmp(entry->name, actual) != 0) {
+			Con_Printf("qc2cpp restore %s mismatch at %u: expected %s, got %s.\n",
+				entry->kind == 'M' ? "model" : "sound", entry->slot,
+				entry->name, actual == NULL ? "<none>" : actual);
+			return QCX_RESTORE_ENTITY_SET_MISMATCH;
+		}
+		if (entry->kind == 'M') {
+			models[entry->slot] = 1U;
 		} else {
-			if (slot == 0U || slot >= MAX_SOUNDS || sounds[slot] != 0U
-				|| sv.sound_precache[slot] == NULL || strcmp(name, sv.sound_precache[slot]) != 0) {
-				Con_Printf("qc2cpp restore sound mismatch at %u: expected %s, got %s.\n", slot,
-					name, slot < MAX_SOUNDS && sv.sound_precache[slot] != NULL ? sv.sound_precache[slot] : "<none>");
-				return QCX_RESTORE_ENTITY_SET_MISMATCH;
-			}
-			sounds[slot] = 1U;
+			sounds[entry->slot] = 1U;
 		}
 	}
 	if (qcx_prepared_image == NULL) {
 		for (index = 1U; index < MAX_MODELS; ++index) {
 			if ((sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0')
-				!= (models[index] != 0U)) return QCX_RESTORE_ENTITY_SET_MISMATCH;
+				!= (models[index] != 0U)) {
+				return QCX_RESTORE_ENTITY_SET_MISMATCH;
+			}
 		}
 		for (index = 1U; index < MAX_SOUNDS; ++index) {
 			if ((sv.sound_precache[index] != NULL && sv.sound_precache[index][0] != '\0')
-				!= (sounds[index] != 0U)) return QCX_RESTORE_ENTITY_SET_MISMATCH;
+				!= (sounds[index] != 0U)) {
+				return QCX_RESTORE_ENTITY_SET_MISMATCH;
+			}
 		}
 	}
-	if (!QCX_SaveReadU32(&reader, &count) || count != image->metadata.entity_capacity) return QCX_RESTORE_MALFORMED_CHUNK;
 	memset(qcx_restore_plan.selection, 0, sizeof(qcx_restore_plan.selection));
 	qcx_restore_plan.num_edicts = 0U;
-	for (index = 0U; index < count; ++index) {
-		if (!QCX_SaveReadU32(&reader, &qcx_restore_plan.edict_flags[index])
-			|| qcx_restore_plan.edict_flags[index] > QCX_SAVE_FREE_EDICT
-			|| !QCX_SaveReadF32(&reader, &qcx_restore_plan.freetimes[index])) return QCX_RESTORE_MALFORMED_CHUNK;
-		if (index == 0U && qcx_restore_plan.edict_flags[index] != QCX_SAVE_ACTIVE_EDICT) {
-			return QCX_RESTORE_ENTITY_SET_MISMATCH;
-		}
-		if (unused_slot && qcx_restore_plan.edict_flags[index] != 0U) return QCX_RESTORE_MALFORMED_CHUNK;
-		if (qcx_restore_plan.edict_flags[index] == 0U) {
-			unused_slot = true;
-		} else {
+	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
+		const qcx_save_edict_state_t state = image->engine.edicts[index].state;
+		if (state != QCX_SAVE_UNUSED_EDICT) {
 			qcx_restore_plan.num_edicts = index + 1U;
-			if (qcx_restore_plan.edict_flags[index] == QCX_SAVE_ACTIVE_EDICT) qcx_restore_plan.selection[index / 8U] |= (uint8_t)(1U << (index % 8U));
 		}
-	}
-	if (reader.cursor != reader.end || image->roster_count > QCX_SAVE_MAX_CLIENTS
-		|| image->roster_count > image->metadata.client_slot_capacity) {
-		return QCX_RESTORE_MALFORMED_CHUNK;
-	}
-	for (index = 0U; index < image->roster_count; ++index) {
-		const qcx_save_roster_entry_t *const entry = &image->roster[index];
-		uint32_t prior;
-		uint32_t parm;
-		if (entry->saved_slot >= image->metadata.client_slot_capacity
-			|| entry->saved_slot >= MAX_CLIENTS
-			|| entry->saved_slot + 1U >= image->metadata.entity_capacity
-			|| qcx_restore_plan.edict_flags[entry->saved_slot + 1U]
-				!= QCX_SAVE_ACTIVE_EDICT
-			|| entry->spawned > 1U
-			|| (entry->role != QCX_SAVE_ROLE_PLAYER
-				&& entry->role != QCX_SAVE_ROLE_SPECTATOR)
-			|| entry->name[0] == '\0') {
-			return QCX_RESTORE_MALFORMED_CHUNK;
-		}
-		for (parm = 0U; parm < QCX_SAVE_SPAWN_PARM_COUNT; ++parm) {
-			if (!isfinite(entry->spawn_parms[parm])) return QCX_RESTORE_MALFORMED_CHUNK;
-		}
-		for (prior = 0U; prior < index; ++prior) {
-			if (entry->saved_slot == image->roster[prior].saved_slot
-				|| QCX_SaveClientNameEqual(entry->name, image->roster[prior].name)) {
-				return QCX_RESTORE_MALFORMED_CHUNK;
-			}
+		if (state == QCX_SAVE_ACTIVE_EDICT) {
+			qcx_restore_plan.selection[index / 8U] |= (uint8_t)(1U << (index % 8U));
 		}
 	}
 	return QCX_RESTORE_OK;
@@ -485,7 +256,7 @@ qcx_restore_status_t QCX_ValidateSaveGame(const qcx_save_image_t *image)
 {
 	qcx_restore_status_t status;
 	qcx_restore_plan.image = NULL;
-	status = QCX_SaveDecodeEngine(image);
+	status = QCX_SaveCheckEngineIdentity(image);
 	if (status != QCX_RESTORE_OK) return status;
 	status = QCX_ValidateGuestRestore(image->guest_payload.data, image->guest_payload.size,
 		qcx_restore_plan.selection, (image->metadata.entity_capacity + 7U) / 8U);
@@ -524,11 +295,11 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 		SV_Error("qc2cpp restore failed after commit");
 	}
 	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) {
-		sv.lightstyles[index] = QCX_StoreLightstyle(index, qcx_restore_plan.lightstyles[index]);
+		sv.lightstyles[index] = QCX_StoreLightstyle(index, image->engine.lightstyles[index]);
 	}
 	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
-		sv.edicts[index].e.free = qcx_restore_plan.edict_flags[index] != QCX_SAVE_ACTIVE_EDICT;
-		sv.edicts[index].e.freetime = qcx_restore_plan.freetimes[index];
+		sv.edicts[index].e.free = image->engine.edicts[index].state != QCX_SAVE_ACTIVE_EDICT;
+		sv.edicts[index].e.freetime = image->engine.edicts[index].freetime;
 	}
 	/* Player edicts are reserved engine slots, not ordinary game objects.  A
 	 * roster-free player slot therefore must not become visible merely because
@@ -545,9 +316,9 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 		if (!restored_client) sv.edicts[index + 1U].e.free = true;
 	}
 	sv.num_edicts = (int)qcx_restore_plan.num_edicts;
-	sv.time = qcx_restore_plan.time;
+	sv.time = image->engine.time;
 	sv.old_time = sv.time;
-	svs.serverflags = qcx_restore_plan.serverflags;
+	svs.serverflags = image->engine.serverflags;
 	PR_GLOBAL(serverflags) = svs.serverflags;
 	SV_ClearWorld();
 	for (index = 0U; index < qcx_restore_plan.num_edicts; ++index) {
@@ -561,7 +332,7 @@ qbool QCX_SaveGame(const char *name)
 	uint8_t selection[(QCX_SAVE_MAX_ENTITY_CAPACITY + 7U) / 8U];
 	const uint32_t entity_capacity = QCX_EntityCapacity();
 	const uint32_t selection_size = (entity_capacity + 7U) / 8U;
-	qcx_save_bytes_t engine = {0}, guest = {0}; qcx_save_image_t image = {0};
+	qcx_save_bytes_t guest = {0}; qcx_save_image_t image = {0};
 	uint8_t *encoded = NULL; uint32_t encoded_size = 0U; qbool result = false;
 	const char *failure = "unknown error";
 	qcx_byte_count_t required;
@@ -593,7 +364,7 @@ qbool QCX_SaveGame(const char *name)
 			goto done;
 		}
 	}
-	if (!QCX_SaveBuildEngine(entity_capacity, &engine)) {
+	if (!QCX_SaveCaptureEngine(entity_capacity, &image.engine)) {
 		failure = "could not serialize server state";
 		goto done;
 	}
@@ -606,7 +377,7 @@ qbool QCX_SaveGame(const char *name)
 	image.metadata.map_bsp_checksum = sv.map_checksum;
 	image.metadata.entity_capacity = entity_capacity;
 	image.metadata.client_slot_capacity = MAX_CLIENTS;
-	image.engine_state = engine; image.guest_payload = guest;
+	image.guest_payload = guest;
 	if (QCX_SaveEncode(&image, &encoded, &encoded_size) != QCX_PLUGIN_OK) {
 		failure = "could not encode QCMS image";
 		goto done;
@@ -615,7 +386,10 @@ qbool QCX_SaveGame(const char *name)
 	if (!result) failure = "could not write save file";
 done:
 	if (!result) Con_Printf("qc2cpp save rejected: %s.\n", failure);
-	free(encoded); free(engine.data); free(guest.data); return result;
+	free(encoded);
+	free(image.engine.precaches);
+	free(guest.data);
+	return result;
 }
 
 static qbool QCX_SaveReadFile(const char *name, uint8_t **out, uint32_t *out_size)
@@ -632,7 +406,7 @@ static qbool QCX_SaveReadFile(const char *name, uint8_t **out, uint32_t *out_siz
 	if (path_size < 0 || (size_t)path_size >= sizeof(path)) return false;
 	file = fopen(path, "rb");
 	if (file == NULL || fseek(file, 0L, SEEK_END) != 0 || (length = ftell(file)) <= 0L
-		|| (uint64_t)length > 12U * 1024U * 1024U || fseek(file, 0L, SEEK_SET) != 0) {
+		|| (uint64_t)length > QCX_SAVE_MAX_FILE_BYTES || fseek(file, 0L, SEEK_SET) != 0) {
 		if (file != NULL) fclose(file);
 		return false;
 	}
@@ -707,47 +481,24 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 
 qbool QCX_PrepareLoadResources(void)
 {
-	qcx_save_reader_t reader;
-	uint8_t models[MAX_MODELS] = {0};
-	uint8_t sounds[MAX_SOUNDS] = {0};
-	uint32_t version;
 	uint32_t index;
-	uint32_t count;
-	uint32_t ignored;
-	double ignored_time;
-	char resource[QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
-	if (qcx_prepared_image == NULL) return false;
+	if (qcx_prepared_image == NULL) {
+		return false;
+	}
 	/* PR_LoadProgs may invoke a qc2cpp host call before SV_SpawnServer installs
-	 * its normal slot-zero sentinels.  Keep the indexed precache arrays
-	 * traversable while restoring their saved order. */
+	 * its normal slot-zero sentinels. Keep the indexed precache arrays
+	 * traversable while restoring their already-validated saved order. */
 	sv.model_precache[0] = "";
 	sv.sound_precache[0] = "";
-	reader = (qcx_save_reader_t){qcx_prepared_image->engine_state.data,
-		qcx_prepared_image->engine_state.data + qcx_prepared_image->engine_state.size};
-	if (!QCX_SaveReadU32(&reader, &version) || version != QCX_SAVE_ENGINE_VERSION
-		|| !QCX_SaveReadF64(&reader, &ignored_time) || !QCX_SaveReadU32(&reader, &ignored)
-		|| !QCX_SaveReadU32(&reader, &count) || count != MAX_LIGHTSTYLES) return false;
-	for (index = 0U; index < count; ++index) {
-		if (!QCX_SaveReadResource(&reader, resource, sizeof(resource))) return false;
-	}
-	if (!QCX_SaveReadU32(&reader, &count) || count > MAX_MODELS + MAX_SOUNDS) return false;
-	for (index = 0U; index < count; ++index) {
-		char kind;
-		uint32_t slot;
-		const char *name;
-		char *persistent;
-		if (!QCX_SaveReadResource(&reader, resource, sizeof(resource))
-			|| !QCX_SaveParseIndexedResource(resource, &kind, &slot, &name)
-			|| (kind == 'M' && (slot == 0U || slot >= MAX_MODELS || models[slot] != 0U))
-			|| (kind == 'S' && (slot == 0U || slot >= MAX_SOUNDS || sounds[slot] != 0U))) return false;
-		persistent = Hunk_Alloc((int)strlen(name) + 1);
-		memcpy(persistent, name, strlen(name) + 1U);
-		if (kind == 'M') {
-			sv.model_precache[slot] = persistent;
-			models[slot] = 1U;
+	for (index = 0U; index < qcx_prepared_image->engine.precache_count; ++index) {
+		const qcx_save_precache_t *entry = &qcx_prepared_image->engine.precaches[index];
+		const size_t size = strlen(entry->name) + 1U;
+		char *persistent = Hunk_Alloc((int)size);
+		memcpy(persistent, entry->name, size);
+		if (entry->kind == 'M') {
+			sv.model_precache[entry->slot] = persistent;
 		} else {
-			sv.sound_precache[slot] = persistent;
-			sounds[slot] = 1U;
+			sv.sound_precache[entry->slot] = persistent;
 		}
 	}
 	return true;
