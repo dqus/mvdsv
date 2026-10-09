@@ -1,7 +1,6 @@
 #include "qwsvdef.h"
 
 #include "qcx/entities.h"
-#include "qcx/globals.h"
 #include "qcx/service_support.h"
 #include "qcx/services.h"
 
@@ -51,16 +50,9 @@ static float QCX_WalkMove(void *context, qcx_entity_id_t self, float yaw,
 	float distance)
 {
 	QCX_ObserveGameplayImport(context);
-	(void)self;
-	globalvars_t *const globals = QCX_Globals();
-	if (globals == NULL) {
-		SV_Error("qc2cpp walkmove has no shared globals");
-	}
-	const qcx_entity_id_t caller_self = globals->self;
-	const float result = (float)PF2_walkmove(
-		QCX_RequireServiceEdict(caller_self, "movement entity"), yaw, distance);
-	globals->self = caller_self;
-	return result;
+	/* PF2_walkmove restores caller self after movement reentry. */
+	return (float)PF2_walkmove(
+		QCX_RequireServiceEdict(self, "movement entity"), yaw, distance);
 }
 
 static float QCX_DropToFloor(void *context, qcx_entity_id_t self)

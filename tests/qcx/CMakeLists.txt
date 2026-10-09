@@ -410,6 +410,28 @@ elseif(UNIX)
 endif()
 add_test(NAME qcx_reentry COMMAND qcx_reentry_test)
 
+add_executable(qcx_walkmove_test
+	walkmove_test.c
+	${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
+set_target_properties(qcx_walkmove_test PROPERTIES
+	C_STANDARD 11
+	C_STANDARD_REQUIRED YES
+	C_EXTENSIONS OFF)
+target_include_directories(qcx_walkmove_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src
+	${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_options(qcx_walkmove_test PRIVATE
+	-UNDEBUG -ffunction-sections -fdata-sections)
+target_compile_definitions(qcx_walkmove_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_link_libraries(qcx_walkmove_test PRIVATE Qc2cppHost::contract m)
+if(APPLE)
+	target_link_options(qcx_walkmove_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_walkmove_test PRIVATE -Wl,--gc-sections)
+endif()
+add_test(NAME qcx_walkmove COMMAND qcx_walkmove_test)
+
 add_executable(qcx_touch_links_test
 	touch_links_test.c
 	${PROJECT_SOURCE_DIR}/src/sv_world.c)
@@ -713,6 +735,7 @@ foreach(test_name IN ITEMS
 	qcx_client_routes
 	qcx_pr2_api_routes
 	qcx_reentry
+	qcx_walkmove
 	qcx_touch_links
 	qcx_entry_routes
 	qcx_startup_routes
