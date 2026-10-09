@@ -177,8 +177,6 @@ int main(void)
 	assert(host.map_post_spawn != NULL);
 	assert(host.precache_model != NULL);
 	assert(host.precache_sound != NULL);
-	assert(host.precache_model2 != NULL);
-	assert(host.precache_sound2 != NULL);
 	assert(host.lightstyle != NULL);
 	assert(host.cvar != NULL);
 	assert(host.cvar_set != NULL);
@@ -202,13 +200,13 @@ int main(void)
 	assert(host.spawn(host.context) == 1U);
 	host.remove(host.context, 1U);
 	assert(freed == 1 && test_spawned.e.free);
-	assert(host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U, NULL, 0U) == 14U);
-	assert(host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U, NULL, 0U) == 14U);
+	host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U);
+	host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U);
 	assert(precached_model == 1 && precached_sound == 1);
 	const int precache_allocations = persistent_allocations;
 	for (int iteration = 0; iteration < 100; ++iteration) {
-		host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U, NULL, 0U);
-		host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U, NULL, 0U);
+		host.precache_model(host.context, (const uint8_t *)"progs/test.mdl", 14U);
+		host.precache_sound(host.context, (const uint8_t *)"sound/test.wav", 14U);
 	}
 	assert(persistent_allocations == precache_allocations);
 	assert(precached_model == 101 && precached_sound == 101);
