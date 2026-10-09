@@ -3,6 +3,7 @@
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
 #include "qcx/restore_session.h"
+#include "qcx/world_text.h"
 #if defined(QCX_TESTS)
 #include "qcx/test_observer.h"
 #endif
@@ -47,7 +48,8 @@ typedef struct qcx_restore_plan_s {
 } qcx_restore_plan_t;
 
 static qcx_restore_plan_t qcx_restore_plan;
-static char qcx_restored_lightstyles[MAX_LIGHTSTYLES][QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
+_Static_assert(QCX_SAVE_MAX_RESOURCE_BYTES == QCX_MAX_LIGHTSTYLE_BYTES,
+	"lightstyle storage must hold validated save resources");
 
 _Static_assert(NUM_SPAWN_PARMS == QCX_SAVE_SPAWN_PARM_COUNT,
 	"QCMS spawn parameter count");
@@ -522,9 +524,7 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 		SV_Error("qc2cpp restore failed after commit");
 	}
 	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) {
-		memcpy(qcx_restored_lightstyles[index], qcx_restore_plan.lightstyles[index],
-			sizeof(qcx_restored_lightstyles[index]));
-		sv.lightstyles[index] = qcx_restored_lightstyles[index];
+		sv.lightstyles[index] = QCX_StoreLightstyle(index, qcx_restore_plan.lightstyles[index]);
 	}
 	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
 		sv.edicts[index].e.free = qcx_restore_plan.edict_flags[index] != QCX_SAVE_ACTIVE_EDICT;
