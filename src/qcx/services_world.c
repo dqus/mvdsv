@@ -124,8 +124,8 @@ static void QCX_MapPostSpawn(void *context, qcx_entity_id_t slot)
 	SV_FlushSignon();
 }
 
-static qcx_byte_count_t QCX_Precache(void *context, const uint8_t *name,
-	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity,
+static void QCX_Precache(void *context, const uint8_t *name,
+	qcx_byte_count_t name_size,
 	void (*operation)(char *), char *const *precache, int capacity, const char *what)
 {
 	QCX_ObserveGameplayImport(context);
@@ -144,23 +144,19 @@ static qcx_byte_count_t QCX_Precache(void *context, const uint8_t *name,
 	}
 	/* Even duplicates go through PF2: loading-state and name checks still apply. */
 	operation(persistent);
-	if (out != NULL && out_capacity >= name_size) {
-		memcpy(out, name, name_size);
-	}
-	return name_size;
 }
 
-static qcx_byte_count_t QCX_PrecacheModel(void *context, const uint8_t *name,
-	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
+static void QCX_PrecacheModel(void *context, const uint8_t *name,
+	qcx_byte_count_t name_size)
 {
-	return QCX_Precache(context, name, name_size, out, out_capacity,
+	QCX_Precache(context, name, name_size,
 		PF2_precache_model, sv.model_precache, MAX_MODELS, "model");
 }
 
-static qcx_byte_count_t QCX_PrecacheSound(void *context, const uint8_t *name,
-	qcx_byte_count_t name_size, uint8_t *out, qcx_byte_count_t out_capacity)
+static void QCX_PrecacheSound(void *context, const uint8_t *name,
+	qcx_byte_count_t name_size)
 {
-	return QCX_Precache(context, name, name_size, out, out_capacity,
+	QCX_Precache(context, name, name_size,
 		PF2_precache_sound, sv.sound_precache, MAX_SOUNDS, "sound");
 }
 
@@ -259,6 +255,4 @@ void QCX_BindWorldServices(qcx_host_api_v1_t *host)
 	host->makestatic = QCX_MakeStatic;
 	host->changelevel = QCX_ChangeLevel;
 	host->cvar_set = QCX_CvarSet;
-	host->precache_model2 = QCX_PrecacheModel;
-	host->precache_sound2 = QCX_PrecacheSound;
 }
