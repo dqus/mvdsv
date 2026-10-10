@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,15 +31,22 @@ static int lightstyle_calls;
 static int makestatic_calls;
 static int changelevel_calls;
 static int persistent_allocations;
+static unsigned int slot_lookups;
+static jmp_buf validation_error;
+static qbool expect_error;
 
 void SV_Error(char *error, ...)
 {
 	(void)error;
+	if (expect_error) {
+		longjmp(validation_error, 1);
+	}
 	abort();
 }
 
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
+	++slot_lookups;
 	return slot == 0U ? &test_entity : slot == 1U ? &test_spawned : NULL;
 }
 
@@ -155,6 +163,35 @@ static void test_unpublish(void *context) { (void)context; }
 static void test_fatal(void *context, const qcx_program_diagnostic_v1_t *diagnostic)
 { (void)context; (void)diagnostic; abort(); }
 
+static void test_invalid_map_metadata(qcx_host_api_v1_t *host)
+{
+	static const struct {
+		const uint8_t *bytes;
+		qcx_byte_count_t size;
+	} invalid_values[] = {
+		{ NULL, 1U },
+		{ (const uint8_t *)"a\0b", 3U },
+	};
+	test_entity.xv.alpha = 0.5f;
+	expect_error = true;
+	for (size_t index = 0; index < sizeof(invalid_values) / sizeof(invalid_values[0]); ++index) {
+		if (setjmp(validation_error) == 0) {
+			host->map_metadata(host->context, 0U, (const uint8_t *)"alpha", 5U,
+				invalid_values[index].bytes, invalid_values[index].size);
+			assert(!"invalid map value accepted");
+		}
+		assert(test_entity.xv.alpha == 0.5f);
+		if (setjmp(validation_error) == 0) {
+			host->map_metadata(host->context, 0U,
+				invalid_values[index].bytes, invalid_values[index].size,
+				(const uint8_t *)"1", 1U);
+			assert(!"invalid map key accepted");
+		}
+		assert(test_entity.xv.alpha == 0.5f);
+	}
+	expect_error = false;
+}
+
 int main(void)
 {
 	test_entity.v = &test_entity_state;
@@ -239,14 +276,17 @@ int main(void)
 	host.changelevel(host.context, (const uint8_t *)"dm6", 3U);
 	assert(!strcmp(queued_command, "map dm6\n"));
 	assert(changelevel_calls == 1);
+	slot_lookups = 0U;
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"alpha", 5U,
 		(const uint8_t *)"1.5", 3U) == QCX_MAP_METADATA_HANDLED);
 	assert(test_entity.xv.alpha == 1.0f);
+	assert(slot_lookups == 1U);
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"colormod", 8U,
 		(const uint8_t *)"2 3 4", 5U) == QCX_MAP_METADATA_HANDLED);
 	assert(test_entity.xv.colourmod[0] == 2.0f && test_entity.xv.colourmod[2] == 4.0f);
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"unknown", 7U,
 		(const uint8_t *)"value", 5U) == QCX_MAP_METADATA_NOT_HANDLED);
+	test_invalid_map_metadata(&host);
 	assert(host.map_admit(host.context, 0U, 0.0f) == QCX_MAP_ACCEPT);
 	deathmatch.value = 1.0f;
 	assert(host.map_admit(host.context, 0U, (float)SPAWNFLAG_NOT_DEATHMATCH)
