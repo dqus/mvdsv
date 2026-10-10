@@ -257,7 +257,6 @@ static void fixture_edict_think(void *context, qcx_entity_id_t self, float time,
 { (void)context; (void)self; (void)time; (void)frametime; }
 static uint32_t fixture_client_say(void *context, qcx_entity_id_t self, uint32_t team, const uint8_t *text, qcx_byte_count_t size)
 { (void)context; (void)self; (void)team; (void)text; (void)size; return 0U; }
-static void fixture_paused_tic(void *context, uint32_t duration_msec) { (void)context; (void)duration_msec; }
 static void fixture_clear_edict(void *context, qcx_entity_id_t self)
 {
 	(void)context;
@@ -267,8 +266,6 @@ static void fixture_clear_edict(void *context, qcx_entity_id_t self)
 	memset(&fixture_entities[self], 0, sizeof(fixture_entities[self]));
 	fixture_initialize_entity_strings(&fixture_entities[self]);
 }
-static uint32_t fixture_edict_csqc_send(void *context, qcx_entity_id_t self, qcx_entity_id_t other, uint32_t flags)
-{ (void)context; (void)self; (void)other; (void)flags; return 0U; }
 static qcx_plugin_status_t fixture_string_write(void *context, qcx_object_scope_t scope, qcx_entity_id_t entity, const uint8_t *name, qcx_byte_count_t name_size, const uint8_t *bytes, qcx_byte_count_t size)
 {
 	(void)context;
@@ -379,8 +376,8 @@ qcx_plugin_status_t qcx_game_plugin_query_v1(const qcx_host_api_v1_t *host,
 		.set_change_parms = fixture_set_change_parms, .set_new_parms = fixture_set_new_parms,
 		.console_command = fixture_console_command, .edict_touch = fixture_edict_event,
 		.edict_think = fixture_edict_think, .edict_blocked = fixture_edict_event,
-		.client_say = fixture_client_say, .paused_tic = fixture_paused_tic,
-		.clear_edict = fixture_clear_edict, .edict_csqc_send = fixture_edict_csqc_send,
+		.client_say = fixture_client_say,
+		.clear_edict = fixture_clear_edict,
 		.string_write = fixture_string_write,
 		.set_save_selection = fixture_selection, .save = fixture_save,
 		.validate_restore = fixture_restore, .restore = fixture_validate_restore,
