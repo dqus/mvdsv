@@ -44,10 +44,9 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
-	if (QCX_CopyText(sample, sample_size, local, sizeof(local), "sound")) {
-		SV_StartSound(QCX_RequireServiceEdict(entity, "network entity"), (int)channel, local,
-			(int)(volume * 255.0f), attenuation);
-	}
+	QCX_CopyText(sample, sample_size, local, sizeof(local), "sound");
+	SV_StartSound(QCX_RequireServiceEdict(entity, "network entity"), (int)channel, local,
+		(int)(volume * 255.0f), attenuation);
 }
 
 static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *text,
@@ -55,9 +54,7 @@ static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *t
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_STUFFTEXT];
-	if (!QCX_CopyText(text, text_size, local, sizeof(local), "stuffcmd")) {
-		return;
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "stuffcmd");
 	const int clientnum = QCX_RequireClientNumber(entity);
 	PF2_stuffcmd(clientnum, local, 0);
 }
@@ -67,9 +64,8 @@ static void QCX_BPrint(void *context, float level, const uint8_t *text,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (QCX_CopyText(text, text_size, local, sizeof(local), "bprint")) {
-		SV_BroadcastPrintf((int)level, "%s", local);
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "bprint");
+	SV_BroadcastPrintf((int)level, "%s", local);
 }
 
 static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
@@ -77,9 +73,7 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (!QCX_CopyText(text, text_size, local, sizeof(local), "sprint")) {
-		return;
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "sprint");
 	const int clientnum = QCX_RequireClientNumber(entity);
 	PF2_sprint(clientnum, (int)level, local, 0);
 }
@@ -137,9 +131,7 @@ static void QCX_WriteString(void *context, float destination, const uint8_t *val
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (!QCX_CopyText(value, value_size, local, sizeof(local), "message")) {
-		return;
-	}
+	QCX_CopyText(value, value_size, local, sizeof(local), "message");
 	const int to = QCX_MessageDestination(destination);
 	PF2_WriteString(to, local, QCX_MessageEntity(to, msg_entity));
 }
@@ -158,9 +150,7 @@ static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (!QCX_CopyText(text, text_size, local, sizeof(local), "centerprint")) {
-		return;
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "centerprint");
 	const int clientnum = QCX_RequireClientNumber(entity);
 	PF2_centerprint(clientnum, local);
 }
@@ -171,10 +161,10 @@ static void QCX_AmbientSound(void *context, const float origin[3],
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
-	if (origin == NULL || !QCX_CopyText(sample, sample_size, local, sizeof(local),
-		"ambient sound")) {
+	if (origin == NULL) {
 		return;
 	}
+	QCX_CopyText(sample, sample_size, local, sizeof(local), "ambient sound");
 	PF2_ambientsound(origin[0], origin[1], origin[2], local, volume, attenuation);
 }
 
@@ -201,9 +191,7 @@ static qcx_byte_count_t QCX_InfoKey(void *context, qcx_entity_id_t entity,
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_KEY_STRING];
-	if (!QCX_CopyText(key, key_size, local, sizeof(local), "infokey")) {
-		return 0U;
-	}
+	QCX_CopyText(key, key_size, local, sizeof(local), "infokey");
 	const char *const value = PF2_infokey(
 		NUM_FOR_EDICT(QCX_RequireServiceEdict(entity, "network entity")), local);
 	const qcx_byte_count_t required = (qcx_byte_count_t)strlen(value);
