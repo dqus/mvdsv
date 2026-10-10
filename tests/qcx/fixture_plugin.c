@@ -249,8 +249,6 @@ static void fixture_client_kill(void *context, qcx_entity_id_t self) { (void)con
 static void fixture_set_change_parms(void *context, qcx_entity_id_t self, float out_parms[16])
 { (void)context; (void)self; (void)out_parms; }
 static void fixture_set_new_parms(void *context, float out_parms[16]) { (void)context; (void)out_parms; }
-static uint32_t fixture_console_command(void *context, qcx_entity_id_t self, qcx_entity_id_t other)
-{ (void)context; (void)self; (void)other; return 0U; }
 static void fixture_edict_event(void *context, qcx_entity_id_t first, qcx_entity_id_t second, float time, float frametime)
 { (void)context; (void)first; (void)second; (void)time; (void)frametime; }
 static void fixture_edict_think(void *context, qcx_entity_id_t self, float time, float frametime)
@@ -374,7 +372,7 @@ qcx_plugin_status_t qcx_game_plugin_query_v1(const qcx_host_api_v1_t *host,
 		.client_prethink = fixture_client_think, .client_postthink = fixture_client_think,
 		.client_kill = fixture_client_kill, .spectator_think = fixture_spectator_think,
 		.set_change_parms = fixture_set_change_parms, .set_new_parms = fixture_set_new_parms,
-		.console_command = fixture_console_command, .edict_touch = fixture_edict_event,
+		.edict_touch = fixture_edict_event,
 		.edict_think = fixture_edict_think, .edict_blocked = fixture_edict_event,
 		.client_say = fixture_client_say,
 		.clear_edict = fixture_clear_edict,
