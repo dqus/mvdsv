@@ -1,4 +1,4 @@
-#include "qcx/transport.h"
+#include "qcx/transport_internal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -7,9 +7,6 @@
 #include <dlfcn.h>
 #define QCX_NATIVE_POSIX_LOADER 1
 #endif
-
-void QCX_TransportDiagnostic(qcx_program_diagnostic_v1_t *diagnostic,
-	qcx_plugin_status_t status, const char *message);
 
 typedef qcx_plugin_status_t (*qcx_plugin_query_v1_t)(const qcx_host_api_v1_t *,
 	qcx_game_api_v1_t *);

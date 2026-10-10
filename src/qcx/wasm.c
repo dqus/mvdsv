@@ -1,4 +1,4 @@
-#include "qcx/transport.h"
+#include "qcx/transport_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,9 +6,6 @@
 #if defined(QCX_WASM)
 #include "game/wasmtime_host.h"
 #endif
-
-void QCX_TransportDiagnostic(qcx_program_diagnostic_v1_t *diagnostic,
-	qcx_plugin_status_t status, const char *message);
 
 qcx_plugin_status_t QCX_WasmOpen(const char *gamedir, const char *basename,
                                const qcx_host_api_v1_t *host, void **handle,
