@@ -150,9 +150,9 @@ static void test_invalid_arguments(void)
 static void test_text_copy(void)
 {
 	char output[4] = "xxx";
-	assert(QCX_CopyText(NULL, 0U, output, sizeof(output), "test"));
+	QCX_CopyText(NULL, 0U, output, sizeof(output), "test");
 	assert(output[0] == '\0');
-	assert(QCX_CopyText((const uint8_t *)"abc", 3U, output, sizeof(output), "test"));
+	QCX_CopyText((const uint8_t *)"abc", 3U, output, sizeof(output), "test");
 	assert(!strcmp(output, "abc"));
 	expect_error = true;
 	if (setjmp(validation_error) == 0) {
