@@ -13,9 +13,6 @@ static globalvars_t *qcx_globals;
 static int qcx_globals_available = 1;
 static qcx_guest_address_t qcx_global_object_base;
 static qcx_byte_count_t qcx_global_object_size;
-static float *qcx_deathmatch;
-static float *qcx_coop;
-static float *qcx_teamplay;
 static globalvars_t *qcx_previous_global_struct;
 static float *qcx_previous_globals;
 static qbool qcx_globals_bound;
@@ -87,14 +84,14 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 			return 0;
 		}
 	}
-	qcx_deathmatch = bindings[0].address;
-	qcx_coop = bindings[1].address;
-	qcx_teamplay = bindings[2].address;
-	*qcx_deathmatch = deathmatch;
-	if (qcx_coop != NULL) {
-		*qcx_coop = coop;
+	float *const deathmatch_global = bindings[0].address;
+	float *const coop_global = bindings[1].address;
+	float *const teamplay_global = bindings[2].address;
+	*deathmatch_global = deathmatch;
+	if (coop_global != NULL) {
+		*coop_global = coop;
 	}
-	*qcx_teamplay = teamplay;
+	*teamplay_global = teamplay;
 	if (!qcx_globals_bound) {
 		qcx_previous_global_struct = pr_global_struct;
 		qcx_previous_globals = pr_globals;
@@ -118,9 +115,6 @@ void QCX_ClearGlobals(void)
 	qcx_globals_available = 0;
 	qcx_global_object_base = 0U;
 	qcx_global_object_size = 0U;
-	qcx_deathmatch = NULL;
-	qcx_coop = NULL;
-	qcx_teamplay = NULL;
 }
 
 int QCX_SetMapName(const char *mapname)
