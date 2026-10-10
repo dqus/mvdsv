@@ -1,13 +1,11 @@
 #include "qcx/globals.h"
+#include "qcx/adapter.h"
 #include "qcx/engine_fields.h"
 #include "qcx/layout_contract.h"
 
 #include "qwsvdef.h"
-#include "game/plugin_api.h"
 
 #include <string.h>
-
-const qcx_game_api_v1_t *QCX_Game(void);
 
 static globalvars_t *qcx_globals;
 static int qcx_globals_available = 1;
