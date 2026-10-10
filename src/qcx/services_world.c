@@ -24,9 +24,7 @@ static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *nam
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
-	if (!QCX_CopyText(name, name_size, local, sizeof(local), "model")) {
-		SV_Error("qc2cpp setmodel failed for %s", local);
-	}
+	QCX_CopyText(name, name_size, local, sizeof(local), "model");
 	PF2_setmodel(entity, local);
 }
 
@@ -66,19 +64,11 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 	qcx_byte_count_t value_size)
 {
 	QCX_ObserveGameplayImport(context);
-	(void)QCX_RequireServiceEdict(slot, "entity");
-	if ((key == NULL && key_size != 0U) || (value == NULL && value_size != 0U)
-		|| (key_size != 0U && memchr(key, '\0', key_size) != NULL)
-		|| (value_size != 0U && memchr(value, '\0', value_size) != NULL)) {
-		SV_Error("qc2cpp invalid map metadata");
-	}
+	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	char local_key[MAX_QPATH];
 	char local_value[MAX_INFO_STRING];
-	if (!QCX_CopyText(key, key_size, local_key, sizeof(local_key), "map key")
-		|| !QCX_CopyText(value, value_size, local_value, sizeof(local_value), "map value")) {
-		return QCX_MAP_METADATA_ERROR;
-	}
-	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
+	QCX_CopyText(key, key_size, local_key, sizeof(local_key), "map key");
+	QCX_CopyText(value, value_size, local_value, sizeof(local_value), "map value");
 	if (!strcmp(local_key, "alpha")) {
 		entity->xv.alpha = bound(0.0f, atof(local_value), 1.0f);
 		return QCX_MAP_METADATA_HANDLED;
@@ -168,9 +158,7 @@ static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 		SV_Error("qc2cpp lightstyle index out of range");
 	}
 	char local[MAX_QPATH];
-	if (!QCX_CopyText(value, value_size, local, sizeof(local), "lightstyle")) {
-		return;
-	}
+	QCX_CopyText(value, value_size, local, sizeof(local), "lightstyle");
 	PF2_lightstyle((int)style, QCX_StoreLightstyle((unsigned int)style, local));
 }
 
@@ -178,9 +166,7 @@ static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
-	if (!QCX_CopyText(name, name_size, local, sizeof(local), "cvar")) {
-		return 0.0f;
-	}
+	QCX_CopyText(name, name_size, local, sizeof(local), "cvar");
 	return Cvar_Value(local);
 }
 
@@ -190,10 +176,8 @@ static void QCX_CvarSet(void *context, const uint8_t *name, qcx_byte_count_t nam
 	QCX_ObserveGameplayImport(context);
 	char local_name[MAX_QPATH];
 	char local_value[MAX_INFO_STRING];
-	if (!QCX_CopyText(name, name_size, local_name, sizeof(local_name), "cvar")
-		|| !QCX_CopyText(value, value_size, local_value, sizeof(local_value), "cvar value")) {
-		return;
-	}
+	QCX_CopyText(name, name_size, local_name, sizeof(local_name), "cvar");
+	QCX_CopyText(value, value_size, local_value, sizeof(local_value), "cvar value");
 	cvar_t *const var = Cvar_Find(local_name);
 	if (var != NULL) {
 		Cvar_Set(var, local_value);
@@ -204,18 +188,16 @@ static void QCX_LocalCmd(void *context, const uint8_t *text, qcx_byte_count_t te
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAXCMDBUF];
-	if (QCX_CopyText(text, text_size, local, sizeof(local), "localcmd")) {
-		Cbuf_AddText(local);
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "localcmd");
+	Cbuf_AddText(local);
 }
 
 static void QCX_DPrint(void *context, const uint8_t *text, qcx_byte_count_t text_size)
 {
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
-	if (QCX_CopyText(text, text_size, local, sizeof(local), "dprint")) {
-		Con_Printf("%s", local);
-	}
+	QCX_CopyText(text, text_size, local, sizeof(local), "dprint");
+	Con_Printf("%s", local);
 }
 
 static void QCX_MakeStatic(void *context, qcx_entity_id_t slot)
@@ -229,9 +211,8 @@ static void QCX_ChangeLevel(void *context, const uint8_t *map, qcx_byte_count_t 
 {
 	QCX_ObserveGameplayImport(context);
 	char map_name[MAX_QPATH];
-	if (QCX_CopyText(map, map_size, map_name, sizeof(map_name), "map")) {
-		PF2_changelevel(map_name, "");
-	}
+	QCX_CopyText(map, map_size, map_name, sizeof(map_name), "map");
+	PF2_changelevel(map_name, "");
 }
 
 void QCX_BindWorldServices(qcx_host_api_v1_t *host)
