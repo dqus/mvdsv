@@ -12,13 +12,21 @@ edict_t *QCX_RequireServiceEdict(qcx_entity_id_t slot, const char *what)
 	return entity;
 }
 
-void QCX_CopyText(const uint8_t *bytes, qcx_byte_count_t size, char *out,
-	size_t capacity, const char *what)
+void QCX_ValidateText(const uint8_t *bytes, qcx_byte_count_t size, const char *what)
 {
-	if ((bytes == NULL && size != 0U) || size >= capacity
+	if ((bytes == NULL && size != 0U)
 		|| (size != 0U && memchr(bytes, '\0', size) != NULL)) {
 		SV_Error("qc2cpp invalid %s string", what);
 	}
+}
+
+void QCX_CopyText(const uint8_t *bytes, qcx_byte_count_t size, char *out,
+	size_t capacity, const char *what)
+{
+	if (size >= capacity) {
+		SV_Error("qc2cpp invalid %s string", what);
+	}
+	QCX_ValidateText(bytes, size, what);
 	if (size != 0U) {
 		memcpy(out, bytes, size);
 	}
