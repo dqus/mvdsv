@@ -163,8 +163,52 @@ static void test_unpublish(void *context) { (void)context; }
 static void test_fatal(void *context, const qcx_program_diagnostic_v1_t *diagnostic)
 { (void)context; (void)diagnostic; abort(); }
 
+static void test_qc_owned_map_metadata(qcx_host_api_v1_t *host)
+{
+	uint8_t long_key[MAX_QPATH];
+	uint8_t long_value[MAX_INFO_STRING];
+	memset(long_key, 'k', sizeof(long_key));
+	memcpy(long_key, "alpha", 5U);
+	memset(long_value, 'v', sizeof(long_value));
+	static const uint8_t alpha_prefix[] = { 'a', 'l', 'p', 'h' };
+	static const uint8_t colormod_suffix[] = {
+		'c', 'o', 'l', 'o', 'r', 'm', 'o', 'd', 'x'
+	};
+	const struct {
+		const uint8_t *key;
+		qcx_byte_count_t key_size;
+		const uint8_t *value;
+		qcx_byte_count_t value_size;
+	} cases[] = {
+		{ long_key, sizeof(long_key), (const uint8_t *)"hello", 5U },
+		{ (const uint8_t *)"message", 7U, long_value, sizeof(long_value) },
+		{ alpha_prefix, sizeof(alpha_prefix), (const uint8_t *)"1", 1U },
+		{ colormod_suffix, sizeof(colormod_suffix), (const uint8_t *)"1 2 3", 5U },
+		{ NULL, 0U, NULL, 0U },
+	};
+	test_entity.xv.alpha = 0.5f;
+	VectorSet(test_entity.xv.colourmod, 1.0f, 2.0f, 3.0f);
+	expect_error = true;
+	for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+		if (setjmp(validation_error) != 0) {
+			assert(!"QC-owned map field rejected by engine metadata");
+		}
+		assert(host->map_metadata(host->context, 0U,
+			cases[index].key, cases[index].key_size,
+			cases[index].value, cases[index].value_size)
+			== QCX_MAP_METADATA_NOT_HANDLED);
+		assert(test_entity.xv.alpha == 0.5f);
+		assert(test_entity.xv.colourmod[0] == 1.0f
+			&& test_entity.xv.colourmod[1] == 2.0f
+			&& test_entity.xv.colourmod[2] == 3.0f);
+	}
+	expect_error = false;
+}
+
 static void test_invalid_map_metadata(qcx_host_api_v1_t *host)
 {
+	uint8_t oversized_value[MAX_INFO_STRING];
+	memset(oversized_value, '1', sizeof(oversized_value));
 	static const struct {
 		const uint8_t *bytes;
 		qcx_byte_count_t size;
@@ -188,7 +232,19 @@ static void test_invalid_map_metadata(qcx_host_api_v1_t *host)
 			assert(!"invalid map key accepted");
 		}
 		assert(test_entity.xv.alpha == 0.5f);
+		if (setjmp(validation_error) == 0) {
+			host->map_metadata(host->context, 0U, (const uint8_t *)"message", 7U,
+				invalid_values[index].bytes, invalid_values[index].size);
+			assert(!"invalid QC-owned map value accepted");
+		}
+		assert(test_entity.xv.alpha == 0.5f);
 	}
+	if (setjmp(validation_error) == 0) {
+		host->map_metadata(host->context, 0U, (const uint8_t *)"alpha", 5U,
+			oversized_value, sizeof(oversized_value));
+		assert(!"oversized engine metadata value accepted");
+	}
+	assert(test_entity.xv.alpha == 0.5f);
 	expect_error = false;
 }
 
@@ -286,6 +342,7 @@ int main(void)
 	assert(test_entity.xv.colourmod[0] == 2.0f && test_entity.xv.colourmod[2] == 4.0f);
 	assert(host.map_metadata(host.context, 0U, (const uint8_t *)"unknown", 7U,
 		(const uint8_t *)"value", 5U) == QCX_MAP_METADATA_NOT_HANDLED);
+	test_qc_owned_map_metadata(&host);
 	test_invalid_map_metadata(&host);
 	assert(host.map_admit(host.context, 0U, 0.0f) == QCX_MAP_ACCEPT);
 	deathmatch.value = 1.0f;
