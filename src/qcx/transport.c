@@ -1,4 +1,4 @@
-#include "qcx/transport.h"
+#include "qcx/transport_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,15 +9,6 @@ struct qcx_transport {
 	void *handle;
 	qcx_game_api_v1_t game;
 };
-
-qcx_plugin_status_t QCX_NativeOpen(const char *gamedir, const char *basename,
-	const qcx_host_api_v1_t *host, void **handle, qcx_game_api_v1_t *game,
-	qcx_program_diagnostic_v1_t *diagnostic);
-void QCX_NativeClose(void *handle);
-qcx_plugin_status_t QCX_WasmOpen(const char *gamedir, const char *basename,
-	const qcx_host_api_v1_t *host, void **handle, qcx_game_api_v1_t *game,
-	qcx_program_diagnostic_v1_t *diagnostic);
-void QCX_WasmClose(void *handle);
 
 void QCX_TransportDiagnostic(qcx_program_diagnostic_v1_t *diagnostic,
 	qcx_plugin_status_t status, const char *message)
