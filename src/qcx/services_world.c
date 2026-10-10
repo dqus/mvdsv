@@ -65,24 +65,26 @@ static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 {
 	QCX_ObserveGameplayImport(context);
 	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
-	char local_key[MAX_QPATH];
+	QCX_ValidateText(key, key_size, "map key");
+	const qbool is_alpha = key_size == 5U && memcmp(key, "alpha", 5U) == 0;
+	const qbool is_colormod = key_size == 8U && memcmp(key, "colormod", 8U) == 0;
+	if (!is_alpha && !is_colormod) {
+		/* QC owns these fields; engine metadata buffer limits do not apply. */
+		QCX_ValidateText(value, value_size, "map value");
+		return QCX_MAP_METADATA_NOT_HANDLED;
+	}
 	char local_value[MAX_INFO_STRING];
-	QCX_CopyText(key, key_size, local_key, sizeof(local_key), "map key");
 	QCX_CopyText(value, value_size, local_value, sizeof(local_value), "map value");
-	if (!strcmp(local_key, "alpha")) {
+	if (is_alpha) {
 		entity->xv.alpha = bound(0.0f, atof(local_value), 1.0f);
 		return QCX_MAP_METADATA_HANDLED;
 	}
-	if (!strcmp(local_key, "colormod")) {
-		float colour[3];
-		if (sscanf(local_value, "%f %f %f", &colour[0], &colour[1], &colour[2]) == 3
-			&& colour[0] > 0.0f && colour[1] > 0.0f && colour[2] > 0.0f) {
-			VectorCopy(colour, entity->xv.colourmod);
-		}
-		return QCX_MAP_METADATA_HANDLED;
+	float colour[3];
+	if (sscanf(local_value, "%f %f %f", &colour[0], &colour[1], &colour[2]) == 3
+		&& colour[0] > 0.0f && colour[1] > 0.0f && colour[2] > 0.0f) {
+		VectorCopy(colour, entity->xv.colourmod);
 	}
-	/* QC owns its schema; M handles only its reserved engine metadata. */
-	return QCX_MAP_METADATA_NOT_HANDLED;
+	return QCX_MAP_METADATA_HANDLED;
 }
 
 static uint32_t QCX_MapAdmit(void *context, qcx_entity_id_t slot, float spawnflags)
