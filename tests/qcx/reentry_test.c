@@ -38,6 +38,7 @@ static int legacy_call_count;
 static func_t legacy_function;
 static jmp_buf error_jump;
 static qbool expecting_error;
+static int trace_mode;
 static int command_source_argc;
 static const char *command_source_argv[QCX_COMMAND_MAX_ARGS];
 static const char *command_source_raw_args;
@@ -205,7 +206,9 @@ char *Cmd_Args(void)
 trace_t SV_Trace(vec3_t start, vec3_t mins, vec3_t maxs, vec3_t end, int type,
 	edict_t *passedict)
 {
-	(void)start; (void)mins; (void)maxs; (void)end; (void)type; (void)passedict;
+	(void)start; (void)mins; (void)maxs; (void)end; (void)passedict;
+	assert(!expecting_error && "invalid trace mode reached SV_Trace");
+	trace_mode = type;
 	return trace_result;
 }
 
@@ -419,6 +422,19 @@ int main(void)
 	assert(result.allsolid == 1.0f && result.fraction == 0.25f && result.entity == 4U);
 	assert(result.endpos[2] == 8.0f && result.plane_normal[1] == 1.0f);
 	assert(result.plane_dist == 9.0f);
+	host.traceline(NULL, start, end, 1.75f, 3U, &result, sizeof(result));
+	assert(trace_mode == 1);
+	const float invalid_modes[] = {
+		NAN, INFINITY, -INFINITY, 2147483648.0f, -2147483904.0f,
+	};
+	expecting_error = true;
+	for (size_t index = 0U; index < sizeof(invalid_modes) / sizeof(invalid_modes[0]); ++index) {
+		if (setjmp(error_jump) == 0) {
+			host.traceline(NULL, start, end, invalid_modes[index], 3U, &result, sizeof(result));
+			assert(!"invalid trace mode accepted");
+		}
+	}
+	expecting_error = false;
 	assert(host.checkclient(NULL, 3U) == 4U && checkclient_calls == 1);
 	globals.self = 3U;
 	globals.other = 2U;

@@ -14,7 +14,7 @@ static void QCX_TraceLine(void *context, const float start[3], const float end[3
 		SV_Error("qc2cpp traceline requires complete vectors and result");
 	}
 	edict_t *const passedict = QCX_RequireServiceEdict(passent, "movement entity");
-	int type = (int)nomonsters;
+	int type = QCX_RequireInt(nomonsters, "traceline mode");
 	if (sv_antilag.value == 2.0f) {
 		type |= MOVE_LAGGED;
 	}
