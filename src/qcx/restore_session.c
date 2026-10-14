@@ -33,8 +33,6 @@ cvar_t qcx_restore_wait_timeout = {"qcx_restore_wait_timeout", "60", CVAR_NONE, 
 
 static void QCX_RestoreSessionReset(qbool notify_clients);
 
-extern void MVD_PlayerReset(int player);
-
 #if defined(QCX_RESTORE_SESSION_TEST)
 extern void QCX_RestoreSessionTestVisitSlot(void);
 #define QCX_RESTORE_SESSION_VISIT_SLOT() QCX_RestoreSessionTestVisitSlot()
@@ -53,29 +51,6 @@ static void QCX_RestoreSessionClearClientFlags(client_t *client)
 	client->qcx_restore_waiting = false;
 	client->qcx_restore_pending = false;
 	client->qcx_restore_roster_index = -1;
-}
-
-static void QCX_RestoreSessionRepairClient(client_t *client, uint32_t slot)
-{
-	client->netchan.message.data = client->netchan.message_buf;
-	client->datagram.data = client->datagram_buf;
-	if (client->num_backbuf > 0 && client->num_backbuf <= MAX_BACK_BUFFERS) {
-		client->backbuf.data = client->backbuf_data[client->num_backbuf - 1];
-	} else {
-		client->backbuf.data = client->backbuf_data[0];
-	}
-	client->edict = &sv.edicts[slot + 1U];
-}
-
-static void QCX_RestoreSessionClearMovementCaches(client_t *client)
-{
-	client->delta_sequence = -1;
-	client->antilag_position_next = 0;
-	memset(client->antilag_positions, 0, sizeof(client->antilag_positions));
-	client->laggedents_count = 0U;
-	client->laggedents_frac = 0.0f;
-	client->laggedents_time = 0.0f;
-	memset(client->laggedents, 0, sizeof(client->laggedents));
 }
 
 static qcx_restore_roster_entry_t *QCX_RestoreSessionClientEntry(client_t *client)
@@ -127,45 +102,6 @@ static void QCX_RestoreSessionQueueWaitingNew(client_t *client)
 	client->netchan.last_reliable_sequence = client->netchan.outgoing_sequence;
 	SV_QCXStartClientSignon(client);
 	client->send_message = true;
-}
-
-static void QCX_RestoreSessionSwapClients(uint32_t left_slot, uint32_t right_slot)
-{
-	client_t *const left = &svs.clients[left_slot];
-	client_t *const right = &svs.clients[right_slot];
-	client_t temporary;
-	edict_t *const left_edict = left->edict;
-	edict_t *const right_edict = right->edict;
-
-	if (left_slot == right_slot) return;
-	memcpy(&temporary, left, sizeof(temporary));
-	memcpy(left, right, sizeof(*left));
-	memcpy(right, &temporary, sizeof(*right));
-	QCX_RestoreSessionRepairClient(left, left_slot);
-	QCX_RestoreSessionRepairClient(right, right_slot);
-	QCX_RestoreSessionClearMovementCaches(left);
-	QCX_RestoreSessionClearMovementCaches(right);
-	MVD_PlayerReset((int)left_slot);
-	MVD_PlayerReset((int)right_slot);
-
-	if (sv_client == left) {
-		sv_client = right;
-	} else if (sv_client == right) {
-		sv_client = left;
-	}
-	if (WatcherId == left) {
-		WatcherId = right;
-	} else if (WatcherId == right) {
-		WatcherId = left;
-	}
-#if defined(WWW_INTEGRATION)
-	Central_SwapClientPointers(left, right);
-#endif
-	if (sv_player == left_edict) {
-		sv_player = right->edict;
-	} else if (sv_player == right_edict) {
-		sv_player = left->edict;
-	}
 }
 
 static int QCX_RestoreSessionFindFreeUnreservedSlot(void)
@@ -235,11 +171,8 @@ static void QCX_RestoreSessionDropClient(uint32_t slot)
 {
 	client_t *const client = &svs.clients[slot];
 	SV_DropClient(client);
-	client->state = cs_free;
 	QCX_RestoreSessionClearClientFlags(client);
-	QCX_RestoreSessionRepairClient(client, slot);
-	QCX_RestoreSessionClearMovementCaches(client);
-	MVD_PlayerReset((int)slot);
+	SV_ReleaseDroppedClientSlot(slot);
 }
 
 static void QCX_RestoreSessionUnbindClient(uint32_t slot, qbool notify_client)
@@ -284,7 +217,7 @@ static void QCX_RestoreSessionEvacuateUnmatchedReservations(void)
 			QCX_RestoreSessionDropClient(slot);
 			continue;
 		}
-		QCX_RestoreSessionSwapClients(slot, (uint32_t)destination);
+		SV_SwapClientSlots(slot, (uint32_t)destination);
 	}
 }
 
@@ -626,7 +559,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 		const int client_slot = QCX_RestoreSessionFindClientForRoster(index);
 		if (entry->state == QCX_RESTORE_ENTRY_BOUND && client_slot >= 0
 			&& (uint32_t)client_slot != entry->saved.saved_slot) {
-			QCX_RestoreSessionSwapClients((uint32_t)client_slot,
+			SV_SwapClientSlots((uint32_t)client_slot,
 				entry->saved.saved_slot);
 		}
 	}

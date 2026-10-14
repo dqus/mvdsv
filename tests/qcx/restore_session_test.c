@@ -355,6 +355,118 @@ static void install_and_reconcile(const qcx_save_roster_entry_t *entries, uint32
 	QCX_RestoreSessionFrame(101.0);
 }
 
+static void test_server_swap_keeps_connections_and_repairs_both_slots(void)
+{
+	client_t *left;
+	client_t *right;
+	reset_fixture();
+	left = connect_client(0U, "Alice", 10);
+	right = connect_client(2U, "Bob", 20);
+	left->netchan.message_buf[0] = 17;
+	right->netchan.message_buf[0] = 29;
+	left->num_backbuf = 2;
+	left->backbuf.data = left->backbuf_data[1];
+	left->backbuf_data[1][0] = 41;
+	right->num_backbuf = 0;
+	right->backbuf.data = right->backbuf_data[0];
+	right->backbuf_data[0][0] = 53;
+	left->qcx_restore_pending = true;
+	left->qcx_restore_roster_index = 2;
+	sv_client = right;
+	sv_player = right->edict;
+	WatcherId = left;
+
+	SV_SwapClientSlots(0U, 2U);
+
+	assert(left->userid == 20 && right->userid == 10);
+	assert(strcmp(left->name, "Bob") == 0);
+	assert(strcmp(right->name, "Alice") == 0);
+	assert(left->netchan.message.data[0] == 29);
+	assert(right->netchan.message.data[0] == 17);
+	assert(left->backbuf.data == left->backbuf_data[0]);
+	assert(right->backbuf.data == right->backbuf_data[1]);
+	assert(left->backbuf.data[0] == 53 && right->backbuf.data[0] == 41);
+	assert(right->qcx_restore_pending && right->qcx_restore_roster_index == 2);
+	assert_client_integrity(left, 0U);
+	assert_client_integrity(right, 2U);
+	assert(sv_client == left && sv_player == &sv.edicts[1]);
+	assert(WatcherId == right);
+	assert(left->delta_sequence == -1 && right->delta_sequence == -1);
+	assert(left->antilag_position_next == 0 && right->antilag_position_next == 0);
+	assert(left->laggedents_count == 0U && right->laggedents_count == 0U);
+	assert(left->laggedents_frac == 0.0f && right->laggedents_frac == 0.0f);
+	assert(left->laggedents_time == 0.0f && right->laggedents_time == 0.0f);
+	assert(reset_calls == 2U && reset_slots[0] == 0 && reset_slots[1] == 2);
+	assert(central_swap_calls == 1U && central_swap_left == left
+		&& central_swap_right == right);
+}
+
+static void test_server_swap_leaves_unrelated_current_client_unchanged(void)
+{
+	client_t *current;
+	reset_fixture();
+	connect_client(0U, "Alice", 10);
+	connect_client(2U, "Bob", 20);
+	current = connect_client(1U, "Carol", 30);
+	sv_client = current;
+	sv_player = current->edict;
+	WatcherId = current;
+
+	SV_SwapClientSlots(0U, 2U);
+
+	assert(sv_client == current && sv_player == &sv.edicts[2]);
+	assert(WatcherId == current && current->userid == 30);
+	assert(current->delta_sequence == 11);
+	assert_client_integrity(current, 1U);
+}
+
+static void test_server_swap_same_slot_is_a_noop(void)
+{
+	client_t *client;
+	reset_fixture();
+	client = connect_client(1U, "Alice", 10);
+	sv_client = WatcherId = client;
+	sv_player = client->edict;
+
+	SV_SwapClientSlots(1U, 1U);
+
+	assert(client->userid == 10 && client->delta_sequence == 11);
+	assert(client->antilag_position_next == 3 && client->laggedents_count == 2U);
+	assert(sv_client == client && WatcherId == client);
+	assert(sv_player == &sv.edicts[2]);
+	assert(reset_calls == 0U && central_swap_calls == 0U);
+	assert_client_integrity(client, 1U);
+}
+
+static void test_server_releases_a_dropped_slot_without_clearing_its_edict(
+	sv_client_state_t dropped_state)
+{
+	client_t *client;
+	entvars_t variables = {0};
+	reset_fixture();
+	client = connect_client(1U, "Alice", 10);
+	SV_DropClient(client);
+	/* QCX pending drops can already be free; ordinary drops retain a zombie. */
+	client->state = dropped_state;
+	client->netchan.message.data = svs.clients[0].netchan.message_buf;
+	client->datagram.data = svs.clients[0].datagram_buf;
+	client->backbuf.data = svs.clients[0].backbuf_data[0];
+	client->edict = &sv.edicts[0];
+	variables.health = 73.0f;
+	sv.edicts[2].v = &variables;
+
+	SV_ReleaseDroppedClientSlot(1U);
+
+	assert(client->state == cs_free);
+	assert(client->userid == 10);
+	assert_client_integrity(client, 1U);
+	assert(client->delta_sequence == -1 && client->antilag_position_next == 0);
+	assert(client->laggedents_count == 0U && client->laggedents_frac == 0.0f
+		&& client->laggedents_time == 0.0f);
+	assert(sv.edicts[2].v == &variables && variables.health == 73.0f);
+	assert(drop_calls == 1U && reset_calls == 1U && reset_slots[0] == 1);
+}
+
 static void test_initial_reconciliation_queues_fresh_signon_after_matching(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
@@ -1205,6 +1317,11 @@ static void test_abandonment_frees_only_nonactive_saved_edicts(void)
 
 int main(void)
 {
+	test_server_swap_keeps_connections_and_repairs_both_slots();
+	test_server_swap_leaves_unrelated_current_client_unchanged();
+	test_server_swap_same_slot_is_a_noop();
+	test_server_releases_a_dropped_slot_without_clearing_its_edict(cs_zombie);
+	test_server_releases_a_dropped_slot_without_clearing_its_edict(cs_free);
 	test_initial_reconciliation_queues_fresh_signon_after_matching();
 	test_moves_to_a_free_saved_slot_and_repairs_globals();
 	test_two_saved_clients_can_cycle();

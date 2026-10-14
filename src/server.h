@@ -808,6 +808,16 @@ void SV_Frame (double time);
 void SV_FinalMessage (const char *message);
 void SV_DropClient (client_t *drop);
 
+#if defined(QCX_ENABLED)
+/* Restore handoff only: choose valid slots before fresh signon. Swapping
+ * moves connection state while player edicts remain at their slot addresses. */
+void SV_SwapClientSlots(unsigned int left_slot, unsigned int right_slot);
+/* After SV_DropClient, bypass zombie retention for immediate slot reuse.
+ * Rebind buffers/edict and invalidate movement/MVD history; do not clear the
+ * edict or perform another disconnect. The caller owns restore bookkeeping. */
+void SV_ReleaseDroppedClientSlot(unsigned int slot);
+#endif
+
 int SV_CalcPing (client_t *cl);
 void SV_FullClientUpdate (client_t *client, sizebuf_t *buf);
 void SV_FullClientUpdateToClient (client_t *client, client_t *cl);
