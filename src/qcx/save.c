@@ -12,13 +12,6 @@
 
 static qcx_save_image_t *qcx_prepared_image;
 
-typedef struct qcx_restore_plan_s {
-	const qcx_save_image_t *image;
-	uint32_t num_edicts;
-	uint8_t selection[(QCX_SAVE_MAX_ENTITY_CAPACITY + 7U) / 8U];
-} qcx_restore_plan_t;
-
-static qcx_restore_plan_t qcx_restore_plan;
 _Static_assert(QCX_SAVE_MAX_RESOURCE_BYTES == QCX_MAX_LIGHTSTYLE_BYTES,
 	"lightstyle storage must hold validated save resources");
 _Static_assert(QCX_SAVE_LIGHTSTYLE_COUNT == MAX_LIGHTSTYLES,
@@ -196,7 +189,8 @@ static qbool QCX_SaveWriteFile(const char *name, const uint8_t *bytes, uint32_t 
 	FS_FlushFSHash(); return true;
 }
 
-static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *image)
+static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *image,
+	qcx_restore_resource_policy_t resource_policy)
 {
 	uint8_t models[MAX_MODELS] = {0};
 	uint8_t sounds[MAX_SOUNDS] = {0};
@@ -230,7 +224,7 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 			sounds[entry->slot] = 1U;
 		}
 	}
-	if (qcx_prepared_image == NULL) {
+	if (resource_policy == QCX_RESTORE_RESOURCES_EXACT) {
 		for (index = 1U; index < MAX_MODELS; ++index) {
 			if ((sv.model_precache[index] != NULL && sv.model_precache[index][0] != '\0')
 				!= (models[index] != 0U)) {
@@ -244,30 +238,43 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 			}
 		}
 	}
-	memset(qcx_restore_plan.selection, 0, sizeof(qcx_restore_plan.selection));
-	qcx_restore_plan.num_edicts = 0U;
-	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
-		const qcx_save_edict_state_t state = image->engine.edicts[index].state;
-		if (state != QCX_SAVE_UNUSED_EDICT) {
-			qcx_restore_plan.num_edicts = index + 1U;
-		}
-		if (state == QCX_SAVE_ACTIVE_EDICT) {
-			qcx_restore_plan.selection[index / 8U] |= (uint8_t)(1U << (index % 8U));
-		}
-	}
 	return QCX_RESTORE_OK;
 }
 
-qcx_restore_status_t QCX_ValidateSaveGame(const qcx_save_image_t *image)
+qcx_restore_status_t QCX_PrepareRestore(const qcx_save_image_t *image,
+	qcx_restore_resource_policy_t resource_policy, qcx_restore_plan_t *out_plan)
 {
+	qcx_restore_plan_t prepared = {0};
 	qcx_restore_status_t status;
-	qcx_restore_plan.image = NULL;
-	status = QCX_SaveCheckEngineIdentity(image);
-	if (status != QCX_RESTORE_OK) return status;
+	uint32_t index;
+	if (out_plan == NULL) {
+		return QCX_RESTORE_MALFORMED_CHUNK;
+	}
+	memset(out_plan, 0, sizeof(*out_plan));
+	if (resource_policy != QCX_RESTORE_RESOURCES_EXACT
+		&& resource_policy != QCX_RESTORE_RESOURCES_ALLOW_EXTRA) {
+		return QCX_RESTORE_MALFORMED_CHUNK;
+	}
+	status = QCX_SaveCheckEngineIdentity(image, resource_policy);
+	if (status != QCX_RESTORE_OK) {
+		return status;
+	}
+	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
+		const qcx_save_edict_state_t state = image->engine.edicts[index].state;
+		if (state != QCX_SAVE_UNUSED_EDICT) {
+			prepared.num_edicts = index + 1U;
+		}
+		if (state == QCX_SAVE_ACTIVE_EDICT) {
+			prepared.selection[index / 8U] |= (uint8_t)(1U << (index % 8U));
+		}
+	}
 	status = QCX_ValidateGuestRestore(image->guest_payload.data, image->guest_payload.size,
-		qcx_restore_plan.selection, (image->metadata.entity_capacity + 7U) / 8U);
-	if (status != QCX_RESTORE_OK) return status;
-	qcx_restore_plan.image = image;
+		prepared.selection, (image->metadata.entity_capacity + 7U) / 8U);
+	if (status != QCX_RESTORE_OK) {
+		return status;
+	}
+	prepared.image = image;
+	*out_plan = prepared;
 	return QCX_RESTORE_OK;
 }
 
@@ -291,11 +298,12 @@ void QCX_RefreshClientReplication(void)
 	}
 }
 
-void QCX_ApplySaveGame(const qcx_save_image_t *image)
+void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 {
+	const qcx_save_image_t *const image = plan == NULL ? NULL : plan->image;
 	uint32_t index;
-	if (image == NULL || qcx_restore_plan.image != image
-		|| QCX_SetSaveSelection(qcx_restore_plan.selection,
+	if (image == NULL
+		|| QCX_SetSaveSelection(plan->selection,
 			(image->metadata.entity_capacity + 7U) / 8U) != QCX_RESTORE_OK
 		|| QCX_RestoreGuest(image->guest_payload.data, image->guest_payload.size) != QCX_RESTORE_OK) {
 		SV_Error("qc2cpp restore failed after commit");
@@ -321,16 +329,16 @@ void QCX_ApplySaveGame(const qcx_save_image_t *image)
 		}
 		if (!restored_client) sv.edicts[index + 1U].e.free = true;
 	}
-	sv.num_edicts = (int)qcx_restore_plan.num_edicts;
+	sv.num_edicts = (int)plan->num_edicts;
 	sv.time = image->engine.time;
 	sv.old_time = sv.time;
 	svs.serverflags = image->engine.serverflags;
 	PR_GLOBAL(serverflags) = svs.serverflags;
 	SV_ClearWorld();
-	for (index = 0U; index < qcx_restore_plan.num_edicts; ++index) {
+	for (index = 0U; index < plan->num_edicts; ++index) {
 		if (!sv.edicts[index].e.free) SV_LinkEdict(&sv.edicts[index], false);
 	}
-	qcx_restore_plan.image = NULL;
+	memset(plan, 0, sizeof(*plan));
 }
 
 qbool QCX_SaveGame(const char *name)
@@ -512,14 +520,18 @@ qbool QCX_PrepareLoadResources(void)
 
 qbool QCX_CommitPreparedLoadGame(void)
 {
+	qcx_restore_plan_t plan = {0};
 	qcx_restore_status_t status;
-	if (qcx_prepared_image == NULL) return false;
-	status = QCX_ValidateSaveGame(qcx_prepared_image);
+	if (qcx_prepared_image == NULL) {
+		return false;
+	}
+	status = QCX_PrepareRestore(qcx_prepared_image, QCX_RESTORE_RESOURCES_ALLOW_EXTRA,
+		&plan);
 	if (status != QCX_RESTORE_OK) {
 		Con_Printf("qc2cpp prepared restore rejected: status %u.\n", (unsigned)status);
 		return false;
 	}
-	QCX_ApplySaveGame(qcx_prepared_image);
+	QCX_ApplyRestore(&plan);
 	if (!QCX_RestoreSessionInstall(qcx_prepared_image, Sys_DoubleTime())) {
 		Con_Printf("qc2cpp prepared restore could not install player roster.\n");
 		return false;
