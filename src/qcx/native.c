@@ -15,8 +15,6 @@ typedef qcx_plugin_status_t (*qcx_plugin_query_v1_t)(const qcx_host_api_v1_t *,
 #define QCX_NATIVE_SUFFIX ".dylib"
 #elif defined(__linux__)
 #define QCX_NATIVE_SUFFIX ".so"
-#else
-#define QCX_NATIVE_SUFFIX NULL
 #endif
 
 qcx_plugin_status_t QCX_NativeOpen(const char *gamedir, const char *basename,
@@ -35,11 +33,6 @@ qcx_plugin_status_t QCX_NativeOpen(const char *gamedir, const char *basename,
 	return QCX_PLUGIN_UNAVAILABLE;
 #else
 	char path[1024];
-	if (QCX_NATIVE_SUFFIX == NULL) {
-		QCX_TransportDiagnostic(diagnostic, QCX_PLUGIN_UNAVAILABLE,
-			"qc2cpp native transport is unsupported on this platform");
-		return QCX_PLUGIN_UNAVAILABLE;
-	}
 	const int path_size = snprintf(path, sizeof(path), "%s/%s%s", gamedir,
 		basename, QCX_NATIVE_SUFFIX);
 	if (path_size < 0 || (size_t)path_size >= sizeof(path)) {
