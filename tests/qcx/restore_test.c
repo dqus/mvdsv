@@ -6,6 +6,7 @@
 #include "qcx/save.h"
 
 #include <assert.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -34,6 +35,9 @@ static uint8_t expected_validation_selection;
 static uint32_t entity_capacity = test_entity_capacity;
 static uint32_t create_path_calls;
 static uint32_t flush_fs_calls;
+static qcx_restore_status_t guest_validation_status;
+static jmp_buf restore_error;
+static qbool expect_restore_error;
 
 qbool QCX_RestoreSessionBlocksSave(void) { return false; }
 qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_now)
@@ -72,7 +76,7 @@ qcx_restore_status_t QCX_ValidateGuestRestore(const uint8_t *data, qcx_byte_coun
 	assert(selection_size == 1U);
 	assert(selection[0] == expected_validation_selection);
 	++guest_validation_calls;
-	return QCX_RESTORE_OK;
+	return guest_validation_status;
 }
 qcx_restore_status_t QCX_RestoreGuest(const uint8_t *data, qcx_byte_count_t size)
 {
@@ -100,7 +104,8 @@ void SV_FullClientUpdateToClient(client_t *source, client_t *recipient)
 void SV_Error(char *error, ...)
 {
 	(void)error;
-	assert(!"unexpected restore commit failure");
+	assert(expect_restore_error);
+	longjmp(restore_error, 1);
 }
 void Con_Printf(char *fmt, ...)
 {
@@ -151,6 +156,8 @@ static void reset_live_engine(void)
 	pr_global_struct = (globalvars_t *)&restore_shared_globals;
 	pr_globals = (float *)&restore_shared_globals;
 	guest_validation_calls = 0U;
+	guest_validation_status = QCX_RESTORE_OK;
+	expect_restore_error = false;
 	guest_restore_calls = 0U;
 	selection_calls = 0U;
 	link_calls = 0U;
@@ -168,13 +175,32 @@ static void reset_live_engine(void)
 	sv.edicts[0].e.free = false;
 }
 
+static void assert_empty_plan(const qcx_restore_plan_t *plan)
+{
+	assert(plan->image == NULL && plan->num_edicts == 0U);
+	for (size_t index = 0U; index < sizeof(plan->selection); ++index) {
+		assert(plan->selection[index] == 0U);
+	}
+}
+
+static void expect_apply_rejected(qcx_restore_plan_t *plan)
+{
+	expect_restore_error = true;
+	if (setjmp(restore_error) == 0) {
+		QCX_ApplyRestore(plan);
+		assert(!"unprepared restore must be rejected");
+	}
+	expect_restore_error = false;
+}
+
 static void test_invalid_image_is_rejected_before_guest_or_host_mutation(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	image = make_valid_image(true, false);
 	strcpy(image.metadata.map_name, "e1m2");
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
 	assert(guest_restore_calls == 0U);
 	assert(selection_calls == 0U);
@@ -186,13 +212,14 @@ static void test_invalid_image_is_rejected_before_guest_or_host_mutation(void)
 static void test_valid_image_validates_then_applies_in_place(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	image = make_valid_image(true, false);
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 	assert(sv.time == 7.0);
-	QCX_ApplySaveGame(&image);
+	QCX_ApplyRestore(&plan);
 	assert(selection_calls == 1U);
 	assert(saved_selection == 1U);
 	assert(guest_restore_calls == 1U);
@@ -207,17 +234,79 @@ static void test_valid_image_validates_then_applies_in_place(void)
 	assert(sv.edicts[1].e.freetime == 3.0f);
 }
 
+static void test_preparing_another_image_does_not_replace_first_restore(qbool second_valid)
+{
+	qcx_restore_plan_t first_plan = {0};
+	qcx_restore_plan_t second_plan = {0};
+	reset_live_engine();
+	qcx_save_image_t first = make_valid_image(true, false);
+	qcx_save_image_t second = make_valid_image(true, true);
+	second.engine.time = 91.0;
+	second.engine.serverflags = 99U;
+	assert(QCX_PrepareRestore(&first, QCX_RESTORE_RESOURCES_EXACT, &first_plan) == QCX_RESTORE_OK);
+	expected_validation_selection = 3U;
+	if (!second_valid) {
+		strcpy(second.metadata.map_name, "e1m2");
+	}
+	const qcx_restore_status_t status = QCX_PrepareRestore(&second,
+		QCX_RESTORE_RESOURCES_EXACT, &second_plan);
+	assert(status == (second_valid ? QCX_RESTORE_OK : QCX_RESTORE_ENTITY_SET_MISMATCH));
+
+	QCX_ApplyRestore(&first_plan);
+
+	assert(saved_selection == 1U && guest_restore_calls == 1U);
+	assert(sv.time == 42.5 && svs.serverflags == 17U);
+	assert(sv.num_edicts == 2 && sv.edicts[1].e.free);
+}
+
+static void test_failed_preparation_clears_a_reused_output_plan(qbool guest_rejection)
+{
+	qcx_restore_plan_t plan = {0};
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
+	if (guest_rejection) {
+		guest_validation_status = QCX_RESTORE_MALFORMED_CHUNK;
+	} else {
+		strcpy(image.metadata.map_name, "e1m2");
+	}
+	const qcx_restore_status_t status = QCX_PrepareRestore(&image,
+		QCX_RESTORE_RESOURCES_EXACT, &plan);
+	assert(status == (guest_rejection ? QCX_RESTORE_MALFORMED_CHUNK
+		: QCX_RESTORE_ENTITY_SET_MISMATCH));
+	assert_empty_plan(&plan);
+	expect_apply_rejected(&plan);
+	assert(selection_calls == 0U && guest_restore_calls == 0U && link_calls == 0U);
+	assert(sv.time == 7.0 && !sv.edicts[0].e.free);
+}
+
+static void test_apply_consumes_a_prepared_plan(void)
+{
+	qcx_restore_plan_t plan = {0};
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	expect_apply_rejected(&plan);
+	assert(selection_calls == 0U && guest_restore_calls == 0U && link_calls == 0U);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
+	QCX_ApplyRestore(&plan);
+	assert_empty_plan(&plan);
+	expect_apply_rejected(&plan);
+	assert(selection_calls == 1U && guest_restore_calls == 1U && link_calls == 1U);
+	assert(sv.time == 42.5);
+}
+
 static void test_roster_restore_defers_client_replication_until_session_completion(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].edict = &sv.edicts[1];
 	svs.clients[0].delta_sequence = 23;
 	expected_validation_selection = 3U;
 	image = make_valid_image(true, true);
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
-	QCX_ApplySaveGame(&image);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
+	QCX_ApplyRestore(&plan);
 	assert(client_replication_updates == 0U);
 	assert(svs.clients[0].delta_sequence == 23);
 }
@@ -225,10 +314,11 @@ static void test_roster_restore_defers_client_replication_until_session_completi
 static void test_rejects_a_save_without_an_active_world_slot(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	expected_validation_selection = 0U;
 	image = make_valid_image(false, false);
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
 	assert(guest_restore_calls == 0U);
 	assert(sv.edicts[0].e.free == false);
@@ -237,11 +327,12 @@ static void test_rejects_a_save_without_an_active_world_slot(void)
 static void test_fresh_restore_does_not_require_current_client_lifecycle(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].edict = &sv.edicts[1];
 	image = make_valid_image(true, false);
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
@@ -249,12 +340,13 @@ static void test_fresh_restore_does_not_require_current_client_lifecycle(void)
 static void test_fresh_restore_does_not_require_matching_current_slot_state(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	svs.clients[0].state = cs_connected;
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
 	image = make_valid_image(true, true);
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
@@ -262,13 +354,14 @@ static void test_fresh_restore_does_not_require_matching_current_slot_state(void
 static void test_fresh_restore_does_not_require_matching_current_role(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	svs.clients[0].state = cs_spawned;
 	svs.clients[0].spectator = 1;
 	svs.clients[0].edict = &sv.edicts[1];
 	expected_validation_selection = 3U;
 	image = make_valid_image(true, true);
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	assert(guest_restore_calls == 0U);
 }
@@ -276,10 +369,11 @@ static void test_fresh_restore_does_not_require_matching_current_role(void)
 static void test_rejects_a_roster_client_without_an_active_player_entity(void)
 {
 	qcx_save_image_t image;
+	qcx_restore_plan_t plan = {0};
 	reset_live_engine();
 	image = make_valid_image(true, true);
 	image.roster[0].saved_slot = 1U;
-	assert(QCX_ValidateSaveGame(&image) != QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) != QCX_RESTORE_OK);
 	assert(guest_validation_calls == 0U);
 	assert(guest_restore_calls == 0U);
 	assert(sv.time == 7.0);
@@ -287,6 +381,7 @@ static void test_rejects_a_roster_client_without_an_active_player_entity(void)
 
 static void test_prepared_resources_survive_image_disposal(const char *directory)
 {
+	qcx_restore_plan_t plan = {0};
 	qcx_save_precache_t precaches[] = {
 		{.kind = 'M', .slot = 7U, .name = "progs/player.mdl"},
 		{.kind = 'S', .slot = 19U, .name = "misc/menu.wav"}
@@ -315,10 +410,16 @@ static void test_prepared_resources_survive_image_disposal(const char *directory
 	assert(QCX_PrepareLoadResources());
 	assert(strcmp(sv.model_precache[0], "") == 0);
 	assert(strcmp(sv.sound_precache[0], "") == 0);
+	/* Pending load ownership must not silently relax other preparations. */
+	sv.model_precache[8] = "progs/startup-extra.mdl";
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+		== QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert_empty_plan(&plan);
 	assert(QCX_CommitPreparedLoadGame());
 	assert(!QCX_HasPreparedLoadGame());
 	assert(strcmp(sv.model_precache[7], "progs/player.mdl") == 0);
 	assert(strcmp(sv.sound_precache[19], "misc/menu.wav") == 0);
+	assert(strcmp(sv.model_precache[8], "progs/startup-extra.mdl") == 0);
 	assert(strcmp(sv.lightstyles[63], "m") == 0);
 	assert(sv.time == 42.5 && guest_restore_calls == 1U);
 	free(sv.model_precache[7]);
@@ -328,6 +429,7 @@ static void test_prepared_resources_survive_image_disposal(const char *directory
 
 static void test_checks_parsed_precaches_against_the_current_world(void)
 {
+	qcx_restore_plan_t plan = {0};
 	qcx_save_precache_t precaches[] = {
 		{.kind = 'M', .slot = 7U, .name = "progs/player.mdl"},
 		{.kind = 'S', .slot = 19U, .name = "misc/menu.wav"}
@@ -338,15 +440,24 @@ static void test_checks_parsed_precaches_against_the_current_world(void)
 	image.engine.precaches = precaches;
 	sv.model_precache[7] = "progs/player.mdl";
 	sv.sound_precache[19] = "misc/menu.wav";
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_OK);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
 	assert(guest_validation_calls == 1U);
 	sv.sound_precache[19] = "misc/other.wav";
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+		== QCX_RESTORE_ENTITY_SET_MISMATCH);
 	assert(guest_validation_calls == 1U);
 	sv.sound_precache[19] = "misc/menu.wav";
 	sv.model_precache[8] = "progs/extra.mdl";
-	assert(QCX_ValidateSaveGame(&image) == QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+		== QCX_RESTORE_ENTITY_SET_MISMATCH);
 	assert(guest_validation_calls == 1U);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_ALLOW_EXTRA, &plan) == QCX_RESTORE_OK);
+	assert(guest_validation_calls == 2U);
+	sv.sound_precache[19] = "misc/other.wav";
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_ALLOW_EXTRA, &plan)
+		== QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert_empty_plan(&plan);
+	assert(guest_validation_calls == 2U);
 	assert(guest_restore_calls == 0U);
 	assert(sv.time == 7.0);
 }
@@ -415,6 +526,11 @@ static void test_save_path_limits_preserve_existing_file(void)
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
+	test_preparing_another_image_does_not_replace_first_restore(true);
+	test_preparing_another_image_does_not_replace_first_restore(false);
+	test_failed_preparation_clears_a_reused_output_plan(false);
+	test_failed_preparation_clears_a_reused_output_plan(true);
+	test_apply_consumes_a_prepared_plan();
 	test_invalid_image_is_rejected_before_guest_or_host_mutation();
 	test_valid_image_validates_then_applies_in_place();
 	test_roster_restore_defers_client_replication_until_session_completion();
