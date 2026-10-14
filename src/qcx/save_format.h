@@ -48,6 +48,9 @@ typedef enum qcx_save_edict_state_e {
 typedef struct qcx_save_edict_s {
 	qcx_save_edict_state_t state;
 	float freetime;
+	/* Engine-owned map metadata, not part of the guest logical schema. */
+	float alpha;
+	float colourmod[3];
 } qcx_save_edict_t;
 
 typedef struct qcx_save_precache_s {

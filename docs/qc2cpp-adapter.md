@@ -166,8 +166,11 @@ when logical game, map, entity capacity, and engine-state identity match.
 QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
 rejected: create a new save after upgrading.
 
-`qcx/save_format` owns the engine-section codec. Engine section version 3 stores
+`qcx/save_format` owns the engine-section codec. Engine section version 4 stores
 typed time, lightstyles, indexed precaches, edict records, and static models.
+Edict records include engine-only `alpha` and `colourmod` map metadata; those
+values are restored before baselines and entity relinking, not reparsed from
+the map or duplicated in the guest schema.
 It also retains the bounded signon chunks containing ambient sounds and QC
 `MSG_INIT` messages. These are protocol bytes, not a dump of `server_t` or
 `sizebuf_t`; pointers, baselines, and spatial links are rebuilt. Signon coordinate
