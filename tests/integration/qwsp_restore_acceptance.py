@@ -78,15 +78,31 @@ def assert_qwsp_restore_map(snapshot):
         raise ProcessFailure(f"QWSP restore did not load e1m2: {snapshot}")
 
 
+def capture_engine_world(process):
+    return process.observe("qc2cpp_test_world_persistence", "qc2cpp_test_world_persistence",
+                           timeout=8)
+
+
+def assert_engine_world(process, expected, *, context):
+    world = capture_engine_world(process)
+    if world != expected["engine_world"]:
+        raise ProcessFailure(f"{context} lost static world/sign-on: "
+                             f"{expected['engine_world']} -> {world}")
+
+
 def save_qwsp_state(process, basedir, name):
     # The test observer uses the same PR2/QCX save route as the server command,
     # but captures immediately after serializing in its one command-buffer pass.
     # A separate capture and save can cross an e1m2 monster think boundary,
     # making nextthink one scheduler tick older than the QCMS image.
+    world = capture_engine_world(process)
+    if world.get("static_count", 0) <= 0 or world.get("signon_size", 0) <= 0:
+        raise ProcessFailure(f"e1m2 has no static world/sign-on to test: {world}")
     saved = process.observe(
         f"qc2cpp_test_qwsp_save {name}",
         "qc2cpp_test_qwsp_monster", timeout=8)
     require_live_qwsp_state(saved, player=True)
+    saved["engine_world"] = world
     assert_map_snapshot(
         process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
     save_path = basedir / "qw" / "save" / f"{name}.sav"
@@ -144,6 +160,7 @@ def restore_qwsp_state(process, name, expected, *, context):
             raise ProcessFailure(f"{context} did not make exactly one fresh map session: "
                                  f"{before} -> {restored_events}")
     restored = capture_qwsp_state(process)
+    assert_engine_world(process, expected, context=context)
     assert_qwsp_restore_state(expected, restored, player=True, context=context)
     resumed = wait_qwsp_monster_progress(process, restored, timeout=12, player=True)
     require_live_qwsp_state(resumed, player=True)
@@ -274,6 +291,7 @@ def run_cross_suite(server, source_artifacts, destination_artifacts, assets, out
                     f"cross-transport QWSP restore replayed {key}: "
                     f"{before_join} -> {restored_events}")
         restored = capture_qwsp_state(destination)
+        assert_engine_world(destination, expected, context="cross-transport QWSP restore")
         assert_qwsp_restore_state(expected, restored, player=True,
                                   context="cross-transport QWSP restore",
                                   player_identity=False)
