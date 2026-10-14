@@ -12,7 +12,7 @@ enum {
 	QCX_SAVE_ENGINE_SECTION = 2,
 	QCX_SAVE_ROSTER_SECTION = 3,
 	QCX_SAVE_GUEST_SECTION = 4,
-	QCX_SAVE_ENGINE_VERSION = 4,
+	QCX_SAVE_ENGINE_VERSION = 5,
 	QCX_SAVE_ROSTER_VERSION = 1
 };
 
@@ -243,7 +243,9 @@ static bool QCX_SaveValidateEngine(const qcx_save_engine_t *engine,
 	uint8_t models[QCX_SAVE_MODEL_CAPACITY] = {0};
 	uint8_t sounds[QCX_SAVE_SOUND_CAPACITY] = {0};
 	bool unused_slot = false;
-	if (!isfinite(engine->time) || engine->precache_count > QCX_SAVE_MAX_PRECACHES
+	if (!isfinite(engine->time) || !isfinite(engine->deathmatch)
+		|| !isfinite(engine->coop) || !isfinite(engine->teamplay)
+		|| engine->precache_count > QCX_SAVE_MAX_PRECACHES
 		|| (engine->precache_count != 0U && engine->precaches == NULL)
 		|| engine->edicts[0].state != QCX_SAVE_ACTIVE_EDICT) {
 		return false;
@@ -458,7 +460,10 @@ static bool QCX_SaveParseEngine(const uint8_t *bytes, uint32_t size,
 			return false;
 		}
 	}
-	return reader.cursor == reader.end && QCX_SaveValidateEngine(engine, metadata);
+	return QCX_SaveReadF32(&reader, &engine->deathmatch)
+		&& QCX_SaveReadF32(&reader, &engine->coop)
+		&& QCX_SaveReadF32(&reader, &engine->teamplay)
+		&& reader.cursor == reader.end && QCX_SaveValidateEngine(engine, metadata);
 }
 
 bool QCX_SaveClientNameEqual(const char *left, const char *right)
@@ -720,7 +725,7 @@ bool QCX_SaveImageValid(const qcx_save_image_t *image)
 static bool QCX_SaveEngineSize(const qcx_save_image_t *image, uint32_t *size)
 {
 	const qcx_save_engine_t *engine = &image->engine;
-	uint32_t total = 4U + 8U + 4U + 4U + 4U + 4U + 12U;
+	uint32_t total = 4U + 8U + 4U + 4U + 4U + 4U + 12U + 12U;
 	for (uint32_t index = 0U; index < QCX_SAVE_LIGHTSTYLE_COUNT; ++index) {
 		if (!QCX_SaveAddSize(&total, 4U + (uint32_t)strlen(engine->lightstyles[index]))) {
 			return false;
@@ -812,7 +817,9 @@ static bool QCX_SaveWriteEngine(qcx_save_writer_t *writer, const qcx_save_image_
 			return false;
 		}
 	}
-	return true;
+	return QCX_SaveWriteF32(writer, engine->deathmatch)
+		&& QCX_SaveWriteF32(writer, engine->coop)
+		&& QCX_SaveWriteF32(writer, engine->teamplay);
 }
 
 qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,

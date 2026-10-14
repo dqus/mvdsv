@@ -62,6 +62,8 @@ typedef struct qcx_save_precache_s {
 typedef struct qcx_save_engine_s {
 	double time;
 	uint32_t serverflags;
+	/* Engine cvars at save time; also authoritative for restored QC globals. */
+	float deathmatch, coop, teamplay;
 	char lightstyles[QCX_SAVE_LIGHTSTYLE_COUNT][QCX_MAX_LIGHTSTYLE_BYTES + 1U];
 	uint32_t precache_count;
 	qcx_save_precache_t *precaches;

@@ -605,6 +605,7 @@ add_test(NAME qcx_save_format COMMAND qcx_save_format_test)
 
 add_executable(qcx_restore_test
 	restore_test.c
+	${PROJECT_SOURCE_DIR}/src/bothtools.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c
 	${PROJECT_SOURCE_DIR}/src/qcx/world_text.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save.c)
