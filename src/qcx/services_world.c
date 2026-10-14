@@ -91,7 +91,7 @@ static uint32_t QCX_MapAdmit(void *context, qcx_entity_id_t slot, float spawnfla
 {
 	QCX_ObserveGameplayImport(context);
 	(void)QCX_RequireServiceEdict(slot, "entity");
-	const int flags = (int)spawnflags;
+	const int flags = QCX_RequireInt(spawnflags, "map spawnflags");
 	if ((int)deathmatch.value != 0) {
 		return (flags & SPAWNFLAG_NOT_DEATHMATCH) != 0 ? QCX_MAP_REJECT : QCX_MAP_ACCEPT;
 	}

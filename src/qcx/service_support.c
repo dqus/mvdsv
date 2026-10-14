@@ -3,6 +3,19 @@
 #include "qcx/entities.h"
 #include "qcx/service_support.h"
 
+#include <limits.h>
+#include <math.h>
+
+int QCX_RequireInt(float value, const char *what)
+{
+	/* Compare in double: float(INT_MAX) can round up past the valid range. */
+	if (!isfinite(value) || (double)value < (double)INT_MIN
+		|| (double)value > (double)INT_MAX) {
+		SV_Error("qc2cpp invalid %s integer", what);
+	}
+	return (int)value;
+}
+
 edict_t *QCX_RequireServiceEdict(qcx_entity_id_t slot, const char *what)
 {
 	edict_t *const entity = QCX_SlotToEdict(slot);
