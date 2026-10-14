@@ -21,6 +21,7 @@ from qc2cpp_acceptance import (
     wait_restore_session,
 )
 from qc2cpp_process import ProcessFailure, RunningProcess
+from qwsp_restore_acceptance import capture_engine_world
 
 
 class QWConnection:
@@ -212,6 +213,74 @@ class RestoreAuthorization(unittest.TestCase):
     def begin(self, session):
         self.connection.command("new", f'spawn {session["spawncount"]} 0',
                                 f'begin {session["spawncount"]}')
+
+    def check_coordinate_rejection_preserves_world(self, *, waiting):
+        if waiting:
+            self.fixture(False, save_bytes=self.force_spec_save, expected_available=2)
+            self.process.send("qcx_restore_wait_timeout 60")
+            self.process.send("load auth")
+            self.process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+            wait_restore_session(self.process,
+                lambda current: current["waiting"] and current["available"] == 2,
+                timeout=8, description="timed two-player restore did not wait")
+        else:
+            self.fixture(False)
+        self.assertTrue(self.connection.connect(
+            "Saved", password="player-pass", spectator="0"))
+        session, _ = self.named_client("Saved", lambda client: client["pending"])
+        if waiting:
+            # Age the finite deadline enough to distinguish preservation from
+            # silently installing a new 60-second restore wait.
+            time.sleep(0.5)
+        else:
+            self.begin(session)
+            wait_restore_session(self.process,
+                lambda current: not current["waiting"]
+                and roster_client(current, "Saved")["state"] == 4,
+                timeout=8, description="source player did not complete restore")
+        before_map = self.process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        before_world = capture_engine_world(self.process)
+        before_events = self.process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        before = observe_restore_session(self.process)
+        started = time.monotonic()
+        self.process.send("sv_bigcoords 1")
+        self.process.send("load auth")
+        after_map = self.process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+        after = observe_restore_session(self.process)
+        elapsed = time.monotonic() - started
+        after_events = self.process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        self.assertTrue(self.process.is_running)
+        self.assertEqual(after_map["map"], before_map["map"])
+        self.assertEqual(after_map["globals_address"], before_map["globals_address"])
+        self.assertEqual(capture_engine_world(self.process), before_world)
+        for key in ("init_count", "normal_unpublish_count"):
+            self.assertEqual(after_events[key], before_events[key], key)
+        self.assertEqual({key: value for key, value in after.items() if key != "remaining_seconds"},
+                         {key: value for key, value in before.items() if key != "remaining_seconds"})
+        if waiting:
+            self.assertEqual(after_map["time"], before_map["time"])
+            self.assertEqual(after["available"], 1)
+            self.assertEqual(after["bound"], 1)
+            self.assertGreater(after["remaining_seconds"], 0)
+            self.assertAlmostEqual(before["remaining_seconds"] - after["remaining_seconds"],
+                                   elapsed, delta=0.3)
+            # The retained binding remains usable; continuation abandons only
+            # the still-missing player rather than breaking the bound client.
+            self.begin(after)
+            self.named_client("Saved", lambda client: client["state"] == 4)
+            self.process.send("qcx_restore_continue")
+            wait_restore_session(self.process,
+                lambda current: not current["waiting"]
+                and roster_client(current, "Saved")["state"] == 4,
+                timeout=8, description="retained restore could not continue")
+        else:
+            self.assertGreaterEqual(after_map["time"], before_map["time"])
+
+    def test_coordinate_rejection_preserves_running_world(self):
+        self.check_coordinate_rejection_preserves_world(waiting=False)
+
+    def test_coordinate_rejection_preserves_restore_wait_and_bound_client(self):
+        self.check_coordinate_rejection_preserves_world(waiting=True)
 
     def check_reconnect_saved_auth(self, saved_spectator):
         self.fixture(saved_spectator)
