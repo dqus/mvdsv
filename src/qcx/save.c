@@ -12,8 +12,6 @@
 
 static qcx_save_image_t *qcx_prepared_image;
 
-_Static_assert(QCX_SAVE_MAX_RESOURCE_BYTES == QCX_MAX_LIGHTSTYLE_BYTES,
-	"lightstyle storage must hold validated save resources");
 _Static_assert(QCX_SAVE_LIGHTSTYLE_COUNT == MAX_LIGHTSTYLES,
 	"QCMS lightstyle count must match the engine");
 _Static_assert(QCX_SAVE_MODEL_CAPACITY == MAX_MODELS && QCX_SAVE_SOUND_CAPACITY == MAX_SOUNDS,

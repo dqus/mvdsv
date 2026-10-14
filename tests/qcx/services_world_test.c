@@ -8,6 +8,7 @@
 #include "game/plugin_api.h"
 #include "qcx/entities.h"
 #include "qcx/services.h"
+#include "qcx/world_text.h"
 
 server_t sv;
 server_static_t svs;
@@ -248,6 +249,36 @@ static void test_invalid_map_metadata(qcx_host_api_v1_t *host)
 	expect_error = false;
 }
 
+static void test_lightstyle_text_limits(qcx_host_api_v1_t *host)
+{
+	uint8_t value[QCX_MAX_LIGHTSTYLE_BYTES + 1U];
+	const uint32_t lengths[] = {0U, 63U, 64U, 255U};
+	memset(value, 'a', sizeof(value));
+	expect_error = true;
+	for (size_t index = 0U; index < sizeof(lengths) / sizeof(lengths[0]); ++index) {
+		if (setjmp(validation_error) != 0) {
+			assert(!"valid lightstyle rejected");
+		}
+		host->lightstyle(host->context, 2.0f, value, lengths[index]);
+		assert(strlen(sv.lightstyles[2]) == lengths[index]);
+		assert(memcmp(sv.lightstyles[2], value, lengths[index]) == 0);
+	}
+	char prior[QCX_MAX_LIGHTSTYLE_BYTES + 1U];
+	memcpy(prior, sv.lightstyles[2], sizeof(prior));
+	const int calls_before_invalid = lightstyle_calls;
+	if (setjmp(validation_error) == 0) {
+		host->lightstyle(host->context, 2.0f, value, sizeof(value));
+		assert(!"oversized lightstyle accepted");
+	}
+	if (setjmp(validation_error) == 0) {
+		host->lightstyle(host->context, 2.0f, (const uint8_t *)"a\0b", 3U);
+		assert(!"embedded NUL in lightstyle accepted");
+	}
+	assert(lightstyle_calls == calls_before_invalid);
+	assert(memcmp(sv.lightstyles[2], prior, sizeof(prior)) == 0);
+	expect_error = false;
+}
+
 int main(void)
 {
 	test_entity.v = &test_entity_state;
@@ -321,6 +352,7 @@ int main(void)
 	host.lightstyle(host.context, 2.0f, (const uint8_t *)transient_style, 3U);
 	memset(transient_style, 'x', 3U);
 	assert(!strcmp(sv.lightstyles[2], "def"));
+	test_lightstyle_text_limits(&host);
 	assert(host.cvar(host.context, (const uint8_t *)"skill", 5U) == 2.0f);
 	host.cvar_set(host.context, (const uint8_t *)"skill", 5U, (const uint8_t *)"3", 1U);
 	assert(cvar_set == 1);
