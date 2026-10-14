@@ -26,8 +26,6 @@ typedef struct qcx_restore_roster_s {
 
 bool QCX_RestoreRosterInit(qcx_restore_roster_t *out,
 	const qcx_save_roster_entry_t *saved, uint32_t count);
-int QCX_RestoreRosterFindAvailable(const qcx_restore_roster_t *roster,
-	const char *canonical_name);
 bool QCX_RestoreRosterBind(qcx_restore_roster_t *roster, uint32_t index);
 bool QCX_RestoreRosterActivate(qcx_restore_roster_t *roster, uint32_t index);
 bool QCX_RestoreRosterRelease(qcx_restore_roster_t *roster, uint32_t saved_slot);

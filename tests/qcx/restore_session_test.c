@@ -45,6 +45,7 @@ static uint32_t fallback_capacity_calls;
 static double test_monotonic_now;
 static info_t *allocated_info[MAX_CLIENTS * 2];
 static uint32_t allocated_info_count;
+static xcommand_t restore_continue_command;
 
 int Q_namecmp(const char *left, const char *right)
 {
@@ -186,8 +187,9 @@ void Cvar_Register(cvar_t *variable) { (void)variable; }
 void Cvar_SetValue(cvar_t *variable, const float value) { variable->value = value; }
 void Cmd_AddCommand(const char *name, xcommand_t command)
 {
-	(void)name;
-	(void)command;
+	assert(strcmp(name, "qcx_restore_continue") == 0);
+	assert(command != NULL);
+	restore_continue_command = command;
 }
 void Con_Printf(char *format, ...) { (void)format; }
 double Sys_DoubleTime(void) { return test_monotonic_now; }
@@ -252,6 +254,7 @@ static void reset_fixture(void)
 		free(allocated_info[index]);
 	}
 	allocated_info_count = 0U;
+	restore_continue_command = NULL;
 	memset(&sv, 0, sizeof(sv));
 	memset(&svs, 0, sizeof(svs));
 	sv_client = NULL;
@@ -615,6 +618,26 @@ static void test_admission_uses_the_saved_identity_role(void)
 	assert(QCX_RestoreSessionInstall(&image, 100.0));
 	assert(QCX_RestoreSessionAdmissionRole("Bob", &role));
 	assert(role);
+}
+
+static void test_admission_matches_colored_names_but_keeps_occupied_slots(void)
+{
+	qcx_save_roster_entry_t entries[] = {saved(1U, "Alice"), saved(2U, "Bob")};
+	const char colored_alice[] = {(char)0xc1, 'L', 'i', 'C', 'e', '\0'};
+	qbool role = true;
+	reset_fixture();
+	entries[1].role = QCX_SAVE_ROLE_SPECTATOR;
+	const qcx_save_image_t image = make_image(entries, 2U);
+	assert(QCX_RestoreSessionInstall(&image, 100.0));
+	assert(QCX_RestoreSessionAdmissionRole(colored_alice, &role) && !role);
+	assert(QCX_RestoreSessionAdmissionSlot(colored_alice) == &svs.clients[1]);
+	assert(!QCX_RestoreSessionAdmissionRole("Charlie", &role));
+	connect_client(1U, "Unmatched", 10);
+	assert(!QCX_RestoreSessionAdmissionRole(colored_alice, &role));
+	assert(QCX_RestoreSessionAdmissionSlot(colored_alice) == &svs.clients[0]);
+	assert(QCX_RestoreSessionAdmissionRole("bOB", &role) && role);
+	assert(QCX_RestoreSessionAdmissionSlot("bOB") == &svs.clients[2]);
+	assert(svs.clients[1].userid == 10);
 }
 
 static void set_client_role_and_team(client_t *client, qbool spectator, const char *team)
@@ -1118,6 +1141,28 @@ static void test_manual_continuation_keeps_a_bound_client_identity(void)
 	}
 }
 
+static void test_registered_continue_command_finishes_at_the_safe_frame(void)
+{
+	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
+	reset_fixture();
+	QCX_RestoreSessionInit();
+	assert(restore_continue_command != NULL);
+	qcx_restore_wait_timeout.value = 0.0f;
+	connect_client(0U, "Una", 10);
+	install_and_reconcile(&entry, 1U);
+	restore_continue_command();
+	assert(QCX_RestoreSessionWaiting());
+	assert(qcx_signon_starts == 0U);
+	QCX_RestoreSessionFrame(102.0);
+	assert(!QCX_RestoreSessionWaiting());
+	assert((sv.paused & SV_PAUSE_RESTORE) == 0);
+	assert(qcx_signon_starts == 1U);
+	assert(!QCX_RestoreSessionClientWaiting(&svs.clients[0]));
+	restore_continue_command();
+	QCX_RestoreSessionFrame(103.0);
+	assert(!QCX_RestoreSessionWaiting() && qcx_signon_starts == 1U);
+}
+
 static void test_zero_and_negative_timeout_wait_for_manual_continuation(void)
 {
 	const qcx_save_roster_entry_t entry = saved(1U, "Alice");
@@ -1331,6 +1376,7 @@ int main(void)
 	test_duplicate_waiting_names_claim_the_lowest_slot();
 	test_admission_does_not_consume_reserved_slots();
 	test_admission_uses_the_saved_identity_role();
+	test_admission_matches_colored_names_but_keeps_occupied_slots();
 	test_bound_client_without_fallback_is_dropped_on_continue();
 	test_bound_client_without_fallback_capacity_is_dropped_on_continue();
 	test_bound_identity_keeps_connection_owned_state();
@@ -1356,6 +1402,7 @@ int main(void)
 	test_inactive_and_complete_frames_do_not_compare_names();
 	test_timeout_abandons_bound_and_waiting_clients();
 	test_manual_continuation_keeps_a_bound_client_identity();
+	test_registered_continue_command_finishes_at_the_safe_frame();
 	test_zero_and_negative_timeout_wait_for_manual_continuation();
 	test_all_active_completes_without_abandonment();
 	test_manual_pause_survives_restore_completion();

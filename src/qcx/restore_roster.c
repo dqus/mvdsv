@@ -19,21 +19,6 @@ bool QCX_RestoreRosterInit(qcx_restore_roster_t *out,
 	return true;
 }
 
-int QCX_RestoreRosterFindAvailable(const qcx_restore_roster_t *roster,
-	const char *canonical_name)
-{
-	uint32_t index;
-	if (roster == NULL || canonical_name == NULL) return -1;
-	for (index = 0U; index < roster->count; ++index) {
-		const qcx_restore_roster_entry_t *const entry = &roster->entries[index];
-		if (entry->state == QCX_RESTORE_ENTRY_AVAILABLE
-			&& QCX_SaveClientNameEqual(entry->saved.name, canonical_name)) {
-			return (int)index;
-		}
-	}
-	return -1;
-}
-
 bool QCX_RestoreRosterBind(qcx_restore_roster_t *roster, uint32_t index)
 {
 	if (roster == NULL || roster->sealed || index >= roster->count
