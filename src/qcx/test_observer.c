@@ -62,6 +62,7 @@ static void QCX_TestEntityReferences_f(void);
 static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
 static void QCX_TestModelPresence_f(void);
+static void QCX_TestWorldPersistence_f(void);
 static void QCX_TestQwspMonster_f(void);
 static void QCX_TestQwspSave_f(void);
 static void QCX_TestRestoreSession_f(void);
@@ -292,6 +293,7 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_optional_fields", QCX_TestOptionalFields_f);
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
 	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
+	Cmd_AddCommand("qc2cpp_test_world_persistence", QCX_TestWorldPersistence_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_monster", QCX_TestQwspMonster_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_save", QCX_TestQwspSave_f);
 	Cmd_AddCommand("qc2cpp_test_restore_session", QCX_TestRestoreSession_f);
@@ -587,6 +589,32 @@ static void QCX_TestLegacyStrings_f(void)
 	}
 	Con_Printf("{\"qc2cpp_test_legacy_strings\":{\"ready\":true,\"value\":\"%s\"}}\n",
 		after);
+}
+
+static uint32_t QCX_TestHashBytes(uint32_t hash, const void *data, size_t size)
+{
+	const byte *bytes = data;
+	for (size_t index = 0U; index < size; ++index) {
+		hash = (hash ^ bytes[index]) * UINT32_C(16777619);
+	}
+	return hash;
+}
+
+static void QCX_TestWorldPersistence_f(void)
+{
+	uint32_t signon_hash = UINT32_C(2166136261);
+	uint32_t signon_size = 0U;
+	for (unsigned int index = 0U; index < sv.num_signon_buffers; ++index) {
+		const int size = index + 1U == sv.num_signon_buffers
+			? sv.signon.cursize : sv.signon_buffer_size[index];
+		signon_size += (uint32_t)size;
+		signon_hash = QCX_TestHashBytes(signon_hash, sv.signon_buffers[index], (size_t)size);
+	}
+	const uint32_t static_hash = QCX_TestHashBytes(UINT32_C(2166136261),
+		sv.static_entities, (size_t)sv.static_entity_count * sizeof(sv.static_entities[0]));
+	Con_Printf("{\"qc2cpp_test_world_persistence\":{\"static_count\":%d,"
+		"\"static_hash\":%u,\"signon_size\":%u,\"signon_hash\":%u}}\n",
+		sv.static_entity_count, static_hash, signon_size, signon_hash);
 }
 
 static void QCX_TestModelPresence_f(void)

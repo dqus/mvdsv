@@ -12,7 +12,7 @@ enum {
 	QCX_SAVE_ENGINE_SECTION = 2,
 	QCX_SAVE_ROSTER_SECTION = 3,
 	QCX_SAVE_GUEST_SECTION = 4,
-	QCX_SAVE_ENGINE_VERSION = 2,
+	QCX_SAVE_ENGINE_VERSION = 3,
 	QCX_SAVE_ROSTER_VERSION = 1
 };
 
@@ -282,7 +282,73 @@ static bool QCX_SaveValidateEngine(const qcx_save_engine_t *engine,
 		}
 		unused_slot = edict->state == QCX_SAVE_UNUSED_EDICT;
 	}
+	if (engine->static_entity_count > QCX_SAVE_MAX_STATIC_ENTITIES
+		|| engine->signon_count > QCX_SAVE_MAX_SIGNON_BUFFERS
+		|| (engine->signon_count != 0U
+			&& engine->signon_coord_bytes != 2U && engine->signon_coord_bytes != 4U)) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->static_entity_count; ++index) {
+		const qcx_save_static_entity_t *entity = &engine->static_entities[index];
+		if (entity->modelindex == 0U || entity->modelindex >= QCX_SAVE_MODEL_CAPACITY
+			|| models[entity->modelindex] == 0U || entity->trans > 255U) {
+			return false;
+		}
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			if (!isfinite(entity->origin[axis]) || !isfinite(entity->angles[axis])
+				|| entity->colourmod[axis] > 255U) {
+				return false;
+			}
+		}
+	}
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		if (engine->signon[index].size > QCX_SAVE_MAX_SIGNON_BUFFER_BYTES) {
+			return false;
+		}
+	}
 	return true;
+}
+
+static bool QCX_SaveReadStaticEntity(qcx_save_reader_t *reader,
+	qcx_save_static_entity_t *entity)
+{
+	uint32_t frame, colormap, skin;
+	if (!QCX_SaveReadU32(reader, &entity->modelindex)
+		|| !QCX_SaveReadU32(reader, &frame)
+		|| !QCX_SaveReadU32(reader, &colormap)
+		|| !QCX_SaveReadU32(reader, &skin)) {
+		return false;
+	}
+	memcpy(&entity->frame, &frame, sizeof(frame));
+	memcpy(&entity->colormap, &colormap, sizeof(colormap));
+	memcpy(&entity->skin, &skin, sizeof(skin));
+	for (uint32_t axis = 0U; axis < 3U; ++axis) {
+		if (!QCX_SaveReadF32(reader, &entity->origin[axis])
+			|| !QCX_SaveReadF32(reader, &entity->angles[axis])
+			|| !QCX_SaveReadU32(reader, &entity->colourmod[axis])) {
+			return false;
+		}
+	}
+	return QCX_SaveReadU32(reader, &entity->trans);
+}
+
+static bool QCX_SaveWriteStaticEntity(qcx_save_writer_t *writer,
+	const qcx_save_static_entity_t *entity)
+{
+	if (!QCX_SaveWriteU32(writer, entity->modelindex)
+		|| !QCX_SaveWriteU32(writer, (uint32_t)entity->frame)
+		|| !QCX_SaveWriteU32(writer, (uint32_t)entity->colormap)
+		|| !QCX_SaveWriteU32(writer, (uint32_t)entity->skin)) {
+		return false;
+	}
+	for (uint32_t axis = 0U; axis < 3U; ++axis) {
+		if (!QCX_SaveWriteF32(writer, entity->origin[axis])
+			|| !QCX_SaveWriteF32(writer, entity->angles[axis])
+			|| !QCX_SaveWriteU32(writer, entity->colourmod[axis])) {
+			return false;
+		}
+	}
+	return QCX_SaveWriteU32(writer, entity->trans);
 }
 
 static bool QCX_SaveReadPrecache(qcx_save_reader_t *reader, qcx_save_precache_t *entry)
@@ -357,6 +423,28 @@ static bool QCX_SaveParseEngine(const uint8_t *bytes, uint32_t size,
 			return false;
 		}
 		engine->edicts[index].state = (qcx_save_edict_state_t)state;
+	}
+	if (!QCX_SaveReadU32(&reader, &engine->static_entity_count)
+		|| engine->static_entity_count > QCX_SAVE_MAX_STATIC_ENTITIES) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->static_entity_count; ++index) {
+		if (!QCX_SaveReadStaticEntity(&reader, &engine->static_entities[index])) {
+			return false;
+		}
+	}
+	if (!QCX_SaveReadU32(&reader, &engine->signon_coord_bytes)
+		|| !QCX_SaveReadU32(&reader, &engine->signon_count)
+		|| engine->signon_count > QCX_SAVE_MAX_SIGNON_BUFFERS) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		qcx_save_signon_t *chunk = &engine->signon[index];
+		if (!QCX_SaveReadU32(&reader, &chunk->size)
+			|| chunk->size > sizeof(chunk->data)
+			|| !QCX_SaveRead(&reader, chunk->data, chunk->size)) {
+			return false;
+		}
 	}
 	return reader.cursor == reader.end && QCX_SaveValidateEngine(engine, metadata);
 }
@@ -620,7 +708,7 @@ bool QCX_SaveImageValid(const qcx_save_image_t *image)
 static bool QCX_SaveEngineSize(const qcx_save_image_t *image, uint32_t *size)
 {
 	const qcx_save_engine_t *engine = &image->engine;
-	uint32_t total = 4U + 8U + 4U + 4U + 4U + 4U;
+	uint32_t total = 4U + 8U + 4U + 4U + 4U + 4U + 12U;
 	for (uint32_t index = 0U; index < QCX_SAVE_LIGHTSTYLE_COUNT; ++index) {
 		if (!QCX_SaveAddSize(&total, 4U + (uint32_t)strlen(engine->lightstyles[index]))) {
 			return false;
@@ -635,6 +723,14 @@ static bool QCX_SaveEngineSize(const qcx_save_image_t *image, uint32_t *size)
 	}
 	if (!QCX_SaveAddSize(&total, image->metadata.entity_capacity * 8U)) {
 		return false;
+	}
+	if (!QCX_SaveAddSize(&total, engine->static_entity_count * 56U)) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		if (!QCX_SaveAddSize(&total, 4U + engine->signon[index].size)) {
+			return false;
+		}
 	}
 	*size = total;
 	return true;
@@ -676,6 +772,25 @@ static bool QCX_SaveWriteEngine(qcx_save_writer_t *writer, const qcx_save_image_
 	for (uint32_t index = 0U; index < image->metadata.entity_capacity; ++index) {
 		if (!QCX_SaveWriteU32(writer, (uint32_t)engine->edicts[index].state)
 			|| !QCX_SaveWriteF32(writer, engine->edicts[index].freetime)) {
+			return false;
+		}
+	}
+	if (!QCX_SaveWriteU32(writer, engine->static_entity_count)) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->static_entity_count; ++index) {
+		if (!QCX_SaveWriteStaticEntity(writer, &engine->static_entities[index])) {
+			return false;
+		}
+	}
+	if (!QCX_SaveWriteU32(writer, engine->signon_coord_bytes)
+		|| !QCX_SaveWriteU32(writer, engine->signon_count)) {
+		return false;
+	}
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		const qcx_save_signon_t *chunk = &engine->signon[index];
+		if (!QCX_SaveWriteU32(writer, chunk->size)
+			|| !QCX_SaveWrite(writer, chunk->data, chunk->size)) {
 			return false;
 		}
 	}
