@@ -6,6 +6,8 @@
 #include "qcx/save.h"
 
 #include <assert.h>
+#include <float.h>
+#include <math.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -23,6 +25,18 @@ int msg_coordsize = 2;
 cvar_t sv_bigcoords;
 #endif
 cvar_t sv_progsname;
+cvar_t deathmatch, coop, teamplay;
+void Cvar_Set(cvar_t *cvar, char *value)
+{
+	cvar->value = Q_atof(value);
+}
+int QCX_ConfigureGlobals(float saved_deathmatch, float saved_coop, float saved_teamplay)
+{
+	(void)saved_deathmatch;
+	(void)saved_coop;
+	(void)saved_teamplay;
+	return 1;
+}
 char fs_gamedir[MAX_OSPATH];
 globalvars_t restore_test_globals;
 qcx_shared_global_state_v1_t restore_shared_globals;
@@ -110,6 +124,11 @@ void SV_Error(char *error, ...)
 	(void)error;
 	assert(expect_restore_error);
 	longjmp(restore_error, 1);
+}
+void Sys_Error(const char *error, ...)
+{
+	(void)error;
+	abort();
 }
 void Con_Printf(char *fmt, ...)
 {
@@ -637,6 +656,9 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	char path[MAX_OSPATH];
 	const byte ambient[] = {29, 8, 0, 16, 0, 24, 0, 1, 127, 192};
 	reset_live_engine();
+	deathmatch.value = 0.0f;
+	coop.value = 1.0f;
+	teamplay.value = 2.0f;
 	entity_capacity = MAX_CLIENTS + 1U;
 	sv.max_edicts = (int)entity_capacity;
 	sv.num_edicts = 1;
@@ -679,11 +701,19 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	strcpy(fs_gamedir, directory);
 	assert(QCX_SaveGame("world"));
 	reset_live_engine();
+	deathmatch.value = 4.0f;
+	coop.value = 0.0f;
+	teamplay.value = 0.0f;
 	entity_capacity = MAX_CLIENTS + 1U;
 	sv.max_edicts = (int)entity_capacity;
 	assert(QCX_PrepareLoadGame("world", map_name, sizeof(map_name)));
+	/* Preflight must not change the current world's mode. */
+	assert(deathmatch.value == 4.0f && coop.value == 0.0f && teamplay.value == 0.0f);
 	assert(QCX_PrepareLoadResources());
+	/* Initialization of the replacement game must see the saved mode. */
+	assert(deathmatch.value == 0.0f && coop.value == 1.0f && teamplay.value == 2.0f);
 	assert(QCX_CommitPreparedLoadGame());
+	assert(deathmatch.value == 0.0f && coop.value == 1.0f && teamplay.value == 2.0f);
 	assert(sv.edicts[0].xv.alpha == 0.375f);
 	assert(sv.edicts[0].xv.colourmod[0] == 0.25f);
 	assert(sv.edicts[0].xv.colourmod[1] == 0.5f);
@@ -708,9 +738,52 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	assert(remove(path) == 0);
 }
 
+static void test_game_mode_round_trip_keeps_float_precision(void)
+{
+	const float values[] = {0.0f, 4.0f, 0.123456789f, 0.000000123f,
+		-FLT_MAX, FLT_MAX, FLT_MIN, FLT_TRUE_MIN};
+	for (size_t index = 0U; index < sizeof(values) / sizeof(values[0]); ++index) {
+		reset_live_engine();
+		qcx_save_image_t image = make_valid_image(true, false);
+		image.engine.deathmatch = values[index];
+		image.engine.coop = values[index];
+		image.engine.teamplay = values[index];
+		qcx_restore_plan_t plan = {0};
+		assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
+		QCX_ApplyRestore(&plan);
+		assert(deathmatch.value == values[index]);
+		assert(coop.value == values[index]);
+		assert(teamplay.value == values[index]);
+	}
+}
+
+static void test_invalid_mode_does_not_mutate_current_world(void)
+{
+	reset_live_engine();
+	deathmatch.value = 4.0f;
+	coop.value = 0.0f;
+	teamplay.value = 2.0f;
+	qcx_save_image_t image = make_valid_image(true, false);
+	float *const fields[] = {&image.engine.deathmatch, &image.engine.coop,
+		&image.engine.teamplay};
+	for (size_t index = 0U; index < 3U; ++index) {
+		*fields[index] = NAN;
+		qcx_restore_plan_t plan = {0};
+		assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+			== QCX_RESTORE_MALFORMED_CHUNK);
+		assert_empty_plan(&plan);
+		assert(deathmatch.value == 4.0f && coop.value == 0.0f && teamplay.value == 2.0f);
+		assert(sv.time == 7.0 && !sv.edicts[0].e.free);
+		assert(guest_validation_calls == 0U && guest_restore_calls == 0U && link_calls == 0U);
+		*fields[index] = 0.0f;
+	}
+}
+
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
+	test_game_mode_round_trip_keeps_float_precision();
+	test_invalid_mode_does_not_mutate_current_world();
 #ifdef FTE_PEXT_FLOATCOORDS
 	test_preflight_uses_next_map_encoding_and_retains_prepared_load(argv[1], 2U);
 	test_preflight_uses_next_map_encoding_and_retains_prepared_load(argv[1], 4U);
