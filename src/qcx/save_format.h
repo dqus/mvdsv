@@ -19,6 +19,25 @@
 #define QCX_SAVE_MAX_RESOURCE_BYTES 255U
 #define QCX_SAVE_MAX_GUEST_BYTES (8U * 1024U * 1024U)
 #define QCX_SAVE_MAX_FILE_BYTES (12U * 1024U * 1024U)
+#define QCX_SAVE_MAX_STATIC_ENTITIES 2048U
+#define QCX_SAVE_MAX_SIGNON_BUFFERS 16U
+/* The minimum client reliable buffer is 1350 bytes. Prespawn copies a whole
+ * chunk and appends svc_stufftext + a spawn/prespawn command; reserve 64 bytes
+ * rather than admitting a save that cannot finish client signon. */
+#define QCX_SAVE_MAX_SIGNON_BUFFER_BYTES 1286U
+
+/* Logical fields, not the compiler-dependent entity_state_t layout. */
+typedef struct qcx_save_static_entity_s {
+	uint32_t modelindex;
+	int32_t frame, colormap, skin;
+	float origin[3], angles[3];
+	uint32_t trans, colourmod[3];
+} qcx_save_static_entity_t;
+
+typedef struct qcx_save_signon_s {
+	uint32_t size;
+	uint8_t data[QCX_SAVE_MAX_SIGNON_BUFFER_BYTES];
+} qcx_save_signon_t;
 
 typedef enum qcx_save_edict_state_e {
 	QCX_SAVE_UNUSED_EDICT = 0,
@@ -44,6 +63,14 @@ typedef struct qcx_save_engine_s {
 	uint32_t precache_count;
 	qcx_save_precache_t *precaches;
 	qcx_save_edict_t edicts[QCX_SAVE_MAX_ENTITY_CAPACITY];
+	uint32_t static_entity_count;
+	qcx_save_static_entity_t static_entities[QCX_SAVE_MAX_STATIC_ENTITIES];
+	/* Signon is already a canonical protocol stream (ambient sounds and QC
+	 * MSG_INIT writes). Preserve chunk boundaries; never serialize sizebuf_t
+	 * pointers. coord_bytes identifies its coordinate/angle encoding. */
+	uint32_t signon_coord_bytes;
+	uint32_t signon_count;
+	qcx_save_signon_t signon[QCX_SAVE_MAX_SIGNON_BUFFERS];
 } qcx_save_engine_t;
 
 typedef struct qcx_save_bytes_s {

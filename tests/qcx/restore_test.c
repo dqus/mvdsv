@@ -18,6 +18,9 @@ enum { test_entity_capacity = 4 };
 
 server_t sv;
 server_static_t svs;
+#ifdef FTE_PEXT_FLOATCOORDS
+int msg_coordsize = 2;
+#endif
 cvar_t sv_progsname;
 char fs_gamedir[MAX_OSPATH];
 globalvars_t restore_test_globals;
@@ -73,7 +76,7 @@ qcx_restore_status_t QCX_ValidateGuestRestore(const uint8_t *data, qcx_byte_coun
 	assert(data != NULL);
 	assert(size == 2U);
 	assert(selection != NULL);
-	assert(selection_size == 1U);
+	assert(selection_size == (entity_capacity + 7U) / 8U);
 	assert(selection[0] == expected_validation_selection);
 	++guest_validation_calls;
 	return guest_validation_status;
@@ -232,6 +235,39 @@ static void test_valid_image_validates_then_applies_in_place(void)
 	assert(sv.edicts[0].e.free == false);
 	assert(sv.edicts[1].e.free == true);
 	assert(sv.edicts[1].e.freetime == 3.0f);
+}
+
+static void test_signon_encoding_mismatch_rejects_before_restore(void)
+{
+	qcx_restore_plan_t plan = {0};
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	image.engine.signon_count = 1U;
+	image.engine.signon_coord_bytes = 4U;
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+		== QCX_RESTORE_ENTITY_SET_MISMATCH);
+	assert_empty_plan(&plan);
+	assert(guest_validation_calls == 0U && guest_restore_calls == 0U);
+	assert(sv.time == 7.0);
+}
+
+static void test_empty_world_restore_removes_previous_static_state(void)
+{
+	qcx_restore_plan_t plan = {0};
+	reset_live_engine();
+	qcx_save_image_t image = make_valid_image(true, false);
+	sv.static_entity_count = 1;
+	sv.static_entities[0].modelindex = 7;
+	sv.num_signon_buffers = 2U;
+	sv.signon_buffer_size[0] = 3;
+	memset(sv.signon_buffers[0], 99, 3U);
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan)
+		== QCX_RESTORE_OK);
+	QCX_ApplyRestore(&plan);
+	assert(sv.static_entity_count == 0 && sv.static_entities[0].modelindex == 0);
+	assert(sv.num_signon_buffers == 1U && sv.signon.cursize == 0);
+	assert(sv.signon.data == sv.signon_buffers[0]);
+	assert(sv.signon_buffer_size[0] == 0 && sv.signon_buffer_size[1] == 0);
 }
 
 static void test_preparing_another_image_does_not_replace_first_restore(qbool second_valid)
@@ -529,9 +565,75 @@ static void test_save_path_limits_preserve_existing_file(void)
 	assert(rmdir(parent) == 0);
 }
 
+static void test_world_signon_survives_fresh_restore(const char *directory)
+{
+	char map_name[QCX_SAVE_NAME_CAPACITY];
+	char path[MAX_OSPATH];
+	const byte ambient[] = {29, 8, 0, 16, 0, 24, 0, 1, 127, 192};
+	reset_live_engine();
+	entity_capacity = MAX_CLIENTS + 1U;
+	sv.max_edicts = (int)entity_capacity;
+	sv.num_edicts = 1;
+	sv.state = ss_active;
+	sv.model_precache[1] = "progs/flame.mdl";
+	sv.sound_precache[1] = "ambience/fire1.wav";
+	sv.static_entity_count = 1;
+	entity_state_t *model = &sv.static_entities[0];
+	model->number = 1;
+	model->modelindex = 1;
+	model->frame = 3;
+	model->colormap = 4;
+	model->skinnum = 5;
+	VectorSet(model->origin, 32, 64, 96);
+	VectorSet(model->angles, 0, 90, 0);
+#ifdef FTE_PEXT_TRANS
+	model->trans = 127;
+#endif
+#ifdef FTE_PEXT_COLOURMOD
+	model->colourmod[0] = 32;
+	model->colourmod[1] = 64;
+	model->colourmod[2] = 96;
+#endif
+	const entity_state_t expected = *model;
+	sv.num_signon_buffers = 2;
+	sv.signon_buffer_size[0] = sizeof(ambient);
+	memcpy(sv.signon_buffers[0], ambient, sizeof(ambient));
+	sv.signon.data = sv.signon_buffers[1];
+	sv.signon.maxsize = sizeof(sv.signon_buffers[1]);
+	sv.signon.cursize = sizeof(ambient);
+	memcpy(sv.signon.data, ambient, sizeof(ambient));
+	/* The active chunk's authoritative size is cursize, not the sealed size. */
+	sv.signon_buffer_size[1] = 0;
+	strcpy(fs_gamedir, directory);
+	assert(QCX_SaveGame("world"));
+	reset_live_engine();
+	entity_capacity = MAX_CLIENTS + 1U;
+	sv.max_edicts = (int)entity_capacity;
+	assert(QCX_PrepareLoadGame("world", map_name, sizeof(map_name)));
+	assert(QCX_PrepareLoadResources());
+	assert(QCX_CommitPreparedLoadGame());
+	assert(sv.static_entity_count == 1);
+	assert(memcmp(&sv.static_entities[0], &expected, sizeof(expected)) == 0);
+	assert(sv.num_signon_buffers == 2);
+	assert(sv.signon_buffer_size[0] == sizeof(ambient));
+	assert(sv.signon_buffer_size[1] == sizeof(ambient));
+	assert(sv.signon.data == sv.signon_buffers[1]);
+	assert(sv.signon.cursize == sizeof(ambient));
+	assert(sv.signon.maxsize == sizeof(sv.signon_buffers[1]));
+	assert(memcmp(sv.signon_buffers[0], ambient, sizeof(ambient)) == 0);
+	assert(memcmp(sv.signon.data, ambient, sizeof(ambient)) == 0);
+	free(sv.model_precache[1]);
+	free(sv.sound_precache[1]);
+	assert(snprintf(path, sizeof(path), "%s/save/world.sav", directory) > 0);
+	assert(remove(path) == 0);
+}
+
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
+	test_world_signon_survives_fresh_restore(argv[1]);
+	test_signon_encoding_mismatch_rejects_before_restore();
+	test_empty_world_restore_removes_previous_static_state();
 	test_preparing_another_image_does_not_replace_first_restore(true);
 	test_preparing_another_image_does_not_replace_first_restore(false);
 	test_failed_preparation_clears_a_reused_output_plan(false);

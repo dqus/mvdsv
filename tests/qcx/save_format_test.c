@@ -14,7 +14,7 @@ enum {
 	roster_section = 3,
 	guest_section = 4,
 	engine_version_v1 = 1,
-	engine_version_v2 = 2,
+	engine_version_current = 3,
 	roster_version_v1 = 1,
 	fixture_entity_capacity = 4,
 	fixture_client_slot_capacity = 3
@@ -106,7 +106,7 @@ static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
 	uint32_t lightstyle_count, const char *model, const char *sound)
 {
 	uint32_t entity;
-	append_u32(engine, engine_version_v2);
+	append_u32(engine, engine_version_current);
 	append_f64(engine, 1.25);
 	append_u32(engine, 7);
 	append_u32(engine, lightstyle_count);
@@ -124,6 +124,9 @@ static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
 		append_u32(engine, entity < 2U ? 1U : 0U);
 		append_f32(engine, 0.0f);
 	}
+	append_u32(engine, 0U); /* Static entities. */
+	append_u32(engine, 2U); /* Signon coordinate width. */
+	append_u32(engine, 0U); /* Signon buffers. */
 }
 
 static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
@@ -516,8 +519,85 @@ static void test_rejects_truncated_engine_and_other_sections(void)
 	}
 }
 
+static void test_static_world_codec_and_bounds(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	qcx_save_image_t *restored = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	/* Prespawn appends a command after copying a chunk into even the smallest
+	 * accepted client reliable buffer (1350 bytes). Keep 64 bytes for it. */
+	image->engine.signon_count = 1U;
+	image->engine.signon_coord_bytes = 2U;
+	image->engine.signon[0].size = 1287U;
+	assert(!QCX_SaveImageValid(image));
+	image->engine.static_entity_count = 1U;
+	image->engine.static_entities[0] = (qcx_save_static_entity_t){
+		.modelindex = 1U, .frame = -7, .colormap = 4, .skin = 5,
+		.origin = {32, 64, 96}, .angles = {0, 90, 0},
+		.trans = 127, .colourmod = {32, 64, 96}};
+	image->engine.signon_count = QCX_SAVE_MAX_SIGNON_BUFFERS;
+	image->engine.signon_coord_bytes = 4U;
+	for (uint32_t index = 0U; index < image->engine.signon_count; ++index) {
+		image->engine.signon[index].size = QCX_SAVE_MAX_SIGNON_BUFFER_BYTES;
+		memset(image->engine.signon[index].data, (int)index,
+			QCX_SAVE_MAX_SIGNON_BUFFER_BYTES);
+	}
+	assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+	assert(QCX_SaveParse(encoded, size, &restored) == QCX_PLUGIN_OK);
+	assert(restored->engine.static_entity_count == 1U);
+	assert(restored->engine.static_entities[0].frame == -7);
+	assert(restored->engine.static_entities[0].origin[2] == 96);
+	assert(restored->engine.static_entities[0].angles[1] == 90);
+	assert(restored->engine.static_entities[0].colourmod[2] == 96U);
+	assert(restored->engine.static_entities[0].trans == 127U);
+	assert(restored->engine.signon_count == 16U);
+	assert(restored->engine.signon_coord_bytes == 4U);
+	assert(restored->engine.signon[15].size == 1286U);
+	assert(restored->engine.signon[15].data[1285] == 15U);
+	assert(restored->engine.signon[0].data[0] == 0U);
+	/* The new tail adds one 56-byte static record before the first chunk
+	 * length. Corrupt that length with plenty of bytes still available, so
+	 * rejection tests the protocol limit rather than simple truncation. */
+	const uint32_t chunk_length_offset = offsets.roster_section_id + 56U;
+	encoded[chunk_length_offset] = 7U; /* 1287, little-endian. */
+	require_rejected(encoded, size);
+	free(encoded);
+	QCX_SaveImageFree(restored);
+	image->engine.signon[15].size = 1287U;
+	assert(!QCX_SaveImageValid(image));
+	image->engine.signon[15].size = 1286U;
+	image->engine.signon_count = QCX_SAVE_MAX_SIGNON_BUFFERS + 1U;
+	assert(!QCX_SaveImageValid(image));
+	image->engine.signon_count = 1U;
+	image->engine.signon_coord_bytes = 3U;
+	assert(!QCX_SaveImageValid(image));
+	image->engine.signon_coord_bytes = 2U;
+	image->engine.static_entities[0].modelindex = 2U; /* Not precached. */
+	assert(!QCX_SaveImageValid(image));
+	image->engine.static_entities[0].modelindex = 1U;
+	image->engine.static_entities[0].origin[0] = NAN;
+	assert(!QCX_SaveImageValid(image));
+	image->engine.static_entity_count = QCX_SAVE_MAX_STATIC_ENTITIES + 1U;
+	assert(!QCX_SaveImageValid(image));
+	QCX_SaveImageFree(image);
+	/* Malformed wire counts must be rejected before indexing fixed arrays. */
+	save_bytes_t malformed = input;
+	overwrite_u32(&malformed, offsets.roster_section_id - 12U,
+		QCX_SAVE_MAX_STATIC_ENTITIES + 1U);
+	require_rejected(malformed.bytes, malformed.size);
+	malformed = input;
+	overwrite_u32(&malformed, offsets.roster_section_id - 4U,
+		QCX_SAVE_MAX_SIGNON_BUFFERS + 1U);
+	require_rejected(malformed.bytes, malformed.size);
+}
+
 int main(void)
 {
+	test_static_world_codec_and_bounds();
 	test_lightstyles_round_trip_as_text_not_resource_names();
 	test_lightstyle_wire_text_rejects_nul_and_oversize();
 	test_rejects_engine_errors_during_initial_parse();
