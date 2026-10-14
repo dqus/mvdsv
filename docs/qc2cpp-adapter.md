@@ -174,8 +174,11 @@ the map or duplicated in the guest schema.
 It also retains the bounded signon chunks containing ambient sounds and QC
 `MSG_INIT` messages. These are protocol bytes, not a dump of `server_t` or
 `sizebuf_t`; pointers, baselines, and spatial links are rebuilt. Signon coordinate
-encoding must match the receiving server's `sv_bigcoords` setting. Earlier engine
-sections are unsupported; create new saves after upgrading.
+encoding must match the receiving server's next-map `sv_bigcoords` setting.
+An incompatible setting is rejected in preflight, before replacing the current
+map, prepared image, or restore wait; the running map's `msg_coordsize` may still
+reflect the previous setting. Earlier engine sections are unsupported; create
+new saves after upgrading.
 Malformed engine and roster structure is rejected before restarting the map.
 Resource preparation and restore consume that same parsed state; restore still
 checks it against the selected game's capacity, map checksum, and world resources.

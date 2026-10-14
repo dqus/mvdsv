@@ -37,6 +37,29 @@ static uint32_t QCX_SaveCoordBytes(void)
 #endif
 }
 
+static uint32_t QCX_SaveNextMapCoordBytes(void)
+{
+#ifdef FTE_PEXT_FLOATCOORDS
+	extern cvar_t sv_bigcoords;
+	/* Like SV_SpawnServer: msg_coordsize still describes the running map and
+	 * is not updated when the operator changes the next map's setting. */
+	return sv_bigcoords.value ? 4U : 2U;
+#else
+	return 2U;
+#endif
+}
+
+static qbool QCX_SaveSignonEncodingMatches(const qcx_save_engine_t *engine,
+	uint32_t coord_bytes)
+{
+	if (engine->signon_count == 0U || engine->signon_coord_bytes == coord_bytes) {
+		return true;
+	}
+	Con_Printf("qc2cpp restore signon coordinate encoding mismatch: saved=%u, selected=%u.\n",
+		engine->signon_coord_bytes, coord_bytes);
+	return false;
+}
+
 static qbool QCX_SaveCaptureStaticWorld(qcx_save_engine_t *engine)
 {
 	if (sv.static_entity_count < 0 || sv.static_entity_count > MAX_STATIC_ENTITIES
@@ -299,9 +322,8 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 			sv_progsname.string, sv.mapname, QCX_EntityCapacity(), sv.map_checksum);
 		return QCX_RESTORE_ENTITY_SET_MISMATCH;
 	}
-	if (image->engine.signon_count != 0U
-		&& image->engine.signon_coord_bytes != QCX_SaveCoordBytes()) {
-		Con_Printf("qc2cpp restore signon coordinate encoding mismatch.\n");
+	/* Retain the commit-side invariant as well as the non-destructive preflight. */
+	if (!QCX_SaveSignonEncodingMatches(&image->engine, QCX_SaveCoordBytes())) {
 		return QCX_RESTORE_ENTITY_SET_MISMATCH;
 	}
 	/* Structural validation belongs to save_format. Here compare the parsed
@@ -579,7 +601,8 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 	}
 	if (strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| QCX_SaveBoundedStringLength(image->metadata.map_name, map_name_size - 1U)
-		>= map_name_size) {
+		>= map_name_size
+		|| !QCX_SaveSignonEncodingMatches(&image->engine, QCX_SaveNextMapCoordBytes())) {
 		Con_Printf("qc2cpp fresh restore rejected: saved game=%s, selected game=%s, map=%s, roster=%u.\n",
 			image->metadata.logical_game, sv_progsname.string, image->metadata.map_name,
 			(unsigned)image->roster_count);

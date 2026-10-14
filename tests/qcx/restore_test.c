@@ -20,6 +20,7 @@ server_t sv;
 server_static_t svs;
 #ifdef FTE_PEXT_FLOATCOORDS
 int msg_coordsize = 2;
+cvar_t sv_bigcoords;
 #endif
 cvar_t sv_progsname;
 char fs_gamedir[MAX_OSPATH];
@@ -152,6 +153,10 @@ static qcx_save_image_t make_valid_image(uint32_t world_flags, qbool restored_cl
 
 static void reset_live_engine(void)
 {
+#ifdef FTE_PEXT_FLOATCOORDS
+	msg_coordsize = 2;
+	sv_bigcoords.value = 0.0f;
+#endif
 	memset(&sv, 0, sizeof(sv));
 	memset(&svs, 0, sizeof(svs));
 	memset(&restore_test_globals, 0, sizeof(restore_test_globals));
@@ -250,6 +255,67 @@ static void test_signon_encoding_mismatch_rejects_before_restore(void)
 	assert(guest_validation_calls == 0U && guest_restore_calls == 0U);
 	assert(sv.time == 7.0);
 }
+
+#ifdef FTE_PEXT_FLOATCOORDS
+static void write_preflight_image(const char *directory, const char *name,
+	const qcx_save_image_t *image)
+{
+	char path[MAX_OSPATH];
+	uint8_t *bytes = NULL;
+	uint32_t size = 0U;
+	assert(QCX_SaveEncode(image, &bytes, &size) == QCX_PLUGIN_OK);
+	assert(snprintf(path, sizeof(path), "%s/save/%s.sav", directory, name) > 0);
+	FILE *file = fopen(path, "wb");
+	assert(file != NULL);
+	assert(fwrite(bytes, 1U, size, file) == size);
+	assert(fclose(file) == 0);
+	free(bytes);
+}
+
+static void test_preflight_uses_next_map_encoding_and_retains_prepared_load(
+	const char *directory, uint32_t saved_coord_bytes)
+{
+	char map_name[QCX_SAVE_NAME_CAPACITY];
+	char path[MAX_OSPATH];
+	reset_live_engine();
+	strcpy(fs_gamedir, directory);
+	qcx_save_image_t prior = make_valid_image(true, false);
+	write_preflight_image(directory, "prior", &prior);
+	assert(QCX_PrepareLoadGame("prior", map_name, sizeof(map_name)));
+	qcx_save_image_t candidate = make_valid_image(true, false);
+	candidate.engine.time = 91.0;
+	candidate.engine.signon_count = 1U;
+	candidate.engine.signon_coord_bytes = saved_coord_bytes;
+	write_preflight_image(directory, "candidate", &candidate);
+	/* The running map matches the save, but the next map's setting does not. */
+	msg_coordsize = (int)saved_coord_bytes;
+	sv_bigcoords.value = saved_coord_bytes == 2U ? 1.0f : 0.0f;
+	strcpy(map_name, "unchanged");
+	assert(!QCX_PrepareLoadGame("candidate", map_name, sizeof(map_name)));
+	assert(strcmp(map_name, "unchanged") == 0);
+	assert(QCX_HasPreparedLoadGame());
+	assert(guest_validation_calls == 0U && guest_restore_calls == 0U);
+	assert(selection_calls == 0U && link_calls == 0U);
+	assert(sv.time == 7.0 && strcmp(sv.mapname, "e1m1") == 0);
+	assert(!sv.edicts[0].e.free);
+	/* Rejection must not dispose of or replace the previously prepared image. */
+	assert(QCX_CommitPreparedLoadGame());
+	assert(sv.time == 42.5);
+	/* Conversely, stale running-map encoding must not reject a compatible
+	 * next-map request. Only map startup updates msg_coordsize. */
+	msg_coordsize = saved_coord_bytes == 2U ? 4 : 2;
+	sv_bigcoords.value = saved_coord_bytes == 4U ? 1.0f : 0.0f;
+	assert(QCX_PrepareLoadGame("candidate", map_name, sizeof(map_name)));
+	assert(strcmp(map_name, "e1m1") == 0);
+	msg_coordsize = (int)saved_coord_bytes;
+	assert(QCX_CommitPreparedLoadGame());
+	assert(sv.time == 91.0);
+	assert(snprintf(path, sizeof(path), "%s/save/prior.sav", directory) > 0);
+	assert(remove(path) == 0);
+	assert(snprintf(path, sizeof(path), "%s/save/candidate.sav", directory) > 0);
+	assert(remove(path) == 0);
+}
+#endif
 
 static void test_empty_world_restore_removes_previous_static_state(void)
 {
@@ -645,6 +711,10 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
+#ifdef FTE_PEXT_FLOATCOORDS
+	test_preflight_uses_next_map_encoding_and_retains_prepared_load(argv[1], 2U);
+	test_preflight_uses_next_map_encoding_and_retains_prepared_load(argv[1], 4U);
+#endif
 	test_world_signon_survives_fresh_restore(argv[1]);
 	test_signon_encoding_mismatch_rejects_before_restore();
 	test_empty_world_restore_removes_previous_static_state();
