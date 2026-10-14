@@ -7,11 +7,7 @@
 #include <stdint.h>
 
 enum {
-	QCX_MSG_BROADCAST = 0,
 	QCX_MSG_ONE = 1,
-	QCX_MSG_ALL = 2,
-	QCX_MSG_INIT = 3,
-	QCX_MSG_MULTICAST = 4,
 };
 
 static int QCX_RequireClientNumber(qcx_entity_id_t slot)
