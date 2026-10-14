@@ -140,6 +140,11 @@ static bool QCX_SaveValidResourceByte(uint8_t byte)
 	return byte >= 32U && byte <= 126U && byte != '\\';
 }
 
+static bool QCX_SaveValidLightstyleByte(uint8_t byte)
+{
+	return byte != '\0';
+}
+
 static bool QCX_SaveValidRosterByte(uint8_t byte)
 {
 	return byte > 13U && byte != '\\' && byte != '"' && byte != '$'
@@ -244,7 +249,8 @@ static bool QCX_SaveValidateEngine(const qcx_save_engine_t *engine,
 		return false;
 	}
 	for (uint32_t index = 0U; index < QCX_SAVE_LIGHTSTYLE_COUNT; ++index) {
-		if (!QCX_SaveValidResource(engine->lightstyles[index], sizeof(engine->lightstyles[index]))) {
+		if (QCX_SaveStringLength(engine->lightstyles[index], sizeof(engine->lightstyles[index]))
+			== sizeof(engine->lightstyles[index])) {
 			return false;
 		}
 	}
@@ -322,7 +328,7 @@ static bool QCX_SaveParseEngine(const uint8_t *bytes, uint32_t size,
 	}
 	for (uint32_t index = 0U; index < count; ++index) {
 		if (!QCX_SaveReadString(&reader, engine->lightstyles[index],
-			sizeof(engine->lightstyles[index]), false, QCX_SaveValidResourceByte)) {
+			sizeof(engine->lightstyles[index]), true, QCX_SaveValidLightstyleByte)) {
 			return false;
 		}
 	}

@@ -159,7 +159,7 @@ static void QCX_LightStyle(void *context, float style, const uint8_t *value,
 	if (!isfinite(style) || style < 0.0f || style >= (float)MAX_LIGHTSTYLES) {
 		SV_Error("qc2cpp lightstyle index out of range");
 	}
-	char local[MAX_QPATH];
+	char local[QCX_MAX_LIGHTSTYLE_BYTES + 1U];
 	QCX_CopyText(value, value_size, local, sizeof(local), "lightstyle");
 	PF2_lightstyle((int)style, QCX_StoreLightstyle((unsigned int)style, local));
 }

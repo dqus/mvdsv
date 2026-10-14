@@ -2,6 +2,7 @@
 #define MVDSV_QC2CPP_SAVE_FORMAT_H
 
 #include <game/host_types.h>
+#include "qcx/world_text.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -39,7 +40,7 @@ typedef struct qcx_save_precache_s {
 typedef struct qcx_save_engine_s {
 	double time;
 	uint32_t serverflags;
-	char lightstyles[QCX_SAVE_LIGHTSTYLE_COUNT][QCX_SAVE_MAX_RESOURCE_BYTES + 1U];
+	char lightstyles[QCX_SAVE_LIGHTSTYLE_COUNT][QCX_MAX_LIGHTSTYLE_BYTES + 1U];
 	uint32_t precache_count;
 	qcx_save_precache_t *precaches;
 	qcx_save_edict_t edicts[QCX_SAVE_MAX_ENTITY_CAPACITY];

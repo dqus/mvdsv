@@ -394,6 +394,9 @@ static void test_prepared_resources_survive_image_disposal(const char *directory
 	qcx_save_image_t image = make_valid_image(true, false);
 	image.engine.precache_count = 2U;
 	image.engine.precaches = precaches;
+	image.engine.lightstyles[2][0] = '\0';
+	memset(image.engine.lightstyles[3], 'a', 255U);
+	image.engine.lightstyles[3][255] = '\0';
 	assert(QCX_SaveEncode(&image, &encoded, &encoded_size) == QCX_PLUGIN_OK);
 	assert(strlcpy(fs_gamedir, directory, sizeof(fs_gamedir)) < sizeof(fs_gamedir));
 	assert(snprintf(path, sizeof(path), "%s/save/prepared.sav", directory) > 0);
@@ -421,6 +424,9 @@ static void test_prepared_resources_survive_image_disposal(const char *directory
 	assert(strcmp(sv.sound_precache[19], "misc/menu.wav") == 0);
 	assert(strcmp(sv.model_precache[8], "progs/startup-extra.mdl") == 0);
 	assert(strcmp(sv.lightstyles[63], "m") == 0);
+	assert(sv.lightstyles[2][0] == '\0');
+	assert(strlen(sv.lightstyles[3]) == 255U);
+	assert(memcmp(sv.lightstyles[3], image.engine.lightstyles[3], 256U) == 0);
 	assert(sv.time == 42.5 && guest_restore_calls == 1U);
 	free(sv.model_precache[7]);
 	free(sv.sound_precache[19]);
