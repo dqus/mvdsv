@@ -20,6 +20,99 @@ _Static_assert(QCX_SAVE_MAX_ENTITY_CAPACITY == MAX_EDICTS,
 	"QCMS entity capacity must match the engine");
 _Static_assert(NUM_SPAWN_PARMS == QCX_SAVE_SPAWN_PARM_COUNT,
 	"QCMS spawn parameter count");
+_Static_assert(QCX_SAVE_MAX_STATIC_ENTITIES == MAX_STATIC_ENTITIES
+	&& QCX_SAVE_MAX_SIGNON_BUFFERS == MAX_SIGNON_BUFFERS
+	&& QCX_SAVE_MAX_SIGNON_BUFFER_BYTES <= MAX_DATAGRAM
+	&& QCX_SAVE_MAX_SIGNON_BUFFER_BYTES + 64U <= MIN_MTU,
+	"QCMS static world bounds must match the engine");
+_Static_assert(sizeof("cmd prespawn -2147483648 4294967295\n") + 1U <= 64U,
+	"signon command reserve includes svc_stufftext and terminating NUL");
+
+static uint32_t QCX_SaveCoordBytes(void)
+{
+#ifdef FTE_PEXT_FLOATCOORDS
+	return (uint32_t)msg_coordsize;
+#else
+	return 2U;
+#endif
+}
+
+static qbool QCX_SaveCaptureStaticWorld(qcx_save_engine_t *engine)
+{
+	if (sv.static_entity_count < 0 || sv.static_entity_count > MAX_STATIC_ENTITIES
+		|| sv.num_signon_buffers > MAX_SIGNON_BUFFERS) {
+		return false;
+	}
+	engine->static_entity_count = (uint32_t)sv.static_entity_count;
+	for (uint32_t index = 0U; index < engine->static_entity_count; ++index) {
+		const entity_state_t *source = &sv.static_entities[index];
+		qcx_save_static_entity_t *target = &engine->static_entities[index];
+		target->modelindex = (uint32_t)source->modelindex;
+		target->frame = source->frame;
+		target->colormap = source->colormap;
+		target->skin = source->skinnum;
+		VectorCopy(source->origin, target->origin);
+		VectorCopy(source->angles, target->angles);
+#ifdef FTE_PEXT_TRANS
+		target->trans = source->trans;
+#endif
+#ifdef FTE_PEXT_COLOURMOD
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			target->colourmod[axis] = source->colourmod[axis];
+		}
+#endif
+	}
+	engine->signon_coord_bytes = QCX_SaveCoordBytes();
+	engine->signon_count = sv.num_signon_buffers;
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		const int size = index + 1U == engine->signon_count
+			? sv.signon.cursize : sv.signon_buffer_size[index];
+		if (size < 0 || (uint32_t)size > QCX_SAVE_MAX_SIGNON_BUFFER_BYTES) {
+			return false;
+		}
+		engine->signon[index].size = (uint32_t)size;
+		memcpy(engine->signon[index].data, sv.signon_buffers[index], (size_t)size);
+	}
+	return true;
+}
+
+static void QCX_SaveApplyStaticWorld(const qcx_save_engine_t *engine)
+{
+	memset(sv.static_entities, 0, sizeof(sv.static_entities));
+	sv.static_entity_count = (int)engine->static_entity_count;
+	for (uint32_t index = 0U; index < engine->static_entity_count; ++index) {
+		const qcx_save_static_entity_t *source = &engine->static_entities[index];
+		entity_state_t *target = &sv.static_entities[index];
+		target->number = (int)index + 1;
+		target->modelindex = (int)source->modelindex;
+		target->frame = source->frame;
+		target->colormap = source->colormap;
+		target->skinnum = source->skin;
+		VectorCopy(source->origin, target->origin);
+		VectorCopy(source->angles, target->angles);
+#ifdef FTE_PEXT_TRANS
+		target->trans = (byte)source->trans;
+#endif
+#ifdef FTE_PEXT_COLOURMOD
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			target->colourmod[axis] = (byte)source->colourmod[axis];
+		}
+#endif
+	}
+	memset(sv.signon_buffers, 0, sizeof(sv.signon_buffers));
+	memset(sv.signon_buffer_size, 0, sizeof(sv.signon_buffer_size));
+	/* An empty saved stream still needs the engine's normal writable chunk. */
+	sv.num_signon_buffers = engine->signon_count == 0U ? 1U : engine->signon_count;
+	for (uint32_t index = 0U; index < engine->signon_count; ++index) {
+		sv.signon_buffer_size[index] = (int)engine->signon[index].size;
+		memcpy(sv.signon_buffers[index], engine->signon[index].data,
+			engine->signon[index].size);
+	}
+	memset(&sv.signon, 0, sizeof(sv.signon));
+	sv.signon.data = sv.signon_buffers[sv.num_signon_buffers - 1U];
+	sv.signon.maxsize = sizeof(sv.signon_buffers[0]);
+	sv.signon.cursize = sv.signon_buffer_size[sv.num_signon_buffers - 1U];
+}
 
 static uint32_t QCX_SaveBoundedStringLength(const char *value, uint32_t limit)
 {
@@ -96,7 +189,7 @@ static qbool QCX_SaveCaptureEngine(uint32_t entity_capacity, qcx_save_engine_t *
 			: sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
 		engine->edicts[index].freetime = sv.edicts[index].e.freetime;
 	}
-	return true;
+	return QCX_SaveCaptureStaticWorld(engine);
 }
 
 static qbool QCX_SaveBuildRoster(qcx_save_image_t *image)
@@ -204,6 +297,11 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 			sv_progsname.string, sv.mapname, QCX_EntityCapacity(), sv.map_checksum);
 		return QCX_RESTORE_ENTITY_SET_MISMATCH;
 	}
+	if (image->engine.signon_count != 0U
+		&& image->engine.signon_coord_bytes != QCX_SaveCoordBytes()) {
+		Con_Printf("qc2cpp restore signon coordinate encoding mismatch.\n");
+		return QCX_RESTORE_ENTITY_SET_MISMATCH;
+	}
 	/* Structural validation belongs to save_format. Here compare the parsed
 	 * resources with the world that will receive the saved gameplay state. */
 	for (index = 0U; index < image->engine.precache_count; ++index) {
@@ -309,6 +407,7 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) {
 		sv.lightstyles[index] = QCX_StoreLightstyle(index, image->engine.lightstyles[index]);
 	}
+	QCX_SaveApplyStaticWorld(&image->engine);
 	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
 		sv.edicts[index].e.free = image->engine.edicts[index].state != QCX_SAVE_ACTIVE_EDICT;
 		sv.edicts[index].e.freetime = image->engine.edicts[index].freetime;

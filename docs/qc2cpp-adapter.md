@@ -166,8 +166,13 @@ when logical game, map, entity capacity, and engine-state identity match.
 QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
 rejected: create a new save after upgrading.
 
-`qcx/save_format` owns the engine-section codec. A parsed image contains typed
-time, lightstyles, indexed precaches, and edict records, not opaque engine bytes.
+`qcx/save_format` owns the engine-section codec. Engine section version 3 stores
+typed time, lightstyles, indexed precaches, edict records, and static models.
+It also retains the bounded signon chunks containing ambient sounds and QC
+`MSG_INIT` messages. These are protocol bytes, not a dump of `server_t` or
+`sizebuf_t`; pointers, baselines, and spatial links are rebuilt. Signon coordinate
+encoding must match the receiving server's `sv_bigcoords` setting. Earlier engine
+sections are unsupported; create new saves after upgrading.
 Malformed engine and roster structure is rejected before restarting the map.
 Resource preparation and restore consume that same parsed state; restore still
 checks it against the selected game's capacity, map checksum, and world resources.
