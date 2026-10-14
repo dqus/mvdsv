@@ -577,6 +577,12 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	sv.state = ss_active;
 	sv.model_precache[1] = "progs/flame.mdl";
 	sv.sound_precache[1] = "ambience/fire1.wav";
+	sv.edicts[0].xv.alpha = 0.375f;
+	VectorSet(sv.edicts[0].xv.colourmod, 0.25f, 0.5f, 2.0f);
+	sv.num_edicts = 2;
+	sv.edicts[1].e.free = true;
+	sv.edicts[1].xv.alpha = 0.75f;
+	VectorSet(sv.edicts[1].xv.colourmod, 2.0f, 1.0f, 0.5f);
 	sv.static_entity_count = 1;
 	entity_state_t *model = &sv.static_entities[0];
 	model->number = 1;
@@ -612,6 +618,14 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	assert(QCX_PrepareLoadGame("world", map_name, sizeof(map_name)));
 	assert(QCX_PrepareLoadResources());
 	assert(QCX_CommitPreparedLoadGame());
+	assert(sv.edicts[0].xv.alpha == 0.375f);
+	assert(sv.edicts[0].xv.colourmod[0] == 0.25f);
+	assert(sv.edicts[0].xv.colourmod[1] == 0.5f);
+	assert(sv.edicts[0].xv.colourmod[2] == 2.0f);
+	assert(sv.edicts[1].e.free && sv.edicts[1].xv.alpha == 0.75f);
+	assert(sv.edicts[1].xv.colourmod[0] == 2.0f);
+	assert(sv.edicts[1].xv.colourmod[1] == 1.0f);
+	assert(sv.edicts[1].xv.colourmod[2] == 0.5f);
 	assert(sv.static_entity_count == 1);
 	assert(memcmp(&sv.static_entities[0], &expected, sizeof(expected)) == 0);
 	assert(sv.num_signon_buffers == 2);

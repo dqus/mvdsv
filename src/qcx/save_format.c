@@ -12,7 +12,7 @@ enum {
 	QCX_SAVE_ENGINE_SECTION = 2,
 	QCX_SAVE_ROSTER_SECTION = 3,
 	QCX_SAVE_GUEST_SECTION = 4,
-	QCX_SAVE_ENGINE_VERSION = 3,
+	QCX_SAVE_ENGINE_VERSION = 4,
 	QCX_SAVE_ROSTER_VERSION = 1
 };
 
@@ -277,8 +277,14 @@ static bool QCX_SaveValidateEngine(const qcx_save_engine_t *engine,
 	for (uint32_t index = 0U; index < metadata->entity_capacity; ++index) {
 		const qcx_save_edict_t *edict = &engine->edicts[index];
 		if ((uint32_t)edict->state > QCX_SAVE_FREE_EDICT || !isfinite(edict->freetime)
+			|| !isfinite(edict->alpha) || edict->alpha < 0.0f || edict->alpha > 1.0f
 			|| (unused_slot && edict->state != QCX_SAVE_UNUSED_EDICT)) {
 			return false;
+		}
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			if (!isfinite(edict->colourmod[axis]) || edict->colourmod[axis] < 0.0f) {
+				return false;
+			}
 		}
 		unused_slot = edict->state == QCX_SAVE_UNUSED_EDICT;
 	}
@@ -419,8 +425,14 @@ static bool QCX_SaveParseEngine(const uint8_t *bytes, uint32_t size,
 	for (uint32_t index = 0U; index < count; ++index) {
 		uint32_t state;
 		if (!QCX_SaveReadU32(&reader, &state)
-			|| !QCX_SaveReadF32(&reader, &engine->edicts[index].freetime)) {
+			|| !QCX_SaveReadF32(&reader, &engine->edicts[index].freetime)
+			|| !QCX_SaveReadF32(&reader, &engine->edicts[index].alpha)) {
 			return false;
+		}
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			if (!QCX_SaveReadF32(&reader, &engine->edicts[index].colourmod[axis])) {
+				return false;
+			}
 		}
 		engine->edicts[index].state = (qcx_save_edict_state_t)state;
 	}
@@ -721,7 +733,7 @@ static bool QCX_SaveEngineSize(const qcx_save_image_t *image, uint32_t *size)
 			return false;
 		}
 	}
-	if (!QCX_SaveAddSize(&total, image->metadata.entity_capacity * 8U)) {
+	if (!QCX_SaveAddSize(&total, image->metadata.entity_capacity * 24U)) {
 		return false;
 	}
 	if (!QCX_SaveAddSize(&total, engine->static_entity_count * 56U)) {
@@ -771,8 +783,14 @@ static bool QCX_SaveWriteEngine(qcx_save_writer_t *writer, const qcx_save_image_
 	}
 	for (uint32_t index = 0U; index < image->metadata.entity_capacity; ++index) {
 		if (!QCX_SaveWriteU32(writer, (uint32_t)engine->edicts[index].state)
-			|| !QCX_SaveWriteF32(writer, engine->edicts[index].freetime)) {
+			|| !QCX_SaveWriteF32(writer, engine->edicts[index].freetime)
+			|| !QCX_SaveWriteF32(writer, engine->edicts[index].alpha)) {
 			return false;
+		}
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			if (!QCX_SaveWriteF32(writer, engine->edicts[index].colourmod[axis])) {
+				return false;
+			}
 		}
 	}
 	if (!QCX_SaveWriteU32(writer, engine->static_entity_count)) {

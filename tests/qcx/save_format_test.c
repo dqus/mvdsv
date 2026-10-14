@@ -14,7 +14,7 @@ enum {
 	roster_section = 3,
 	guest_section = 4,
 	engine_version_v1 = 1,
-	engine_version_current = 3,
+	engine_version_current = 4,
 	roster_version_v1 = 1,
 	fixture_entity_capacity = 4,
 	fixture_client_slot_capacity = 3
@@ -123,6 +123,10 @@ static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
 		if (entity == 2U) offsets->second_player_entity_flags = engine->size;
 		append_u32(engine, entity < 2U ? 1U : 0U);
 		append_f32(engine, 0.0f);
+		append_f32(engine, 0.0f); /* alpha */
+		for (uint32_t axis = 0U; axis < 3U; ++axis) {
+			append_f32(engine, 0.0f); /* colourmod */
+		}
 	}
 	append_u32(engine, 0U); /* Static entities. */
 	append_u32(engine, 2U); /* Signon coordinate width. */
@@ -492,7 +496,7 @@ static void test_rejects_engine_errors_during_initial_parse(void)
 	overwrite_u32(&input, offsets.world_entity_flags, 2U);
 	require_rejected(input.bytes, input.size);
 	input = make_valid_v2("red", &offsets);
-	overwrite_u32(&input, offsets.second_player_entity_flags + 8U, 2U);
+	overwrite_u32(&input, offsets.second_player_entity_flags + 24U, 2U);
 	require_rejected(input.bytes, input.size);
 }
 
@@ -595,9 +599,54 @@ static void test_static_world_codec_and_bounds(void)
 	require_rejected(malformed.bytes, malformed.size);
 }
 
+static void test_engine_render_metadata_codec(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	qcx_save_image_t *restored = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	image->engine.edicts[0].alpha = 0.375f;
+	image->engine.edicts[0].colourmod[0] = 0.25f;
+	image->engine.edicts[0].colourmod[1] = 0.5f;
+	image->engine.edicts[0].colourmod[2] = 2.0f; /* Overbright is supported. */
+	image->engine.edicts[1].alpha = 1.0f;
+	assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+	assert(QCX_SaveParse(encoded, size, &restored) == QCX_PLUGIN_OK);
+	assert(restored->engine.edicts[0].alpha == 0.375f);
+	assert(restored->engine.edicts[0].colourmod[0] == 0.25f);
+	assert(restored->engine.edicts[0].colourmod[1] == 0.5f);
+	assert(restored->engine.edicts[0].colourmod[2] == 2.0f);
+	assert(restored->engine.edicts[1].alpha == 1.0f);
+	assert(restored->engine.edicts[2].alpha == 0.0f);
+	free(encoded);
+	QCX_SaveImageFree(restored);
+	const float invalid_alpha[] = {NAN, INFINITY, -0.01f, 1.01f};
+	for (size_t index = 0U; index < sizeof(invalid_alpha) / sizeof(invalid_alpha[0]); ++index) {
+		image->engine.edicts[0].alpha = invalid_alpha[index];
+		assert(!QCX_SaveImageValid(image));
+	}
+	image->engine.edicts[0].alpha = 0.0f;
+	const float invalid_colour[] = {NAN, INFINITY, -0.01f};
+	for (size_t index = 0U; index < sizeof(invalid_colour) / sizeof(invalid_colour[0]); ++index) {
+		image->engine.edicts[1].colourmod[2] = invalid_colour[index];
+		assert(!QCX_SaveImageValid(image));
+	}
+	QCX_SaveImageFree(image);
+	save_bytes_t malformed = input;
+	overwrite_u32(&malformed, offsets.world_entity_flags + 8U, UINT32_C(0x7fc00000));
+	require_rejected(malformed.bytes, malformed.size);
+	malformed = input;
+	overwrite_u32(&malformed, offsets.player_entity_flags + 12U, UINT32_C(0xbf800000));
+	require_rejected(malformed.bytes, malformed.size);
+}
+
 int main(void)
 {
 	test_static_world_codec_and_bounds();
+	test_engine_render_metadata_codec();
 	test_lightstyles_round_trip_as_text_not_resource_names();
 	test_lightstyle_wire_text_rejects_nul_and_oversize();
 	test_rejects_engine_errors_during_initial_parse();
