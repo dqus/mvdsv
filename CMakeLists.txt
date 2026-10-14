@@ -115,6 +115,7 @@ set(SRC_COMMON
 
 if(MVDSV_QC2CPP_NATIVE OR MVDSV_QC2CPP_WASM)
 	list(APPEND SRC_COMMON
+		"${DIR_SRC}/sv_client_slots.c"
 		"${DIR_SRC}/qcx/transport.c"
 		"${DIR_SRC}/qcx/native.c"
 		"${DIR_SRC}/qcx/wasm.c"
