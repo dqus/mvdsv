@@ -642,6 +642,7 @@ add_test(NAME qcx_restore_roster COMMAND qcx_restore_roster_test)
 
 add_executable(qcx_restore_session_test
 	restore_session_test.c
+	${PROJECT_SOURCE_DIR}/src/sv_client_slots.c
 	${PROJECT_SOURCE_DIR}/src/qcx/restore_session.c
 	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c
 	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
