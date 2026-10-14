@@ -2,6 +2,8 @@
 #include "qcx/services.h"
 
 #include <assert.h>
+#include <math.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,8 +36,18 @@ static int write_entity_calls;
 static int setspawnparms_calls;
 static int infokey_calls;
 static unsigned int slot_lookups;
+static jmp_buf validation_error;
+static qbool expect_error;
+static int written_long;
 
-void SV_Error(char *error, ...) { (void)error; abort(); }
+void SV_Error(char *error, ...)
+{
+	(void)error;
+	if (expect_error) {
+		longjmp(validation_error, 1);
+	}
+	abort();
+}
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
 	++slot_lookups;
@@ -148,7 +160,9 @@ void PF2_WriteShort(int to, int value, edict_t *msg_entity)
 
 void PF2_WriteLong(int to, int value, edict_t *msg_entity)
 {
-	assert(to == 3 && value == 40 && msg_entity == NULL);
+	assert(!expect_error && "invalid numeric import reached PF2");
+	assert(to == 3 && msg_entity == NULL);
+	written_long = value;
 	++write_long_calls;
 }
 
@@ -198,6 +212,54 @@ char *NET_BaseAdrToString(netadr_t address) { (void)address; return "127.0.0.1";
 int SV_CalcPing(client_t *client) { (void)client; return 42; }
 char *VersionStringFull(void) { return "test"; }
 void SV_TimeOfDay(date_t *date, char *format) { (void)format; strlcpy(date->str, "date", sizeof(date->str)); }
+
+static void test_invalid_numeric_import(qcx_host_api_v1_t *host, float value, int operation)
+{
+	const float origin[3] = {1.0f, 2.0f, 3.0f};
+	expect_error = true;
+	if (setjmp(validation_error) == 0) {
+		switch (operation) {
+		case 0: host->write_long(host->context, 3.0f, value, 0U); break;
+		case 1: host->write_byte(host->context, 1.0f, value, 0U); break;
+		case 2: host->write_char(host->context, 0.0f, value, 0U); break;
+		case 3: host->write_short(host->context, 2.0f, value, 0U); break;
+		case 4: host->bprint(host->context, value, (const uint8_t *)"hello", 5U); break;
+		case 5: host->sprint(host->context, 0U, value, (const uint8_t *)"client", 6U); break;
+		case 6: host->sound(host->context, 0U, value,
+			(const uint8_t *)"misc/test.wav", 13U, 0.5f, 1.0f); break;
+		case 7: host->sound(host->context, 0U, 2.0f,
+			(const uint8_t *)"misc/test.wav", 13U, value, 1.0f); break;
+		case 8: host->multicast(host->context, origin, value); break;
+		case 9: host->write_long(host->context, value, 40.0f, 0U); break;
+		default: abort();
+		}
+		assert(!"invalid numeric import accepted");
+	}
+	expect_error = false;
+}
+
+static void test_numeric_import_validation(qcx_host_api_v1_t *host)
+{
+	const float invalid[] = {
+		NAN, INFINITY, -INFINITY, 2147483648.0f, -2147483904.0f,
+	};
+	for (size_t index = 0U; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+		for (int operation = 0; operation < 10; ++operation) {
+			test_invalid_numeric_import(host, invalid[index], operation);
+		}
+	}
+	test_invalid_numeric_import(host, 1.5f, 9);
+	/* Fractional values still truncate toward zero; float(INT_MAX) is outside
+	 * int's range, but the adjacent representable float below it is valid. */
+	const struct { float input; int expected; } valid[] = {
+		{ 40.75f, 40 }, { -40.75f, -40 }, { 0.0f, 0 }, { -0.0f, 0 },
+		{ 2147483520.0f, 2147483520 }, { -2147483648.0f, (-2147483647 - 1) },
+	};
+	for (size_t index = 0U; index < sizeof(valid) / sizeof(valid[0]); ++index) {
+		host->write_long(host->context, 3.0f, valid[index].input, 0U);
+		assert(written_long == valid[index].expected);
+	}
+}
 
 int main(void)
 {
@@ -268,5 +330,6 @@ int main(void)
 	const float origin[3] = {1.0f, 2.0f, 3.0f};
 	host.multicast(host.context, origin, 2.0f);
 	assert(direct_destination == 2 && multicast_calls == 1);
+	test_numeric_import_validation(&host);
 	return 0;
 }

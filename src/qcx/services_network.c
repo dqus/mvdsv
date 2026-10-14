@@ -25,7 +25,7 @@ static int QCX_RequireClientNumber(qcx_entity_id_t slot)
 
 static int QCX_MessageDestination(float destination)
 {
-	const int value = (int)destination;
+	const int value = QCX_RequireInt(destination, "message destination");
 	if ((float)value != destination) {
 		SV_Error("qc2cpp message destination must be integral");
 	}
@@ -45,8 +45,9 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	QCX_CopyText(sample, sample_size, local, sizeof(local), "sound");
-	SV_StartSound(QCX_RequireServiceEdict(entity, "network entity"), (int)channel, local,
-		(int)(volume * 255.0f), attenuation);
+	SV_StartSound(QCX_RequireServiceEdict(entity, "network entity"),
+		QCX_RequireInt(channel, "sound channel"), local,
+		QCX_RequireInt(volume * 255.0f, "sound volume"), attenuation);
 }
 
 static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *text,
@@ -65,7 +66,7 @@ static void QCX_BPrint(void *context, float level, const uint8_t *text,
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_INFO_STRING];
 	QCX_CopyText(text, text_size, local, sizeof(local), "bprint");
-	SV_BroadcastPrintf((int)level, "%s", local);
+	SV_BroadcastPrintf(QCX_RequireInt(level, "bprint level"), "%s", local);
 }
 
 static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
@@ -75,7 +76,7 @@ static void QCX_SPrint(void *context, qcx_entity_id_t entity, float level,
 	char local[MAX_INFO_STRING];
 	QCX_CopyText(text, text_size, local, sizeof(local), "sprint");
 	const int clientnum = QCX_RequireClientNumber(entity);
-	PF2_sprint(clientnum, (int)level, local, 0);
+	PF2_sprint(clientnum, QCX_RequireInt(level, "sprint level"), local, 0);
 }
 
 static void QCX_WriteByte(void *context, float destination, float value,
@@ -83,7 +84,7 @@ static void QCX_WriteByte(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteByte(to, (int)value, QCX_MessageEntity(to, msg_entity));
+	PF2_WriteByte(to, QCX_RequireInt(value, "write byte"), QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteChar(void *context, float destination, float value,
@@ -91,7 +92,7 @@ static void QCX_WriteChar(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteChar(to, (int)value, QCX_MessageEntity(to, msg_entity));
+	PF2_WriteChar(to, QCX_RequireInt(value, "write char"), QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteShort(void *context, float destination, float value,
@@ -99,7 +100,7 @@ static void QCX_WriteShort(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteShort(to, (int)value, QCX_MessageEntity(to, msg_entity));
+	PF2_WriteShort(to, QCX_RequireInt(value, "write short"), QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteLong(void *context, float destination, float value,
@@ -107,7 +108,7 @@ static void QCX_WriteLong(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteLong(to, (int)value, QCX_MessageEntity(to, msg_entity));
+	PF2_WriteLong(to, QCX_RequireInt(value, "write long"), QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteCoord(void *context, float destination, float value,
@@ -208,7 +209,8 @@ static void QCX_Multicast(void *context, const float origin[3], float destinatio
 	if (origin == NULL) {
 		SV_Error("qc2cpp multicast requires an origin");
 	}
-	PF2_multicast(origin[0], origin[1], origin[2], (int)destination);
+	PF2_multicast(origin[0], origin[1], origin[2],
+		QCX_RequireInt(destination, "multicast destination"));
 }
 
 void QCX_BindNetworkServices(qcx_host_api_v1_t *host)
