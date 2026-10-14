@@ -188,6 +188,8 @@ static qbool QCX_SaveCaptureEngine(uint32_t entity_capacity, qcx_save_engine_t *
 		engine->edicts[index].state = index >= sv.num_edicts ? QCX_SAVE_UNUSED_EDICT
 			: sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
 		engine->edicts[index].freetime = sv.edicts[index].e.freetime;
+		engine->edicts[index].alpha = sv.edicts[index].xv.alpha;
+		VectorCopy(sv.edicts[index].xv.colourmod, engine->edicts[index].colourmod);
 	}
 	return QCX_SaveCaptureStaticWorld(engine);
 }
@@ -411,6 +413,8 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
 		sv.edicts[index].e.free = image->engine.edicts[index].state != QCX_SAVE_ACTIVE_EDICT;
 		sv.edicts[index].e.freetime = image->engine.edicts[index].freetime;
+		sv.edicts[index].xv.alpha = image->engine.edicts[index].alpha;
+		VectorCopy(image->engine.edicts[index].colourmod, sv.edicts[index].xv.colourmod);
 	}
 	/* Player edicts are reserved engine slots, not ordinary game objects.  A
 	 * roster-free player slot therefore must not become visible merely because
