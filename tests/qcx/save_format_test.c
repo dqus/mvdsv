@@ -312,6 +312,58 @@ static void test_accepts_an_empty_roster_team(void)
 	QCX_SaveImageFree(image);
 }
 
+static void test_lightstyles_round_trip_as_text_not_resource_names(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	qcx_save_image_t *restored = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t encoded_size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	image->engine.lightstyles[0][0] = '\0';
+	memset(image->engine.lightstyles[1], 'a', 255U);
+	image->engine.lightstyles[1][255] = '\0';
+	/* The builtin accepts NUL-free text, not just printable resource paths. */
+	strcpy(image->engine.lightstyles[2], "a\\b\n\200");
+	assert(QCX_SaveEncode(image, &encoded, &encoded_size) == QCX_PLUGIN_OK);
+	assert(QCX_SaveParse(encoded, encoded_size, &restored) == QCX_PLUGIN_OK);
+	assert(restored->engine.lightstyles[0][0] == '\0');
+	assert(strlen(restored->engine.lightstyles[1]) == 255U);
+	assert(memcmp(restored->engine.lightstyles[1], image->engine.lightstyles[1], 256U) == 0);
+	assert(strcmp(restored->engine.lightstyles[2], "a\\b\n\200") == 0);
+	free(encoded);
+	QCX_SaveImageFree(restored);
+	memset(image->engine.lightstyles[0], 'a', sizeof(image->engine.lightstyles[0]));
+	assert(QCX_SaveEncode(image, &encoded, &encoded_size) == QCX_PLUGIN_BAD_ARGUMENT);
+	assert(encoded == NULL && encoded_size == 0U);
+	QCX_SaveImageFree(image);
+}
+
+static void test_lightstyle_wire_text_rejects_nul_and_oversize(void)
+{
+	v2_offsets_t offsets;
+	save_bytes_t input = make_valid_v2("red", &offsets);
+	/* The engine payload starts with version/time/serverflags/style count. */
+	const uint32_t first_style_length = offsets.second_section_id + 8U + 20U;
+	input.bytes[first_style_length + 4U] = '\0';
+	require_rejected(input.bytes, input.size);
+	input = make_valid_v2("red", &offsets);
+	/* Keep the rest of the wire image valid: replace the original one-byte
+	 * style with 256 nonzero bytes and grow the engine section accordingly. */
+	const uint32_t first_style_bytes = first_style_length + 4U;
+	const uint32_t tail = first_style_bytes + 1U;
+	const uint32_t growth = 255U;
+	assert(input.size + growth <= sizeof(input.bytes));
+	memmove(input.bytes + tail + growth, input.bytes + tail, input.size - tail);
+	memset(input.bytes + first_style_bytes, 'a', 256U);
+	input.size += growth;
+	overwrite_u32(&input, first_style_length, 256U);
+	overwrite_u32(&input, offsets.second_section_id + 4U,
+		offsets.roster_section_id - offsets.second_section_id - 8U + growth);
+	require_rejected(input.bytes, input.size);
+}
+
 static void test_rejects_a_complete_v1_container(void)
 {
 	const save_bytes_t input = make_valid_v1();
@@ -466,6 +518,8 @@ static void test_rejects_truncated_engine_and_other_sections(void)
 
 int main(void)
 {
+	test_lightstyles_round_trip_as_text_not_resource_names();
+	test_lightstyle_wire_text_rejects_nul_and_oversize();
 	test_rejects_engine_errors_during_initial_parse();
 	test_parses_and_reencodes_v2_with_a_roster();
 	test_accepts_an_empty_roster_team();
