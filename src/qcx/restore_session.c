@@ -294,7 +294,7 @@ static void QCX_RestoreSessionContinueCommand(void)
 		Con_Printf("No QCX restore session is waiting.\n");
 		return;
 	}
-	qcx_restore_session.continue_requested = true;
+	QCX_RestoreSessionContinue();
 }
 
 void QCX_RestoreSessionInit(void)
@@ -305,7 +305,9 @@ void QCX_RestoreSessionInit(void)
 
 void QCX_RestoreSessionContinue(void)
 {
-	if (QCX_RestoreSessionWaiting()) qcx_restore_session.continue_requested = true;
+	if (QCX_RestoreSessionWaiting()) {
+		qcx_restore_session.continue_requested = true;
+	}
 }
 
 static void QCX_RestoreSessionReset(qbool notify_clients)

@@ -628,8 +628,7 @@ add_test(NAME qcx_restore COMMAND qcx_restore_test "${CMAKE_CURRENT_BINARY_DIR}/
 
 add_executable(qcx_restore_roster_test
 	restore_roster_test.c
-	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c
-	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
+	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c)
 set_target_properties(qcx_restore_roster_test PROPERTIES
 	C_STANDARD 11
 	C_STANDARD_REQUIRED YES
@@ -644,8 +643,7 @@ add_executable(qcx_restore_session_test
 	restore_session_test.c
 	${PROJECT_SOURCE_DIR}/src/sv_client_slots.c
 	${PROJECT_SOURCE_DIR}/src/qcx/restore_session.c
-	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c
-	${PROJECT_SOURCE_DIR}/src/qcx/save_format.c)
+	${PROJECT_SOURCE_DIR}/src/qcx/restore_roster.c)
 set_target_properties(qcx_restore_session_test PROPERTIES
 	C_STANDARD 11
 	C_STANDARD_REQUIRED YES
