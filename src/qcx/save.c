@@ -165,7 +165,13 @@ static qbool QCX_SaveWriteFile(const char *name, const uint8_t *bytes, uint32_t 
 	qbool flushed;
 	int error = 0;
 	const int path_size = snprintf(path, sizeof(path), "%s/save/%s.sav", fs_gamedir, name);
-	if (path_size < 0 || (size_t)path_size >= sizeof(path) || snprintf(temporary, sizeof(temporary), "%s.tmp", path) < 0 || strlen(temporary) >= sizeof(temporary)) return false;
+	if (path_size < 0 || (size_t)path_size >= sizeof(path)) {
+		return false;
+	}
+	const int temporary_size = snprintf(temporary, sizeof(temporary), "%s.tmp", path);
+	if (temporary_size < 0 || (size_t)temporary_size >= sizeof(temporary)) {
+		return false;
+	}
 	FS_CreatePath(path);
 	file = fopen(temporary, "wb");
 	if (file == NULL) {

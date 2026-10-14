@@ -1,3 +1,8 @@
+/* glibc requires this to declare mkdtemp in strict C11 mode. */
+#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "qcx/save.h"
 
 #include <assert.h>
@@ -5,6 +10,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 enum { test_entity_capacity = 4 };
 
@@ -24,6 +31,9 @@ static uint32_t link_calls;
 static uint32_t client_replication_updates;
 static uint8_t saved_selection;
 static uint8_t expected_validation_selection;
+static uint32_t entity_capacity = test_entity_capacity;
+static uint32_t create_path_calls;
+static uint32_t flush_fs_calls;
 
 qbool QCX_RestoreSessionBlocksSave(void) { return false; }
 qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_now)
@@ -36,20 +46,22 @@ double Sys_DoubleTime(void) { return 100.0; }
 
 qbool QCX_Active(void) { return true; }
 qcx_shared_global_state_v1_t *QCX_Globals(void) { return &restore_shared_globals; }
-uint32_t QCX_EntityCapacity(void) { return test_entity_capacity; }
+uint32_t QCX_EntityCapacity(void) { return entity_capacity; }
 qcx_restore_status_t QCX_SetSaveSelection(const uint8_t *bitmap, qcx_byte_count_t size)
 {
 	assert(bitmap != NULL);
-	assert(size == 1U);
+	assert(size == (entity_capacity + 7U) / 8U);
 	++selection_calls;
 	saved_selection = bitmap[0];
 	return QCX_RESTORE_OK;
 }
 qcx_byte_count_t QCX_SaveGuest(uint8_t *out, qcx_byte_count_t capacity)
 {
-	(void)out;
-	(void)capacity;
-	return 0U;
+	if (out != NULL) {
+		assert(capacity == 2U);
+		memcpy(out, "OK", 2U);
+	}
+	return 2U;
 }
 qcx_restore_status_t QCX_ValidateGuestRestore(const uint8_t *data, qcx_byte_count_t size,
 	const uint8_t *selection, qcx_byte_count_t selection_size)
@@ -69,8 +81,8 @@ qcx_restore_status_t QCX_RestoreGuest(const uint8_t *data, qcx_byte_count_t size
 	++guest_restore_calls;
 	return QCX_RESTORE_OK;
 }
-void FS_CreatePath(char *path) { (void)path; }
-void FS_FlushFSHash(void) {}
+void FS_CreatePath(char *path) { (void)path; ++create_path_calls; }
+void FS_FlushFSHash(void) { ++flush_fs_calls; }
 void *Hunk_Alloc(int size) { return malloc((size_t)size); }
 void SV_ClearWorld(void) {}
 void SV_LinkEdict(edict_t *edict, qbool touch_triggers)
@@ -145,6 +157,9 @@ static void reset_live_engine(void)
 	client_replication_updates = 0U;
 	saved_selection = 0U;
 	expected_validation_selection = 1U;
+	entity_capacity = test_entity_capacity;
+	create_path_calls = 0U;
+	flush_fs_calls = 0U;
 	sv.max_edicts = test_entity_capacity;
 	sv.time = 7.0;
 	sv.map_checksum = UINT32_C(0x12345678);
@@ -336,6 +351,67 @@ static void test_checks_parsed_precaches_against_the_current_world(void)
 	assert(sv.time == 7.0);
 }
 
+static void test_save_path_limits_preserve_existing_file(void)
+{
+	char parent[] = "/tmp/qcx-save-path-XXXXXX";
+	assert(mkdtemp(parent) != NULL);
+	/* Full .tmp fits at MAX_OSPATH-5. The next four lengths fit .sav only;
+	 * MAX_OSPATH also truncates the final path. These five cases must fail
+	 * before file I/O. */
+	for (size_t path_length = MAX_OSPATH - 5U; path_length <= MAX_OSPATH; ++path_length) {
+		char directory[MAX_OSPATH];
+		char save_directory[MAX_OSPATH];
+		char path[MAX_OSPATH + 8U];
+		char temporary[MAX_OSPATH + 8U];
+		const char suffix[] = "/save/edge.sav";
+		const char prior[] = "prior save";
+		const size_t directory_length = path_length - (sizeof(suffix) - 1U);
+		const size_t prefix_length = strlen(parent);
+		reset_live_engine();
+		entity_capacity = MAX_CLIENTS + 1U;
+		sv.max_edicts = (int)entity_capacity;
+		sv.num_edicts = 1;
+		sv.state = ss_active;
+		assert(prefix_length + 1U < directory_length);
+		memcpy(directory, parent, prefix_length);
+		directory[prefix_length] = '/';
+		memset(directory + prefix_length + 1U, 'p', directory_length - prefix_length - 1U);
+		directory[directory_length] = '\0';
+		assert(mkdir(directory, 0700) == 0);
+		assert(snprintf(save_directory, sizeof(save_directory), "%s/save", directory)
+			== (int)directory_length + 5);
+		assert(mkdir(save_directory, 0700) == 0);
+		assert(snprintf(path, sizeof(path), "%s%s", directory, suffix) == (int)path_length);
+		assert(snprintf(temporary, sizeof(temporary), "%s.tmp", path) == (int)path_length + 4);
+		strcpy(fs_gamedir, directory);
+		FILE *file = fopen(path, "wb");
+		assert(file != NULL);
+		assert(fwrite(prior, 1U, sizeof(prior), file) == sizeof(prior));
+		assert(fclose(file) == 0);
+		const qbool saved = QCX_SaveGame("edge");
+		file = fopen(path, "rb");
+		assert(file != NULL);
+		if (path_length == MAX_OSPATH - 5U) {
+			char magic[4];
+			assert(saved && create_path_calls == 1U && flush_fs_calls == 1U);
+			assert(fread(magic, 1U, sizeof(magic), file) == sizeof(magic));
+			assert(memcmp(magic, "QCMS", sizeof(magic)) == 0);
+		} else {
+			char actual[sizeof(prior)];
+			assert(fread(actual, 1U, sizeof(actual), file) == sizeof(actual));
+			assert(memcmp(actual, prior, sizeof(prior)) == 0);
+			assert(fgetc(file) == EOF);
+			assert(!saved && create_path_calls == 0U && flush_fs_calls == 0U);
+		}
+		assert(fclose(file) == 0);
+		assert(access(temporary, F_OK) != 0);
+		assert(remove(path) == 0);
+		assert(rmdir(save_directory) == 0);
+		assert(rmdir(directory) == 0);
+	}
+	assert(rmdir(parent) == 0);
+}
+
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
@@ -349,5 +425,6 @@ int main(int argc, char **argv)
 	test_rejects_a_roster_client_without_an_active_player_entity();
 	test_checks_parsed_precaches_against_the_current_world();
 	test_prepared_resources_survive_image_disposal(argv[1]);
+	test_save_path_limits_preserve_existing_file();
 	return 0;
 }
