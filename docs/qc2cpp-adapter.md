@@ -166,7 +166,7 @@ when logical game, map, entity capacity, and engine-state identity match.
 QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
 rejected: create a new save after upgrading.
 
-`qcx/save_format` owns the engine-section codec. Engine section version 4 stores
+`qcx/save_format` owns the engine-section codec. Engine section version 5 stores
 typed time, lightstyles, indexed precaches, edict records, and static models.
 Edict records include engine-only `alpha` and `colourmod` map metadata; those
 values are restored before baselines and entity relinking, not reparsed from
@@ -179,6 +179,12 @@ An incompatible setting is rejected in preflight, before replacing the current
 map, prepared image, or restore wait; the running map's `msg_coordsize` may still
 reflect the previous setting. Earlier engine sections are unsupported; create
 new saves after upgrading.
+The engine section also saves the numeric `deathmatch`, `coop`, and `teamplay`
+cvars. These saved settings are authoritative on load: they configure the new
+game before initialization and replace the corresponding QC globals after guest
+restore. Thus engine policy and game rules agree even if the operator changed
+cvars after saving, or the QC copies were already stale at save time. Other
+cvars are not restored. Preflight never changes the running world's settings.
 Malformed engine and roster structure is rejected before restarting the map.
 Resource preparation and restore consume that same parsed state; restore still
 checks it against the selected game's capacity, map checksum, and world resources.

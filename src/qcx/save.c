@@ -2,6 +2,7 @@
 
 #include "qcx/adapter.h"
 #include "qcx/entities.h"
+#include "qcx/globals.h"
 #include "qcx/restore_session.h"
 #include "qcx/world_text.h"
 #include <errno.h>
@@ -11,6 +12,33 @@
 #include <string.h>
 
 static qcx_save_image_t *qcx_prepared_image;
+
+static void QCX_SaveSetModeCvar(cvar_t *cvar, float value)
+{
+	/* Q_atof does not support exponents, and Cvar_SetValue rounds to six
+	 * decimal places. Fixed notation with 46 places covers every finite f32,
+	 * including subnormals; trim zeros to keep normal serverinfo values short. */
+	char text[96];
+	snprintf(text, sizeof(text), "%.46f", value);
+	size_t length = strlen(text);
+	while (length > 0U && text[length - 1U] == '0') {
+		text[--length] = '\0';
+	}
+	if (length > 0U && text[length - 1U] == '.') {
+		text[--length] = '\0';
+	}
+	Cvar_Set(cvar, text);
+	if (cvar->value != value) {
+		SV_Error("qc2cpp could not restore game-mode cvar %s", cvar->name);
+	}
+}
+
+static void QCX_SaveApplyMode(const qcx_save_engine_t *engine)
+{
+	QCX_SaveSetModeCvar(&deathmatch, engine->deathmatch);
+	QCX_SaveSetModeCvar(&coop, engine->coop);
+	QCX_SaveSetModeCvar(&teamplay, engine->teamplay);
+}
 
 _Static_assert(QCX_SAVE_LIGHTSTYLE_COUNT == MAX_LIGHTSTYLES,
 	"QCMS lightstyle count must match the engine");
@@ -172,6 +200,9 @@ static qbool QCX_SaveCaptureEngine(uint32_t entity_capacity, qcx_save_engine_t *
 	}
 	engine->time = sv.time;
 	engine->serverflags = svs.serverflags;
+	engine->deathmatch = deathmatch.value;
+	engine->coop = coop.value;
+	engine->teamplay = teamplay.value;
 	for (index = 0; index < MAX_LIGHTSTYLES; ++index) {
 		const char *value = sv.lightstyles[index] == NULL ? "m" : sv.lightstyles[index];
 		if (strlcpy(engine->lightstyles[index], value, sizeof(engine->lightstyles[index]))
@@ -428,6 +459,14 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 		|| QCX_RestoreGuest(image->guest_payload.data, image->guest_payload.size) != QCX_RESTORE_OK) {
 		SV_Error("qc2cpp restore failed after commit");
 	}
+	/* The engine owns mode configuration. Guest save data may contain older
+	 * QC copies (e.g. cvars changed since map startup); do not let it override
+	 * the saved engine mode or leave game rules and engine policy divergent. */
+	QCX_SaveApplyMode(&image->engine);
+	if (!QCX_ConfigureGlobals(image->engine.deathmatch, image->engine.coop,
+		image->engine.teamplay)) {
+		SV_Error("qc2cpp could not configure restored game mode");
+	}
 	for (index = 0U; index < MAX_LIGHTSTYLES; ++index) {
 		sv.lightstyles[index] = QCX_StoreLightstyle(index, image->engine.lightstyles[index]);
 	}
@@ -623,6 +662,9 @@ qbool QCX_PrepareLoadResources(void)
 	if (qcx_prepared_image == NULL) {
 		return false;
 	}
+	/* Called only after successful preflight and old-world teardown, before
+	 * loading/initializing the replacement guest. Never mutate cvars in preflight. */
+	QCX_SaveApplyMode(&qcx_prepared_image->engine);
 	/* PR_LoadProgs may invoke a qc2cpp host call before SV_SpawnServer installs
 	 * its normal slot-zero sentinels. Keep the indexed precache arrays
 	 * traversable while restoring their already-validated saved order. */

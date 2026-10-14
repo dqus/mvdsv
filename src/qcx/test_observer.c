@@ -3,6 +3,7 @@
 #include "qcx/adapter.h"
 #include "qcx/test_observer.h"
 #include "qcx/entities.h"
+#include "qcx/engine_fields.h"
 #include "qcx/globals.h"
 #include "qcx/restore_session.h"
 #include "qcx/strings.h"
@@ -63,6 +64,7 @@ static void QCX_TestOptionalFields_f(void);
 static void QCX_TestLegacyStrings_f(void);
 static void QCX_TestModelPresence_f(void);
 static void QCX_TestWorldPersistence_f(void);
+static void QCX_TestGameMode_f(void);
 static void QCX_TestQwspMonster_f(void);
 static void QCX_TestQwspSave_f(void);
 static void QCX_TestRestoreSession_f(void);
@@ -294,6 +296,7 @@ void QCX_TestObserverRegisterCommands(void)
 	Cmd_AddCommand("qc2cpp_test_legacy_strings", QCX_TestLegacyStrings_f);
 	Cmd_AddCommand("qc2cpp_test_model_presence", QCX_TestModelPresence_f);
 	Cmd_AddCommand("qc2cpp_test_world_persistence", QCX_TestWorldPersistence_f);
+	Cmd_AddCommand("qc2cpp_test_game_mode", QCX_TestGameMode_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_monster", QCX_TestQwspMonster_f);
 	Cmd_AddCommand("qc2cpp_test_qwsp_save", QCX_TestQwspSave_f);
 	Cmd_AddCommand("qc2cpp_test_restore_session", QCX_TestRestoreSession_f);
@@ -598,6 +601,33 @@ static uint32_t QCX_TestHashBytes(uint32_t hash, const void *data, size_t size)
 		hash = (hash ^ bytes[index]) * UINT32_C(16777619);
 	}
 	return hash;
+}
+
+static void QCX_TestGameMode_f(void)
+{
+	const qcx_game_api_v1_t *game = QCX_Game();
+	qcx_engine_field_exports_v1_t fields;
+	qcx_engine_field_table_view_t table;
+	float values[3] = {0};
+	const char *names[] = {"deathmatch", "coop", "teamplay"};
+	qbool ready = game != NULL && QCX_ReadEngineFieldExports(game, &fields)
+		&& QCX_OpenEngineFieldTable(game, &fields.global_fields, &table);
+	for (size_t index = 0U; ready && index < 3U; ++index) {
+		/* Test-only inspection of the actual guest configuration words, not
+		 * another copy of the server cvars. Production only writes these fields. */
+		const qcx_engine_field_spec_t spec = {names[index], "qc.f32",
+			sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE};
+		qcx_engine_field_binding_t binding;
+		ready = QCX_ResolveEngineField(&table, &spec, fields.globals_base,
+			fields.globals_size, &binding) == QCX_ENGINE_FIELD_FOUND;
+		if (ready) {
+			values[index] = *(const float *)binding.address;
+		}
+	}
+	Con_Printf("{\"qc2cpp_test_game_mode\":{\"ready\":%s,"
+		"\"engine\":[%.9g,%.9g,%.9g],\"game\":[%.9g,%.9g,%.9g]}}\n",
+		ready ? "true" : "false", deathmatch.value, coop.value, teamplay.value,
+		values[0], values[1], values[2]);
 }
 
 static void QCX_TestWorldPersistence_f(void)
