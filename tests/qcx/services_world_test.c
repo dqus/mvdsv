@@ -352,5 +352,18 @@ int main(void)
 	current_skill = 1;
 	assert(host.map_admit(host.context, 0U, (float)SPAWNFLAG_NOT_MEDIUM)
 		== QCX_MAP_REJECT);
+	assert(host.map_admit(host.context, 0U, (float)SPAWNFLAG_NOT_MEDIUM + 0.5f)
+		== QCX_MAP_REJECT);
+	const float invalid_flags[] = {
+		NAN, INFINITY, -INFINITY, 2147483648.0f, -2147483904.0f,
+	};
+	expect_error = true;
+	for (size_t index = 0U; index < sizeof(invalid_flags) / sizeof(invalid_flags[0]); ++index) {
+		if (setjmp(validation_error) == 0) {
+			host.map_admit(host.context, 0U, invalid_flags[index]);
+			assert(!"invalid map spawnflags accepted");
+		}
+	}
+	expect_error = false;
 	return 0;
 }
