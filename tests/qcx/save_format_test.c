@@ -14,7 +14,7 @@ enum {
 	roster_section = 3,
 	guest_section = 4,
 	engine_version_v1 = 1,
-	engine_version_current = 4,
+	engine_version_current = 5,
 	roster_version_v1 = 1,
 	fixture_entity_capacity = 4,
 	fixture_client_slot_capacity = 3
@@ -131,6 +131,9 @@ static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
 	append_u32(engine, 0U); /* Static entities. */
 	append_u32(engine, 2U); /* Signon coordinate width. */
 	append_u32(engine, 0U); /* Signon buffers. */
+	append_f32(engine, 0.0f); /* deathmatch */
+	append_f32(engine, 1.0f); /* coop */
+	append_f32(engine, 2.0f); /* teamplay */
 }
 
 static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
@@ -566,7 +569,7 @@ static void test_static_world_codec_and_bounds(void)
 	/* The new tail adds one 56-byte static record before the first chunk
 	 * length. Corrupt that length with plenty of bytes still available, so
 	 * rejection tests the protocol limit rather than simple truncation. */
-	const uint32_t chunk_length_offset = offsets.roster_section_id + 56U;
+	const uint32_t chunk_length_offset = offsets.roster_section_id - 12U + 56U;
 	encoded[chunk_length_offset] = 7U; /* 1287, little-endian. */
 	require_rejected(encoded, size);
 	free(encoded);
@@ -590,11 +593,11 @@ static void test_static_world_codec_and_bounds(void)
 	QCX_SaveImageFree(image);
 	/* Malformed wire counts must be rejected before indexing fixed arrays. */
 	save_bytes_t malformed = input;
-	overwrite_u32(&malformed, offsets.roster_section_id - 12U,
+	overwrite_u32(&malformed, offsets.roster_section_id - 24U,
 		QCX_SAVE_MAX_STATIC_ENTITIES + 1U);
 	require_rejected(malformed.bytes, malformed.size);
 	malformed = input;
-	overwrite_u32(&malformed, offsets.roster_section_id - 4U,
+	overwrite_u32(&malformed, offsets.roster_section_id - 16U,
 		QCX_SAVE_MAX_SIGNON_BUFFERS + 1U);
 	require_rejected(malformed.bytes, malformed.size);
 }
@@ -643,8 +646,54 @@ static void test_engine_render_metadata_codec(void)
 	require_rejected(malformed.bytes, malformed.size);
 }
 
+static void test_game_mode_codec_and_validation(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	qcx_save_image_t *restored = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	assert(image->engine.deathmatch == 0.0f);
+	assert(image->engine.coop == 1.0f);
+	assert(image->engine.teamplay == 2.0f);
+	image->engine.deathmatch = 4.0f;
+	image->engine.coop = 0.0f;
+	image->engine.teamplay = 0.5f;
+	assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+	assert(QCX_SaveParse(encoded, size, &restored) == QCX_PLUGIN_OK);
+	assert(restored->engine.deathmatch == 4.0f);
+	assert(restored->engine.coop == 0.0f);
+	assert(restored->engine.teamplay == 0.5f);
+	free(encoded);
+	QCX_SaveImageFree(restored);
+	float *const fields[] = {&image->engine.deathmatch, &image->engine.coop,
+		&image->engine.teamplay};
+	for (uint32_t index = 0U; index < 3U; ++index) {
+		const float saved = *fields[index];
+		const float invalid[] = {NAN, INFINITY, -INFINITY};
+		for (uint32_t value = 0U; value < 3U; ++value) {
+			*fields[index] = invalid[value];
+			assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_BAD_ARGUMENT);
+			assert(encoded == NULL && size == 0U);
+			save_bytes_t malformed = input;
+			memcpy(malformed.bytes + offsets.roster_section_id - 12U + index * 4U,
+				&invalid[value], sizeof(float));
+			require_rejected(malformed.bytes, malformed.size);
+		}
+		*fields[index] = saved;
+	}
+	QCX_SaveImageFree(image);
+	/* No compatibility parser for old engine sections. */
+	save_bytes_t old = input;
+	overwrite_u32(&old, offsets.second_section_id + 8U, 4U);
+	require_rejected(old.bytes, old.size);
+}
+
 int main(void)
 {
+	test_game_mode_codec_and_validation();
 	test_static_world_codec_and_bounds();
 	test_engine_render_metadata_codec();
 	test_lightstyles_round_trip_as_text_not_resource_names();

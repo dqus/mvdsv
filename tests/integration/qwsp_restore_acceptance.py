@@ -84,6 +84,61 @@ def capture_engine_world(process, *, seed=False):
                            timeout=8)
 
 
+def assert_game_mode(process, expected_engine, expected_game=None):
+    state = process.observe("qc2cpp_test_game_mode", "qc2cpp_test_game_mode", timeout=12)
+    if expected_game is None:
+        expected_game = expected_engine
+    if (not state.get("ready") or state.get("engine") != expected_engine
+            or state.get("game") != expected_game):
+        raise ProcessFailure(f"inconsistent QWSP game mode: {state}; "
+                             f"expected engine={expected_engine}, game={expected_game}")
+
+
+def run_game_mode_suite(server, artifacts, assets, output, mode):
+    """Actual guest words and engine cvars must agree, not just two host copies."""
+    run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qwr-mode-{mode[0]}-", dir="/tmp"))
+    basedir = prepare_game_directory(run_root, assets, artifacts, mode)
+    command = server_command(server, basedir, mode, available_udp_port(), start_map=False)
+    command += ["+coop", "1", "+teamplay", "2", "+map", "e1m2"]
+    process = RunningProcess(command, run_root / "server.log")
+    try:
+        assert_map_snapshot(
+            process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
+        for name, saved_mode, replacement in (
+                ("coopmode", [0, 1, 2], [4, 0, 0]),
+                ("dmmode", [4, 0, 0.5], [0, 1, 2]),
+                # The QC copies are intentionally stale before saving: the
+                # current engine cvars, not startup QC values, own the mode.
+                ("changedmode", [0, 1, 1], [4, 0, 0])):
+            if name == "dmmode":
+                process.send("coop 0\ndeathmatch 4\nteamplay 0.5\nmap e1m2")
+                assert_map_snapshot(process.observe(
+                    "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
+            elif name == "changedmode":
+                process.send("coop 1\ndeathmatch 0\nteamplay 1")
+                assert_game_mode(process, saved_mode, [4, 0, 0.5])
+            if name != "changedmode":
+                assert_game_mode(process, saved_mode)
+            process.send(f"save {name}")
+            process.send(f"deathmatch {replacement[0]}\ncoop {replacement[1]}\n"
+                         f"teamplay {replacement[2]}")
+            assert_game_mode(process, replacement,
+                             [4, 0, 0.5] if name == "changedmode" else saved_mode)
+            process.send(f"load {name}")
+            assert_map_snapshot(process.observe(
+                "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
+            assert_game_mode(process, saved_mode)
+            # Re-serialization must persist the same mode for another load.
+            process.send(f"save {name}-again\nload {name}-again")
+            assert_map_snapshot(process.observe(
+                "qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
+            assert_game_mode(process, saved_mode)
+    except ProcessFailure as error:
+        raise ProcessFailure(f"{error}; mode server log preserved in {run_root}") from error
+    finally:
+        process.close()
+
+
 def assert_engine_world(process, expected, *, context):
     world = capture_engine_world(process)
     if world != expected["engine_world"]:
@@ -241,14 +296,15 @@ def run_cross_suite(server, source_artifacts, destination_artifacts, assets, out
     source_basedir = prepare_game_directory(source_root, assets, source_artifacts, source_mode)
     source_client_basedir = prepare_client_directory(source_root, assets)
     source_port = available_udp_port()
-    source = RunningProcess(
-        server_command(server, source_basedir, source_mode, source_port, start_map=False,
-                       startup_command=("map", "e1m2")),
-        source_root / "server.log")
+    source_command = server_command(server, source_basedir, source_mode, source_port,
+                                    start_map=False)
+    source_command += ["+coop", "1", "+teamplay", "2", "+map", "e1m2"]
+    source = RunningProcess(source_command, source_root / "server.log")
     source_client = None
     try:
         assert_map_snapshot(
             source.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m2")
+        assert_game_mode(source, [0, 1, 2])
         source_log = source_root / "alice.log"
         source_client = start_alice(client, source_client_basedir, source_port, source_log)
         wait_for_client_events(source, source_client, source_log,
@@ -280,6 +336,7 @@ def run_cross_suite(server, source_artifacts, destination_artifacts, assets, out
     try:
         assert_qwsp_restore_map(
             destination.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12))
+        assert_game_mode(destination, [0, 1, 2])
         before_join = destination.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
         destination_log = destination_root / "alice.log"
         destination_client = start_alice(
@@ -313,6 +370,7 @@ def run_cross_suite(server, source_artifacts, destination_artifacts, assets, out
 def run_suite(server, source_artifacts, destination_artifacts, assets, output,
               source_mode, destination_mode, client):
     if source_mode == destination_mode:
+        run_game_mode_suite(server, source_artifacts, assets, output, source_mode)
         run_direct_suite(server, source_artifacts, assets, output, source_mode, client)
     else:
         run_cross_suite(server, source_artifacts, destination_artifacts, assets, output,
