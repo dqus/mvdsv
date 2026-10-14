@@ -78,8 +78,9 @@ def assert_qwsp_restore_map(snapshot):
         raise ProcessFailure(f"QWSP restore did not load e1m2: {snapshot}")
 
 
-def capture_engine_world(process):
-    return process.observe("qc2cpp_test_world_persistence", "qc2cpp_test_world_persistence",
+def capture_engine_world(process, *, seed=False):
+    command = "qc2cpp_test_world_persistence" + (" seed" if seed else "")
+    return process.observe(command, "qc2cpp_test_world_persistence",
                            timeout=8)
 
 
@@ -95,9 +96,11 @@ def save_qwsp_state(process, basedir, name):
     # but captures immediately after serializing in its one command-buffer pass.
     # A separate capture and save can cross an e1m2 monster think boundary,
     # making nextthink one scheduler tick older than the QCMS image.
-    world = capture_engine_world(process)
+    world = capture_engine_world(process, seed=True)
     if world.get("static_count", 0) <= 0 or world.get("signon_size", 0) <= 0:
         raise ProcessFailure(f"e1m2 has no static world/sign-on to test: {world}")
+    if world.get("render_state") != [0.375, 0.25, 0.5, 2]:
+        raise ProcessFailure(f"e1m2 engine render-state probe was not seeded: {world}")
     saved = process.observe(
         f"qc2cpp_test_qwsp_save {name}",
         "qc2cpp_test_qwsp_monster", timeout=8)

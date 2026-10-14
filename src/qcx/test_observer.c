@@ -602,6 +602,11 @@ static uint32_t QCX_TestHashBytes(uint32_t hash, const void *data, size_t size)
 
 static void QCX_TestWorldPersistence_f(void)
 {
+	if (Cmd_Argc() == 2 && strcmp(Cmd_Argv(1), "seed") == 0) {
+		/* Non-default engine-only values distinguish restore from map defaults. */
+		sv.edicts[0].xv.alpha = 0.375f;
+		VectorSet(sv.edicts[0].xv.colourmod, 0.25f, 0.5f, 2.0f);
+	}
 	uint32_t signon_hash = UINT32_C(2166136261);
 	uint32_t signon_size = 0U;
 	for (unsigned int index = 0U; index < sv.num_signon_buffers; ++index) {
@@ -613,8 +618,11 @@ static void QCX_TestWorldPersistence_f(void)
 	const uint32_t static_hash = QCX_TestHashBytes(UINT32_C(2166136261),
 		sv.static_entities, (size_t)sv.static_entity_count * sizeof(sv.static_entities[0]));
 	Con_Printf("{\"qc2cpp_test_world_persistence\":{\"static_count\":%d,"
-		"\"static_hash\":%u,\"signon_size\":%u,\"signon_hash\":%u}}\n",
-		sv.static_entity_count, static_hash, signon_size, signon_hash);
+		"\"static_hash\":%u,\"signon_size\":%u,\"signon_hash\":%u,"
+		"\"render_state\":[%.9g,%.9g,%.9g,%.9g]}}\n",
+		sv.static_entity_count, static_hash, signon_size, signon_hash,
+		sv.edicts[0].xv.alpha, sv.edicts[0].xv.colourmod[0],
+		sv.edicts[0].xv.colourmod[1], sv.edicts[0].xv.colourmod[2]);
 }
 
 static void QCX_TestModelPresence_f(void)
