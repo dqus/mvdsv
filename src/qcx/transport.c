@@ -49,7 +49,6 @@ qcx_plugin_status_t QCX_TransportOpen(qcx_transport_kind_t transport_kind, const
                                     qcx_transport_t **out,
                                     qcx_program_diagnostic_v1_t *diagnostic)
 {
-	(void)host;
 	if (out != NULL) {
 		*out = NULL;
 	}

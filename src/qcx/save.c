@@ -656,7 +656,7 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 	return true;
 }
 
-qbool QCX_PrepareLoadResources(void)
+qbool QCX_PrepareLoadStartup(void)
 {
 	uint32_t index;
 	if (qcx_prepared_image == NULL) {

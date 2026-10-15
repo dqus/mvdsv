@@ -502,11 +502,11 @@ void PR2_GameSetChangeParms(void)
 	}
 }
 
-void PR2_PrepareRestoreResources(qbool restoring_qcx)
+void PR2_PrepareRestoreStartup(qbool restoring_qcx)
 {
 #ifdef QCX_ENABLED
-	if (restoring_qcx && !QCX_PrepareLoadResources()) {
-		SV_Error("qc2cpp restore could not prepare saved resource ordering");
+	if (restoring_qcx && !QCX_PrepareLoadStartup()) {
+		SV_Error("qc2cpp restore could not prepare saved startup state");
 	}
 #else
 	if (restoring_qcx) {
