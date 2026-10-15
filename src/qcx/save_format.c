@@ -28,8 +28,12 @@ typedef struct qcx_save_writer_s {
 
 static bool QCX_SaveRead(qcx_save_reader_t *reader, void *out, uint32_t size)
 {
-	if ((size_t)(reader->end - reader->cursor) < size) return false;
-	if (size != 0U) memcpy(out, reader->cursor, size);
+	if ((size_t)(reader->end - reader->cursor) < size) {
+		return false;
+	}
+	if (size != 0U) {
+		memcpy(out, reader->cursor, size);
+	}
 	reader->cursor += size;
 	return true;
 }
@@ -37,7 +41,9 @@ static bool QCX_SaveRead(qcx_save_reader_t *reader, void *out, uint32_t size)
 static bool QCX_SaveReadU32(qcx_save_reader_t *reader, uint32_t *out)
 {
 	uint8_t bytes[4];
-	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) return false;
+	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) {
+		return false;
+	}
 	*out = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
 		| ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 	return true;
@@ -47,7 +53,9 @@ static bool QCX_SaveReadU64(qcx_save_reader_t *reader, uint64_t *out)
 {
 	uint8_t bytes[8];
 	uint32_t index;
-	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) return false;
+	if (!QCX_SaveRead(reader, bytes, sizeof(bytes))) {
+		return false;
+	}
 	*out = 0U;
 	for (index = 0U; index < sizeof(bytes); ++index) {
 		*out |= (uint64_t)bytes[index] << (8U * index);
@@ -58,7 +66,9 @@ static bool QCX_SaveReadU64(qcx_save_reader_t *reader, uint64_t *out)
 static bool QCX_SaveReadF32(qcx_save_reader_t *reader, float *out)
 {
 	uint32_t bits;
-	if (!QCX_SaveReadU32(reader, &bits)) return false;
+	if (!QCX_SaveReadU32(reader, &bits)) {
+		return false;
+	}
 	memcpy(out, &bits, sizeof(bits));
 	return true;
 }
@@ -66,15 +76,21 @@ static bool QCX_SaveReadF32(qcx_save_reader_t *reader, float *out)
 static bool QCX_SaveReadF64(qcx_save_reader_t *reader, double *out)
 {
 	uint64_t bits;
-	if (!QCX_SaveReadU64(reader, &bits)) return false;
+	if (!QCX_SaveReadU64(reader, &bits)) {
+		return false;
+	}
 	memcpy(out, &bits, sizeof(bits));
 	return true;
 }
 
 static bool QCX_SaveWrite(qcx_save_writer_t *writer, const void *bytes, uint32_t size)
 {
-	if ((size_t)(writer->end - writer->cursor) < size) return false;
-	if (size != 0U) memcpy(writer->cursor, bytes, size);
+	if ((size_t)(writer->end - writer->cursor) < size) {
+		return false;
+	}
+	if (size != 0U) {
+		memcpy(writer->cursor, bytes, size);
+	}
 	writer->cursor += size;
 	return true;
 }
@@ -113,7 +129,9 @@ static bool QCX_SaveWriteString(qcx_save_writer_t *writer, const char *value,
 
 static bool QCX_SaveAddSize(uint32_t *total, uint32_t add)
 {
-	if (*total > UINT32_MAX - add) return false;
+	if (*total > UINT32_MAX - add) {
+		return false;
+	}
 	*total += add;
 	return true;
 }
@@ -121,9 +139,13 @@ static bool QCX_SaveAddSize(uint32_t *total, uint32_t add)
 static uint32_t QCX_SaveStringLength(const char *value, uint32_t capacity)
 {
 	uint32_t length;
-	if (value == NULL) return capacity;
+	if (value == NULL) {
+		return capacity;
+	}
 	for (length = 0U; length < capacity; ++length) {
-		if (value[length] == '\0') return length;
+		if (value[length] == '\0') {
+			return length;
+		}
 	}
 	return capacity;
 }
@@ -162,9 +184,13 @@ static bool QCX_SaveReadString(qcx_save_reader_t *reader, char *out,
 		return false;
 	}
 	for (index = 0U; index < length; ++index) {
-		if (!valid_byte(reader->cursor[index])) return false;
+		if (!valid_byte(reader->cursor[index])) {
+			return false;
+		}
 	}
-	if (length != 0U) memcpy(out, reader->cursor, length);
+	if (length != 0U) {
+		memcpy(out, reader->cursor, length);
+	}
 	out[length] = '\0';
 	reader->cursor += length;
 	return true;
@@ -188,10 +214,14 @@ static bool QCX_SaveValidMetadata(const qcx_save_metadata_t *metadata,
 		return false;
 	}
 	for (uint32_t index = 0U; index < *game_size; ++index) {
-		if (!QCX_SaveValidNameByte((uint8_t)metadata->logical_game[index])) return false;
+		if (!QCX_SaveValidNameByte((uint8_t)metadata->logical_game[index])) {
+			return false;
+		}
 	}
 	for (uint32_t index = 0U; index < *map_size; ++index) {
-		if (!QCX_SaveValidNameByte((uint8_t)metadata->map_name[index])) return false;
+		if (!QCX_SaveValidNameByte((uint8_t)metadata->map_name[index])) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -468,14 +498,24 @@ static bool QCX_SaveParseEngine(const uint8_t *bytes, uint32_t size,
 
 bool QCX_SaveClientNameEqual(const char *left, const char *right)
 {
-	if (left == NULL || right == NULL) return false;
+	if (left == NULL || right == NULL) {
+		return false;
+	}
 	for (;;) {
 		uint8_t left_byte = (uint8_t)*left++ & 0x7fU;
 		uint8_t right_byte = (uint8_t)*right++ & 0x7fU;
-		if (left_byte >= 'A' && left_byte <= 'Z') left_byte += 'a' - 'A';
-		if (right_byte >= 'A' && right_byte <= 'Z') right_byte += 'a' - 'A';
-		if (left_byte != right_byte) return false;
-		if (left_byte == 0U) return true;
+		if (left_byte >= 'A' && left_byte <= 'Z') {
+			left_byte += 'a' - 'A';
+		}
+		if (right_byte >= 'A' && right_byte <= 'Z') {
+			right_byte += 'a' - 'A';
+		}
+		if (left_byte != right_byte) {
+			return false;
+		}
+		if (left_byte == 0U) {
+			return true;
+		}
 	}
 }
 
@@ -493,13 +533,19 @@ static bool QCX_SaveValidRosterEntry(const qcx_save_roster_entry_t *entry)
 		return false;
 	}
 	for (index = 0U; index < name_size; ++index) {
-		if (!QCX_SaveValidRosterByte((uint8_t)entry->name[index])) return false;
+		if (!QCX_SaveValidRosterByte((uint8_t)entry->name[index])) {
+			return false;
+		}
 	}
 	for (index = 0U; index < team_size; ++index) {
-		if (!QCX_SaveValidRosterByte((uint8_t)entry->team[index])) return false;
+		if (!QCX_SaveValidRosterByte((uint8_t)entry->team[index])) {
+			return false;
+		}
 	}
 	for (index = 0U; index < QCX_SAVE_SPAWN_PARM_COUNT; ++index) {
-		if (!isfinite(entry->spawn_parms[index])) return false;
+		if (!isfinite(entry->spawn_parms[index])) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -526,7 +572,9 @@ static bool QCX_SaveValidateRoster(const qcx_save_metadata_t *metadata,
 		}
 		slots[entry->saved_slot] = 1U;
 		for (prior = 0U; prior < index; ++prior) {
-			if (QCX_SaveClientNameEqual(entry->name, roster[prior].name)) return false;
+			if (QCX_SaveClientNameEqual(entry->name, roster[prior].name)) {
+				return false;
+			}
 		}
 	}
 	return true;
@@ -577,9 +625,13 @@ static bool QCX_SaveCopy(qcx_save_bytes_t *out, const uint8_t *bytes, uint32_t s
 {
 	out->data = NULL;
 	out->size = 0U;
-	if (size == 0U) return true;
+	if (size == 0U) {
+		return true;
+	}
 	out->data = malloc(size);
-	if (out->data == NULL) return false;
+	if (out->data == NULL) {
+		return false;
+	}
 	memcpy(out->data, bytes, size);
 	out->size = size;
 	return true;
@@ -587,7 +639,9 @@ static bool QCX_SaveCopy(qcx_save_bytes_t *out, const uint8_t *bytes, uint32_t s
 
 void QCX_SaveImageFree(qcx_save_image_t *image)
 {
-	if (image == NULL) return;
+	if (image == NULL) {
+		return;
+	}
 	free(image->engine.precaches);
 	free(image->guest_payload.data);
 	free(image);
@@ -600,7 +654,9 @@ qcx_plugin_status_t QCX_SaveParse(const uint8_t *bytes, uint32_t size,
 	qcx_save_image_t *image;
 	uint32_t version;
 	uint32_t section;
-	if (out == NULL) return QCX_PLUGIN_BAD_ARGUMENT;
+	if (out == NULL) {
+		return QCX_PLUGIN_BAD_ARGUMENT;
+	}
 	*out = NULL;
 	if (bytes == NULL || size < 8U || size > QCX_SAVE_MAX_FILE_BYTES
 		|| memcmp(bytes, "QCMS", 4) != 0) {
@@ -611,7 +667,9 @@ qcx_plugin_status_t QCX_SaveParse(const uint8_t *bytes, uint32_t size,
 		return QCX_PLUGIN_BAD_ARGUMENT;
 	}
 	image = calloc(1U, sizeof(*image));
-	if (image == NULL) return QCX_PLUGIN_IO_ERROR;
+	if (image == NULL) {
+		return QCX_PLUGIN_IO_ERROR;
+	}
 	for (section = QCX_SAVE_METADATA_SECTION; section <= QCX_SAVE_GUEST_SECTION;
 		++section) {
 		uint32_t id;
@@ -644,7 +702,9 @@ qcx_plugin_status_t QCX_SaveParse(const uint8_t *bytes, uint32_t size,
 			}
 		}
 	}
-	if (reader.cursor != reader.end) goto bad_argument;
+	if (reader.cursor != reader.end) {
+		goto bad_argument;
+	}
 	*out = image;
 	return QCX_PLUGIN_OK;
 
@@ -706,7 +766,9 @@ static bool QCX_SaveWriteRoster(qcx_save_writer_t *writer,
 			return false;
 		}
 		for (parm = 0U; parm < QCX_SAVE_SPAWN_PARM_COUNT; ++parm) {
-			if (!QCX_SaveWriteF32(writer, entry->spawn_parms[parm])) return false;
+			if (!QCX_SaveWriteF32(writer, entry->spawn_parms[parm])) {
+				return false;
+			}
 		}
 	}
 	return true;
@@ -833,7 +895,9 @@ qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,
 	uint32_t engine_size;
 	uint32_t total_size = 8U;
 	uint8_t *bytes;
-	if (out == NULL || size == NULL) return QCX_PLUGIN_BAD_ARGUMENT;
+	if (out == NULL || size == NULL) {
+		return QCX_PLUGIN_BAD_ARGUMENT;
+	}
 	*out = NULL;
 	*size = 0U;
 	if (!QCX_SaveImageValid(image) || !QCX_SaveValidMetadata(&image->metadata,
@@ -852,7 +916,9 @@ qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,
 		return QCX_PLUGIN_BAD_ARGUMENT;
 	}
 	bytes = malloc(total_size);
-	if (bytes == NULL) return QCX_PLUGIN_IO_ERROR;
+	if (bytes == NULL) {
+		return QCX_PLUGIN_IO_ERROR;
+	}
 	writer = (qcx_save_writer_t){bytes, bytes + total_size};
 	if (!QCX_SaveWrite(&writer, "QCMS", 4U) || !QCX_SaveWriteU32(&writer,
 		QCX_SAVE_VERSION) || !QCX_SaveWriteU32(&writer, QCX_SAVE_METADATA_SECTION)
