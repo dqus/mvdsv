@@ -842,6 +842,10 @@ int SV_BoundRate (qbool dl, int rate);
 /* Starts the ordinary QW signon for a client which QCX has kept connected
  * while it chose a saved restore identity. */
 void SV_QCXStartClientSignon (client_t *client);
+/* Existing same-netchannel client: request changing/reconnect and a fresh `new`. */
+void SV_RestartClientSignon (client_t *client);
+/* Waiting pre-serverdata client: discard obsolete reliable replies and start `new`. */
+void SV_ResumeClientSignon (client_t *client);
 qbool SV_AdmitRestoreFallback (client_t *client);
 
 typedef struct
