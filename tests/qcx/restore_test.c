@@ -531,7 +531,7 @@ static void test_prepared_resources_survive_image_disposal(const char *directory
 	assert(QCX_HasPreparedLoadGame());
 	assert(sv.model_precache[7] == NULL && sv.sound_precache[19] == NULL);
 	assert(sv.time == 7.0 && guest_restore_calls == 0U);
-	assert(QCX_PrepareLoadResources());
+	assert(QCX_PrepareLoadStartup());
 	assert(strcmp(sv.model_precache[0], "") == 0);
 	assert(strcmp(sv.sound_precache[0], "") == 0);
 	/* Pending load ownership must not silently relax other preparations. */
@@ -709,7 +709,7 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	assert(QCX_PrepareLoadGame("world", map_name, sizeof(map_name)));
 	/* Preflight must not change the current world's mode. */
 	assert(deathmatch.value == 4.0f && coop.value == 0.0f && teamplay.value == 0.0f);
-	assert(QCX_PrepareLoadResources());
+	assert(QCX_PrepareLoadStartup());
 	/* Initialization of the replacement game must see the saved mode. */
 	assert(deathmatch.value == 0.0f && coop.value == 1.0f && teamplay.value == 2.0f);
 	assert(QCX_CommitPreparedLoadGame());

@@ -410,7 +410,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 
 	// load progs to establish the selected game capacity before host headers
 	// and selected game views are bound below
-	PR_PrepareRestoreResources(restoring_qc2cpp);
+	PR_PrepareRestoreStartup(restoring_qc2cpp);
 	PR_LoadProgs ();
 #ifdef WITH_NQPROGS
 	PR_InitPatchTables();
