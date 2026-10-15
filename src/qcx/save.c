@@ -257,8 +257,12 @@ static qbool QCX_SaveBuildRoster(qcx_save_image_t *image)
 		qcx_save_roster_entry_t *entry;
 		uint32_t name_size;
 		uint32_t team_size;
-		if (client->state != cs_connected && client->state != cs_spawned) continue;
-		if (image->roster_count == QCX_SAVE_MAX_CLIENTS) return false;
+		if (client->state != cs_connected && client->state != cs_spawned) {
+			continue;
+		}
+		if (image->roster_count == QCX_SAVE_MAX_CLIENTS) {
+			return false;
+		}
 		name_size = QCX_SaveBoundedStringLength(client->name,
 			QCX_SAVE_CLIENT_STRING_CAPACITY - 1U);
 		team_size = QCX_SaveBoundedStringLength(client->team,
@@ -283,17 +287,26 @@ static void QCX_SaveSelection(uint8_t *bitmap, uint32_t size)
 {
 	int slot;
 	memset(bitmap, 0, size);
-	for (slot = 0; slot < sv.num_edicts; ++slot) if (!sv.edicts[slot].e.free) bitmap[(uint32_t)slot / 8U] |= (uint8_t)(1U << ((uint32_t)slot % 8U));
+	for (slot = 0; slot < sv.num_edicts; ++slot) {
+		if (!sv.edicts[slot].e.free) {
+			bitmap[(uint32_t)slot / 8U] |= (uint8_t)(1U << ((uint32_t)slot % 8U));
+		}
+	}
 }
 
 static qbool QCX_SaveNameIsSafe(const char *name)
 {
 	uint32_t index;
 	const uint32_t size = QCX_SaveBoundedStringLength(name, QCX_SAVE_NAME_CAPACITY - 1U);
-	if (size == 0U || size >= QCX_SAVE_NAME_CAPACITY) return false;
+	if (size == 0U || size >= QCX_SAVE_NAME_CAPACITY) {
+		return false;
+	}
 	for (index = 0U; index < size; ++index) {
 		const unsigned char byte = (unsigned char)name[index];
-		if (!((byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') || (byte >= '0' && byte <= '9') || byte == '_' || byte == '-')) return false;
+		if (!((byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z')
+			|| (byte >= '0' && byte <= '9') || byte == '_' || byte == '-')) {
+			return false;
+		}
 	}
 	return true;
 }
@@ -319,10 +332,16 @@ static qbool QCX_SaveWriteFile(const char *name, const uint8_t *bytes, uint32_t 
 		return false;
 	}
 	written = fwrite(bytes, 1U, size, file) == size;
-	if (!written) error = errno;
+	if (!written) {
+		error = errno;
+	}
 	flushed = written && fflush(file) == 0;
-	if (!flushed && error == 0) error = errno;
-	if (fclose(file) != 0 && error == 0) error = errno;
+	if (!flushed && error == 0) {
+		error = errno;
+	}
+	if (fclose(file) != 0 && error == 0) {
+		error = errno;
+	}
 	if (!written || !flushed || error != 0) {
 		Con_Printf("qc2cpp save write failed for %s: %s.\n", temporary, strerror(error));
 		remove(temporary);
@@ -435,11 +454,15 @@ void QCX_RefreshClientReplication(void)
 	for (source_index = 0U; source_index < MAX_CLIENTS; ++source_index) {
 		client_t *const source = &svs.clients[source_index];
 		uint32_t recipient_index;
-		if (source->state != cs_connected && source->state != cs_spawned) continue;
+		if (source->state != cs_connected && source->state != cs_spawned) {
+			continue;
+		}
 		source->delta_sequence = -1;
 		for (recipient_index = 0U; recipient_index < MAX_CLIENTS; ++recipient_index) {
 			client_t *const recipient = &svs.clients[recipient_index];
-			if (recipient->state < cs_preconnected) continue;
+			if (recipient->state < cs_preconnected) {
+				continue;
+			}
 			SV_FullClientUpdateToClient(source, recipient);
 			/* A load can happen between client packets; make the rebuilt reliable
 			 * stream eligible for the next server send rather than waiting for a
@@ -489,7 +512,9 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 				break;
 			}
 		}
-		if (!restored_client) sv.edicts[index + 1U].e.free = true;
+		if (!restored_client) {
+			sv.edicts[index + 1U].e.free = true;
+		}
 	}
 	sv.num_edicts = (int)plan->num_edicts;
 	sv.time = image->engine.time;
@@ -498,7 +523,9 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 	PR_GLOBAL(serverflags) = svs.serverflags;
 	SV_ClearWorld();
 	for (index = 0U; index < plan->num_edicts; ++index) {
-		if (!sv.edicts[index].e.free) SV_LinkEdict(&sv.edicts[index], false);
+		if (!sv.edicts[index].e.free) {
+			SV_LinkEdict(&sv.edicts[index], false);
+		}
 	}
 	memset(plan, 0, sizeof(*plan));
 }
@@ -559,9 +586,13 @@ qbool QCX_SaveGame(const char *name)
 		goto done;
 	}
 	result = QCX_SaveWriteFile(name, encoded, encoded_size);
-	if (!result) failure = "could not write save file";
+	if (!result) {
+		failure = "could not write save file";
+	}
 done:
-	if (!result) Con_Printf("qc2cpp save rejected: %s.\n", failure);
+	if (!result) {
+		Con_Printf("qc2cpp save rejected: %s.\n", failure);
+	}
 	free(encoded);
 	free(image.engine.precaches);
 	free(guest.data);
@@ -579,11 +610,15 @@ static qbool QCX_SaveReadFile(const char *name, uint8_t **out, uint32_t *out_siz
 	const int path_size = snprintf(path, sizeof(path), "%s/save/%s.sav", fs_gamedir, name);
 	*out = NULL;
 	*out_size = 0U;
-	if (path_size < 0 || (size_t)path_size >= sizeof(path)) return false;
+	if (path_size < 0 || (size_t)path_size >= sizeof(path)) {
+		return false;
+	}
 	file = fopen(path, "rb");
 	if (file == NULL || fseek(file, 0L, SEEK_END) != 0 || (length = ftell(file)) <= 0L
 		|| (uint64_t)length > QCX_SAVE_MAX_FILE_BYTES || fseek(file, 0L, SEEK_SET) != 0) {
-		if (file != NULL) fclose(file);
+		if (file != NULL) {
+			fclose(file);
+		}
 		return false;
 	}
 	bytes = malloc((size_t)length);
