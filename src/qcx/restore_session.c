@@ -73,37 +73,6 @@ static void QCX_RestoreSessionNotifyBoundIdentity(client_t *client,
 		saved->name);
 }
 
-static void QCX_RestoreSessionQueueRestoredNew(client_t *client)
-{
-	/* The usual map path normally does this in SV_SaveSpawnparms.  Keep the
-	 * requirement local to the restore handoff as well, so Cmd_New_f cannot
-	 * discard the client's new signon while it is still marked spawned. */
-	if (client->state == cs_spawned) client->state = cs_connected;
-	SV_ClearReliable(client);
-	/* An active QW client must first leave its old signon state.  FTE (and
-	 * ordinary QW clients) implements this pair as a same-netchannel fresh
-	 * handshake: changing makes it connected, reconnect sends `new` without a
-	 * new direct-connect or ClientConnect callback. */
-	ClientReliableWrite_Begin(client, svc_stufftext, 20);
-	ClientReliableWrite_String(client, "changing\nreconnect\n");
-	client->send_message = true;
-}
-
-static void QCX_RestoreSessionQueueWaitingNew(client_t *client)
-{
-	/* A newcomer in the restore list was deliberately held before serverdata,
-	 * so starting its normal QW signon is now a server-side action.  This avoids
-	 * depending on an extra client command after its name update; it is the same
-	 * Cmd_New_f path an ordinary `new` request reaches.  The roster-list reply
-	 * may still occupy the one reliable retransmit slot, so discard that
-	 * deliberately obsolete pre-serverdata stream before queueing serverdata. */
-	SV_ClearReliable(client);
-	client->netchan.reliable_length = 0;
-	client->netchan.last_reliable_sequence = client->netchan.outgoing_sequence;
-	SV_QCXStartClientSignon(client);
-	client->send_message = true;
-}
-
 static int QCX_RestoreSessionFindFreeUnreservedSlot(void)
 {
 	uint32_t slot;
@@ -189,9 +158,9 @@ static void QCX_RestoreSessionUnbindClient(uint32_t slot, qbool notify_client)
 		 * helper's immediate slot reuse is unnecessary after abandonment. */
 		SV_DropClient(client);
 	} else if (pending) {
-		QCX_RestoreSessionQueueRestoredNew(client);
+		SV_RestartClientSignon(client);
 	} else {
-		QCX_RestoreSessionQueueWaitingNew(client);
+		SV_ResumeClientSignon(client);
 	}
 }
 
@@ -249,7 +218,6 @@ qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_
 	qcx_restore_roster_t roster;
 	uint32_t slot;
 	float timeout;
-	(void)monotonic_now;
 	if (!QCX_RestoreSessionImageIsValid(image)
 		|| !QCX_RestoreRosterInit(&roster, image->roster, image->roster_count)) {
 		return false;
@@ -485,7 +453,6 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 	uint32_t slot;
 	qbool was_waiting[MAX_CLIENTS];
 	qbool queue_waiting_new[QCX_SAVE_MAX_CLIENTS];
-	(void)monotonic_now;
 	if (!QCX_RestoreSessionWaiting()) return;
 	if (QCX_RestoreRosterAllActive(&qcx_restore_session.roster)) {
 		QCX_RestoreSessionFinish(false);
@@ -570,7 +537,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 		if (!queue_waiting_new[index]) continue;
 		client_slot = QCX_RestoreSessionFindClientForRoster(index);
 		if (client_slot >= 0) {
-			QCX_RestoreSessionQueueWaitingNew(&svs.clients[client_slot]);
+			SV_ResumeClientSignon(&svs.clients[client_slot]);
 		}
 	}
 	if (qcx_restore_session.initial_handshake_pending) {
@@ -578,7 +545,7 @@ void QCX_RestoreSessionFrame(double monotonic_now)
 			client_t *const client = &svs.clients[slot];
 			QCX_RESTORE_SESSION_VISIT_SLOT();
 			if (QCX_RestoreSessionClientIsLive(client)) {
-				QCX_RestoreSessionQueueRestoredNew(client);
+				SV_RestartClientSignon(client);
 			}
 		}
 		qcx_restore_session.initial_handshake_pending = false;
