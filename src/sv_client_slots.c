@@ -2,6 +2,35 @@
 
 extern void MVD_PlayerReset(int player);
 
+void SV_RestartClientSignon(client_t *client)
+{
+	/* SV_SaveSpawnparms normally does this on map changes. Repeat the
+	 * requirement at a restore handoff so Cmd_New_f cannot reject `new`
+	 * merely because the old session was still marked spawned. */
+	if (client->state == cs_spawned) {
+		client->state = cs_connected;
+	}
+	SV_ClearReliable(client);
+	/* Keep any in-flight reliable packet. The client leaves its old signon
+	 * state via changing/reconnect, then sends `new` on the same netchannel,
+	 * without another direct-connect or gameplay ClientConnect callback. */
+	ClientReliableWrite_Begin(client, svc_stufftext, 20);
+	ClientReliableWrite_String(client, "changing\nreconnect\n");
+	client->send_message = true;
+}
+
+void SV_ResumeClientSignon(client_t *client)
+{
+	/* A waiting newcomer has not received serverdata. Its roster-list reply
+	 * may still occupy the reliable retransmit slot; discard that obsolete
+	 * pre-serverdata stream before starting the ordinary `new` path. */
+	SV_ClearReliable(client);
+	client->netchan.reliable_length = 0;
+	client->netchan.last_reliable_sequence = client->netchan.outgoing_sequence;
+	SV_QCXStartClientSignon(client);
+	client->send_message = true;
+}
+
 static void SV_RebindClientSlot(client_t *client, unsigned int slot)
 {
 	client->netchan.message.data = client->netchan.message_buf;

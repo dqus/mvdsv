@@ -168,7 +168,9 @@ void ClientReliableWrite_String(client_t *client, char *value)
 
 void SV_QCXStartClientSignon(client_t *client)
 {
-	(void)client;
+	assert(client->netchan.message.cursize == 0 && client->num_backbuf == 0);
+	assert(client->netchan.reliable_length == 0);
+	assert(client->netchan.last_reliable_sequence == client->netchan.outgoing_sequence);
 	++qcx_signon_starts;
 }
 
@@ -1360,8 +1362,45 @@ static void test_abandonment_frees_only_nonactive_saved_edicts(void)
 	assert(game_disconnect_calls == 1U);
 }
 
+static void test_server_restarts_an_existing_client_without_resetting_inflight_reliable(void)
+{
+	reset_fixture();
+	client_t *const client = connect_client(0U, "Alice", 1);
+	client->state = cs_spawned;
+	client->netchan.message.cursize = 15;
+	client->num_backbuf = 1;
+	client->netchan.reliable_length = 12;
+	client->netchan.outgoing_sequence = 9;
+	client->netchan.last_reliable_sequence = 7;
+	SV_RestartClientSignon(client);
+	assert(client->state == cs_connected && client->send_message);
+	assert(client->netchan.message.cursize == 0 && client->num_backbuf == 0);
+	assert(client->netchan.reliable_length == 12);
+	assert(client->netchan.last_reliable_sequence == 7);
+	assert(reliable_reconnect_requests == 1U && qcx_signon_starts == 0U);
+}
+
+static void test_server_resumes_a_waiting_client_after_discarding_obsolete_reliable(void)
+{
+	reset_fixture();
+	client_t *const client = connect_client(0U, "Alice", 1);
+	client->netchan.message.cursize = 15;
+	client->num_backbuf = 1;
+	client->netchan.reliable_length = 12;
+	client->netchan.outgoing_sequence = 9;
+	client->netchan.last_reliable_sequence = 7;
+	SV_ResumeClientSignon(client);
+	assert(client->state == cs_connected && client->send_message);
+	assert(client->netchan.message.cursize == 0 && client->num_backbuf == 0);
+	assert(client->netchan.reliable_length == 0);
+	assert(client->netchan.last_reliable_sequence == 9);
+	assert(reliable_reconnect_requests == 0U && qcx_signon_starts == 1U);
+}
+
 int main(void)
 {
+	test_server_restarts_an_existing_client_without_resetting_inflight_reliable();
+	test_server_resumes_a_waiting_client_after_discarding_obsolete_reliable();
 	test_server_swap_keeps_connections_and_repairs_both_slots();
 	test_server_swap_leaves_unrelated_current_client_unchanged();
 	test_server_swap_same_slot_is_a_noop();
