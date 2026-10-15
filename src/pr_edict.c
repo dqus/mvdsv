@@ -1312,7 +1312,7 @@ void PR1_InitializePrecacheSlots(void)
 	sv.model_precache[0] = pr_strings;
 }
 
-void PR1_PrepareRestoreResources(qbool restoring_qcx)
+void PR1_PrepareRestoreStartup(qbool restoring_qcx)
 {
 	if (restoring_qcx) {
 		SV_Error("qc2cpp restore support is unavailable");

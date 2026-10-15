@@ -186,7 +186,9 @@ restore. Thus engine policy and game rules agree even if the operator changed
 cvars after saving, or the QC copies were already stale at save time. Other
 cvars are not restored. Preflight never changes the running world's settings.
 Malformed engine and roster structure is rejected before restarting the map.
-Resource preparation and restore consume that same parsed state; restore still
+Startup preparation (`PR_PrepareRestoreStartup` / `QCX_PrepareLoadStartup`)
+applies mode settings and indexed resource names after old-world teardown and
+before guest load/init. It and restore consume the same parsed state; restore still
 checks it against the selected game's capacity, map checksum, and world resources.
 
 A QCMS load always creates a fresh map session before restoring its logical
