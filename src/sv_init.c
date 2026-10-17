@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "game_compat.h"
+#include "nq_messages.h"
 #if defined(QCX_ENABLED)
 #include "qcx/restore_session.h"
 #include "qcx/save.h"
@@ -581,7 +583,9 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		pr_globals[35] = deathmatch.value;
 		pr_globals[36] = coop.value;
 		pr_globals[37] = teamplay.value;
-		NQP_Reset ();
+	}
+	if (PR_GameIsNetQuake()) {
+		NQ_ResetMessages();
 	}
 
 	if (pr_nqprogs)

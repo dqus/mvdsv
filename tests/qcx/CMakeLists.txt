@@ -1,3 +1,25 @@
+add_executable(qcx_nq_messages_test nq_messages_test.c
+	${PROJECT_SOURCE_DIR}/src/nq_messages.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
+	${PROJECT_SOURCE_DIR}/src/common.c ${PROJECT_SOURCE_DIR}/src/bothtools.c)
+set_target_properties(qcx_nq_messages_test PROPERTIES
+	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(qcx_nq_messages_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_definitions(qcx_nq_messages_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_compile_options(qcx_nq_messages_test PRIVATE
+	-UNDEBUG -ffunction-sections -fdata-sections)
+if(APPLE)
+	target_link_options(qcx_nq_messages_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_nq_messages_test PRIVATE -Wl,--gc-sections)
+	target_link_libraries(qcx_nq_messages_test PRIVATE m)
+endif()
+target_link_libraries(qcx_nq_messages_test PRIVATE Qc2cppHost::contract)
+add_test(NAME qcx_nq_messages COMMAND qcx_nq_messages_test)
+set_tests_properties(qcx_nq_messages PROPERTIES LABELS "qcx;fast")
+
 foreach(compat_variant IN ITEMS nq no_nq)
 	set(compat_target qcx_game_compat_${compat_variant}_test)
 	add_executable(${compat_target} game_compat_test.c
@@ -30,6 +52,7 @@ foreach(compat_variant IN ITEMS nq no_nq)
 endforeach()
 
 add_executable(qcx_nq_pr1_compat_test nq_pr1_compat_test.c
+	${PROJECT_SOURCE_DIR}/src/nq_messages.c
 	${PROJECT_SOURCE_DIR}/src/common.c ${PROJECT_SOURCE_DIR}/src/bothtools.c)
 set_target_properties(qcx_nq_pr1_compat_test PROPERTIES
 	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
