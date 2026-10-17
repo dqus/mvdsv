@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "game_compat.h"
+#include "nq_messages.h"
 
 /*
 
@@ -975,8 +977,9 @@ void SV_Physics (void)
 
 	sv.physicstime = sv.time;
 
-	if (pr_nqprogs)
-		NQP_Reset ();
+	if (PR_GameIsNetQuake()) {
+		NQ_ResetMessages();
+	}
 
 	PR_GLOBAL(frametime) = sv_frametime;
 

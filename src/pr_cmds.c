@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "nq_messages.h"
 
 static tokenizecontext_t pr1_tokencontext;
 
@@ -1735,224 +1736,17 @@ static client_t *Write_GetClient(void)
 		PR_RunError ("WriteDest: not a client");
 	return &svs.clients[entnum-1];
 }
-
-
-#ifdef WITH_NQPROGS
-static byte nqp_buf_data[1024] /* must be large enough for svc_finale text */;
-static sizebuf_t nqp_buf;
-static qbool nqp_ignore_this_frame;
-static int nqp_expect;
-
-void NQP_Reset (void)
-{
-	nqp_ignore_this_frame = false;
-	nqp_expect = 0;
-	SZ_Init (&nqp_buf, nqp_buf_data, sizeof(nqp_buf_data));
-}
-
-static void NQP_Flush (int count)
-{
-// FIXME, we make no distinction reliable or not
-	assert (count <= nqp_buf.cursize);
-	SZ_Write (&sv.reliable_datagram, nqp_buf_data, count);
-	memmove (nqp_buf_data, nqp_buf_data + count, nqp_buf.cursize - count);
-	nqp_buf.cursize -= count;
-}
-
-static void NQP_Skip (int count)
-{
-	assert (count <= nqp_buf.cursize);
-	memmove (nqp_buf_data, nqp_buf_data + count, nqp_buf.cursize - count);
-	nqp_buf.cursize -= count;
-}
-
-static void NQP_Process (void)
-{
-	int cmd;
-
-	if (nqp_ignore_this_frame) {
-		SZ_Clear (&nqp_buf);
-		return;
-	}
-
-	while (1) {
-		if (nqp_expect) {
-			if (nqp_buf.cursize >= nqp_expect) {
-				NQP_Flush (nqp_expect);
-				nqp_expect = 0;
-			}
-			else
-				break;
-		}
-
-		if (!nqp_buf.cursize)
-			break;
-
-		nqp_expect = 0;
-
-		cmd = nqp_buf_data[0];
-		if (cmd == svc_killedmonster || cmd == svc_foundsecret || cmd == svc_sellscreen)
-			nqp_expect = 1;
-		else if (cmd == svc_updatestat) {
-			NQP_Skip (1);
-			MSG_WriteByte (&sv.reliable_datagram, svc_updatestatlong);
-			nqp_expect = 5;
-		}
-		else if (cmd == svc_print) {
-			byte *p = (byte *)memchr (nqp_buf_data + 1, 0, nqp_buf.cursize - 1);
-			if (!p)
-				goto waitformore;
-			MSG_WriteByte(&sv.reliable_datagram, svc_print);
-			MSG_WriteByte(&sv.reliable_datagram, PRINT_HIGH);
-			MSG_WriteString(&sv.reliable_datagram, (char *)(nqp_buf_data + 1));
-			NQP_Skip(p - nqp_buf_data + 1);
-		}
-		else if (cmd == nq_svc_setview) {
-			if (nqp_buf.cursize < 3)
-				goto waitformore;
-			NQP_Skip (3);		// TODO: make an extension for this
-		}
-		else if (cmd == svc_updatefrags)
-			nqp_expect = 4;
-		else if (cmd == nq_svc_updatecolors) {
-			if (nqp_buf.cursize < 3)
-				goto waitformore;
-			MSG_WriteByte (&sv.reliable_datagram, svc_setinfo);
-			MSG_WriteByte (&sv.reliable_datagram, nqp_buf_data[1]);
-			MSG_WriteString (&sv.reliable_datagram, "topcolor");
-			MSG_WriteString (&sv.reliable_datagram, va("%i", min(nqp_buf_data[2] & 15, 13)));
-			MSG_WriteByte (&sv.reliable_datagram, svc_setinfo);
-			MSG_WriteByte (&sv.reliable_datagram, nqp_buf_data[1]);
-			MSG_WriteString (&sv.reliable_datagram, "bottomcolor");
-			MSG_WriteString (&sv.reliable_datagram, va("%i", min((nqp_buf_data[2] >> 4)& 15, 13)));
-			NQP_Skip (3);
-		}
-		else if (cmd == nq_svc_updatename) {
-			int slot;
-			byte *p;
-			if (nqp_buf.cursize < 3)
-				goto waitformore;
-			slot = nqp_buf_data[1];
-			p = (byte *)memchr (nqp_buf_data + 2, 0, nqp_buf.cursize - 2);
-			if (!p)
-				goto waitformore;
-			MSG_WriteByte (&sv.reliable_datagram, svc_setinfo);
-			MSG_WriteByte (&sv.reliable_datagram, slot);
-			MSG_WriteString (&sv.reliable_datagram, "name");
-			MSG_WriteString (&sv.reliable_datagram, (char *)nqp_buf_data + 2);
-			MSG_WriteByte (&sv.reliable_datagram, svc_updateping);
-			MSG_WriteByte (&sv.reliable_datagram, slot);
-			MSG_WriteShort (&sv.reliable_datagram, 0);
-			// We expect bots to set their name when they enter the game and never change it
-			MSG_WriteByte (&sv.reliable_datagram, svc_updateentertime);
-			MSG_WriteByte (&sv.reliable_datagram, slot);
-			MSG_WriteFloat (&sv.reliable_datagram, 0);
-			NQP_Skip ((p - nqp_buf_data) + 1);
-		}
-		else if (cmd == svc_cdtrack) {
-			if (nqp_buf.cursize < 3)
-				goto waitformore;
-			NQP_Flush (2);
-			NQP_Skip (1);
-		}
-		else if (cmd == svc_finale) {
-			byte *p = (byte *)memchr (nqp_buf_data + 1, 0, nqp_buf.cursize - 1);
-			if (!p)
-				goto waitformore;
-			nqp_expect = (p - nqp_buf_data) + 1;
-		}
-		else if (cmd == svc_intermission) {
-			int i;
-			NQP_Flush (1);
-			for (i = 0; i < 3; i++)
-				MSG_WriteCoord (&sv.reliable_datagram, svs.clients[0].edict->v->origin[i]);
-			for (i = 0; i < 3; i++)
-				MSG_WriteAngle (&sv.reliable_datagram, svs.clients[0].edict->v->angles[i]);
-		}
-		else if (cmd == nq_svc_cutscene) {
-			byte *p = (byte *)memchr (nqp_buf_data + 1, 0, nqp_buf.cursize - 1);
-			if (!p)
-				goto waitformore;
-			MSG_WriteByte (&sv.reliable_datagram, svc_stufftext);
-			MSG_WriteString (&sv.reliable_datagram, "//cutscene\n"); // ZQ extension
-			NQP_Skip (p - nqp_buf_data + 1);
-		}
-		else if (nqp_buf_data[0] == svc_temp_entity) {
-			if (nqp_buf.cursize < 2)
-				break;
-
-switch (nqp_buf_data[1]) {
-  case TE_SPIKE:
-  case TE_SUPERSPIKE:
-  case TE_EXPLOSION:
-  case TE_TAREXPLOSION:
-  case TE_WIZSPIKE:
-  case TE_KNIGHTSPIKE:
-  case TE_LAVASPLASH:
-  case TE_TELEPORT:
-		nqp_expect = 8;
-		break;
-  case TE_GUNSHOT:
-		if (nqp_buf.cursize < 8)
-			goto waitformore;
-		NQP_Flush (2);
-		MSG_WriteByte (&sv.reliable_datagram, 1);
-		NQP_Flush (6);
-		break;
-
-  case TE_LIGHTNING1:
-  case TE_LIGHTNING2:
-  case TE_LIGHTNING3:
-		nqp_expect = 16;
-	  break;
-  case NQ_TE_BEAM:
-  {		int entnum;
-		if (nqp_buf.cursize < 16)
-			goto waitformore;
-		MSG_WriteByte (&sv.reliable_datagram, svc_temp_entity);
-		MSG_WriteByte (&sv.reliable_datagram, TE_LIGHTNING1);
-		entnum = nqp_buf_data[2] + nqp_buf_data[3]*256;
-		if ((unsigned int)entnum > 1023)
-			entnum = 0;
-		MSG_WriteShort (&sv.reliable_datagram, (short)(entnum - 1288));
-		NQP_Skip (4);
-		nqp_expect = 12;
-		break;
-  }
-
-  case NQ_TE_EXPLOSION2:
-		nqp_expect = 10;
-		break;
-  default:
-		Con_Printf ("WARNING: progs.dat sent an unsupported svc_temp_entity: %i\n", nqp_buf_data[1]);
-	    goto ignore;
-}
-
-		}
-		else {
-			Con_Printf ("WARNING: progs.dat sent an unsupported svc: %i\n", cmd);
-ignore:
-			nqp_ignore_this_frame = true;
-			break;
-		}
-	}
-waitformore:;
-}
-
-#else // !WITH_NQPROGS
-#define NQP_Process()
-sizebuf_t nqp_buf;	// dummy
-#endif
-
-
+/* NQ ignores exact MSG_ONE/MSG_INIT values before decoding the payload.
+ * All remaining destinations share the legacy reliable stream; keep the
+ * float-domain checks here: truncation could turn an accepted fractional
+ * destination into an ignored integer destination. */
 void PF_WriteByte (void)
 {
 	if (pr_nqprogs)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteByte (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteByte(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -1979,8 +1773,7 @@ void PF_WriteChar (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteByte (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteChar(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -2007,8 +1800,7 @@ void PF_WriteShort (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteShort (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteShort(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -2035,8 +1827,7 @@ void PF_WriteLong (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteLong (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteLong(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -2063,8 +1854,7 @@ void PF_WriteAngle (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteAngle (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteAngle(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -2096,8 +1886,7 @@ void PF_WriteCoord (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteCoord (&nqp_buf, G_FLOAT(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteCoord(MSG_BROADCAST, G_FLOAT(OFS_PARM1));
 		return;
 	}
 
@@ -2129,8 +1918,7 @@ void PF_WriteString (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteString (&nqp_buf, G_STRING(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteString(MSG_BROADCAST, G_STRING(OFS_PARM1));
 		return;
 	}
 
@@ -2158,8 +1946,7 @@ void PF_WriteEntity (void)
 	{
 		if (G_FLOAT(OFS_PARM0) == MSG_ONE || G_FLOAT(OFS_PARM0) == MSG_INIT)
 			return;	// we don't support this
-		MSG_WriteShort (&nqp_buf, G_EDICTNUM(OFS_PARM1));
-		NQP_Process ();
+		NQ_WriteEntity(MSG_BROADCAST, G_EDICTNUM(OFS_PARM1));
 		return;
 	}
 

@@ -1,4 +1,6 @@
 #include "qwsvdef.h"
+#include "game_compat.h"
+#include "nq_messages.h"
 
 #include "qcx/entities.h"
 #include "qcx/service_support.h"
@@ -80,7 +82,12 @@ static void QCX_WriteByte(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteByte(to, QCX_RequireInt(value, "write byte"), QCX_MessageEntity(to, msg_entity));
+	const int encoded = QCX_RequireInt(value, "write byte");
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteByte(to, encoded);
+		return;
+	}
+	PF2_WriteByte(to, encoded, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteChar(void *context, float destination, float value,
@@ -88,7 +95,12 @@ static void QCX_WriteChar(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteChar(to, QCX_RequireInt(value, "write char"), QCX_MessageEntity(to, msg_entity));
+	const int encoded = QCX_RequireInt(value, "write char");
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteChar(to, encoded);
+		return;
+	}
+	PF2_WriteChar(to, encoded, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteShort(void *context, float destination, float value,
@@ -96,7 +108,12 @@ static void QCX_WriteShort(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteShort(to, QCX_RequireInt(value, "write short"), QCX_MessageEntity(to, msg_entity));
+	const int encoded = QCX_RequireInt(value, "write short");
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteShort(to, encoded);
+		return;
+	}
+	PF2_WriteShort(to, encoded, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteLong(void *context, float destination, float value,
@@ -104,7 +121,12 @@ static void QCX_WriteLong(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteLong(to, QCX_RequireInt(value, "write long"), QCX_MessageEntity(to, msg_entity));
+	const int encoded = QCX_RequireInt(value, "write long");
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteLong(to, encoded);
+		return;
+	}
+	PF2_WriteLong(to, encoded, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_WriteCoord(void *context, float destination, float value,
@@ -112,6 +134,10 @@ static void QCX_WriteCoord(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteCoord(to, value);
+		return;
+	}
 	PF2_WriteCoord(to, value, QCX_MessageEntity(to, msg_entity));
 }
 
@@ -120,6 +146,10 @@ static void QCX_WriteAngle(void *context, float destination, float value,
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteAngle(to, value);
+		return;
+	}
 	PF2_WriteAngle(to, value, QCX_MessageEntity(to, msg_entity));
 }
 
@@ -130,6 +160,10 @@ static void QCX_WriteString(void *context, float destination, const uint8_t *val
 	char local[MAX_INFO_STRING];
 	QCX_CopyText(value, value_size, local, sizeof(local), "message");
 	const int to = QCX_MessageDestination(destination);
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteString(to, local);
+		return;
+	}
 	PF2_WriteString(to, local, QCX_MessageEntity(to, msg_entity));
 }
 
@@ -138,8 +172,12 @@ static void QCX_WriteEntity(void *context, float destination, qcx_entity_id_t va
 {
 	QCX_ObserveGameplayImport(context);
 	const int to = QCX_MessageDestination(destination);
-	PF2_WriteEntity(to, NUM_FOR_EDICT(QCX_RequireServiceEdict(value, "network entity")),
-		QCX_MessageEntity(to, msg_entity));
+	const int entity_number = NUM_FOR_EDICT(QCX_RequireServiceEdict(value, "network entity"));
+	if (PR_GameIsNetQuake()) {
+		NQ_WriteEntity(to, entity_number);
+		return;
+	}
+	PF2_WriteEntity(to, entity_number, QCX_MessageEntity(to, msg_entity));
 }
 
 static void QCX_CenterPrint(void *context, qcx_entity_id_t entity,

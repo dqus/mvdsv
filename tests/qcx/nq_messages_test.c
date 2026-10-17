@@ -1,0 +1,262 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+#include <math.h>
+#include <setjmp.h>
+#include <string.h>
+#include "qwsvdef.h"
+#include "qcx/entities.h"
+#include "nq_messages.h"
+
+server_t sv;
+server_static_t svs;
+static qbool netquake = true, through_qcx;
+static unsigned qw_calls, qw_operations, warnings;
+static int destination;
+static byte reliable[4096];
+static entvars_t states[258];
+static jmp_buf rejected;
+static qbool expect_rejection;
+
+qbool PR_GameIsNetQuake(void) { return netquake; }
+edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
+{
+	return slot == 0U || slot == 1U || slot == 257U ? &sv.edicts[slot] : NULL;
+}
+int NUM_FOR_EDICT(edict_t *entity) { return (int)(entity - sv.edicts); }
+void Con_Printf(char *format, ...) { (void)format; ++warnings; }
+void Sys_Printf(char *format, ...) { (void)format; abort(); }
+void Sys_Error(const char *format, ...) { (void)format; abort(); }
+void SV_Error(char *format, ...)
+{
+	(void)format;
+	assert(expect_rejection);
+	longjmp(rejected, 1);
+}
+
+static void qw_write(int to, edict_t *entity, unsigned operation)
+{
+	assert(!netquake && (to == 0 || to == 1));
+	assert(entity == (to == 1 ? &sv.edicts[1] : NULL));
+	++qw_calls;
+	qw_operations |= 1U << operation;
+}
+void PF2_WriteByte(int to, int value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 0U); }
+void PF2_WriteChar(int to, int value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 1U); }
+void PF2_WriteShort(int to, int value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 2U); }
+void PF2_WriteLong(int to, int value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 3U); }
+void PF2_WriteCoord(int to, float value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 4U); }
+void PF2_WriteAngle(int to, float value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 5U); }
+void PF2_WriteString(int to, char *value, edict_t *entity)
+{ (void)value; qw_write(to, entity, 6U); }
+void PF2_WriteEntity(int to, int value, edict_t *entity)
+{ assert(value == 257); qw_write(to, entity, 7U); }
+
+/* Exercise the actual QCX validation/routing functions, not a copied adapter. */
+#include "../../src/qcx/services_network.c"
+
+static void emit_byte(int value)
+{
+	if (through_qcx) {
+		QCX_WriteByte(NULL, (float)destination, (float)value, 1U);
+	} else {
+		NQ_WriteByte(destination, value);
+	}
+}
+static void emit_char(int value)
+{
+	if (through_qcx) {
+		QCX_WriteChar(NULL, (float)destination, (float)value, 1U);
+	} else {
+		NQ_WriteChar(destination, value);
+	}
+}
+static void emit_short(int value)
+{
+	if (through_qcx) {
+		QCX_WriteShort(NULL, (float)destination, (float)value, 1U);
+	} else {
+		NQ_WriteShort(destination, value);
+	}
+}
+static void emit_long(int value)
+{
+	if (through_qcx) {
+		QCX_WriteLong(NULL, (float)destination, (float)value, 1U);
+	} else {
+		NQ_WriteLong(destination, value);
+	}
+}
+static void emit_coord(float value)
+{
+	if (through_qcx) {
+		QCX_WriteCoord(NULL, (float)destination, value, 1U);
+	} else {
+		NQ_WriteCoord(destination, value);
+	}
+}
+static void emit_angle(float value)
+{
+	if (through_qcx) {
+		QCX_WriteAngle(NULL, (float)destination, value, 1U);
+	} else {
+		NQ_WriteAngle(destination, value);
+	}
+}
+static void emit_string(const char *value)
+{
+	if (through_qcx) {
+		QCX_WriteString(NULL, (float)destination, (const uint8_t *)value,
+			(qcx_byte_count_t)strlen(value), 1U);
+	} else {
+		NQ_WriteString(destination, value);
+	}
+}
+static void emit_entity(void)
+{
+	if (through_qcx) {
+		QCX_WriteEntity(NULL, (float)destination, 257U, 1U);
+	} else {
+		NQ_WriteEntity(destination, 257);
+	}
+}
+static void reset(void)
+{
+	SZ_Init(&sv.reliable_datagram, reliable, sizeof(reliable));
+	NQ_ResetMessages();
+	destination = 0;
+}
+static void check(const byte *expected, size_t size)
+{
+	assert(sv.reliable_datagram.cursize == (int)size);
+	assert(!memcmp(reliable, expected, size));
+}
+static void test_packets(void)
+{
+	reset();
+	emit_byte(23);
+	emit_byte(2);
+	emit_coord(1);
+	emit_coord(-2);
+	assert(sv.reliable_datagram.cursize == 0);
+	emit_coord(3);
+	const byte gunshot[] = {23, 2, 1, 8, 0, 240, 255, 24, 0};
+	check(gunshot, sizeof(gunshot));
+	reset();
+	emit_byte(3);
+	emit_char(-1);
+	emit_long(-123);
+	const byte stat[] = {38, 255, 133, 255, 255, 255};
+	check(stat, sizeof(stat));
+	reset();
+	emit_byte(14);
+	emit_byte(3);
+	emit_short(-123);
+	const byte frags[] = {14, 3, 133, 255};
+	check(frags, sizeof(frags));
+	reset();
+	emit_byte(23);
+	emit_byte(5);
+	emit_entity();
+	for (int i = 1; i <= 6; ++i) {
+		emit_coord((float)i);
+	}
+	const byte lightning[] = {23, 5, 1, 1, 8, 0, 16, 0, 24, 0, 32, 0, 40, 0, 48, 0};
+	check(lightning, sizeof(lightning));
+	reset();
+	emit_byte(23);
+	emit_byte(12); /* NQ_TE_EXPLOSION2: retain the baseline parser's raw form. */
+	for (int i = 1; i <= 3; ++i) {
+		emit_coord((float)i);
+	}
+	emit_angle(90);
+	emit_angle(180);
+	const byte explosion[] = {23, 12, 8, 0, 16, 0, 24, 0, 64, 128};
+	check(explosion, sizeof(explosion));
+	reset();
+	emit_byte(8);
+	emit_string("hello");
+	const byte print[] = {8, 2, 'h', 'e', 'l', 'l', 'o', 0};
+	check(print, sizeof(print));
+	reset();
+	emit_byte(32);
+	emit_byte(3);
+	emit_byte(9);
+	const byte cdtrack[] = {32, 3};
+	check(cdtrack, sizeof(cdtrack));
+	reset();
+	emit_byte(30);
+	const byte intermission[] = {30, 8, 0, 240, 255, 24, 0, 0, 64, 128};
+	check(intermission, sizeof(intermission));
+}
+static void test_reset_and_ignored_destinations(void)
+{
+	reset();
+	emit_byte(23);
+	reset();
+	emit_byte(27);
+	const byte killed[] = {27};
+	check(killed, sizeof(killed));
+	reset();
+	const unsigned before = warnings;
+	emit_byte(255);
+	emit_byte(27);
+	assert(warnings == before + 1U && sv.reliable_datagram.cursize == 0);
+	reset();
+	emit_byte(27);
+	check(killed, sizeof(killed));
+	for (unsigned i = 0U; i < 2U; ++i) {
+		reset();
+		destination = i == 0U ? 1 : 3;
+		emit_byte(27); emit_char(-1); emit_short(-123); emit_long(-123);
+		emit_coord(1); emit_angle(90); emit_string("ignored"); emit_entity();
+		assert(sv.reliable_datagram.cursize == 0);
+	}
+}
+int main(void)
+{
+	sv.edicts[0].v = &states[0];
+	sv.edicts[1].v = &states[1];
+	sv.edicts[257].v = &states[257];
+	svs.clients[0].edict = &sv.edicts[1];
+	VectorSet(states[1].origin, 1, -2, 3);
+	VectorSet(states[1].angles, 0, 90, 180);
+	for (unsigned route = 0U; route < 2U; ++route) {
+		through_qcx = route != 0U;
+		test_packets();
+		test_reset_and_ignored_destinations();
+	}
+	through_qcx = true;
+	netquake = false;
+	reset();
+	emit_byte(27); emit_char(-1); emit_short(-123); emit_long(-123);
+	emit_coord(1); emit_angle(90); emit_string("direct"); emit_entity();
+	assert(qw_calls == 8U && qw_operations == 255U && sv.reliable_datagram.cursize == 0);
+	destination = 1;
+	emit_byte(27);
+	assert(qw_calls == 9U);
+	netquake = true;
+	reset();
+	expect_rejection = true;
+	if (setjmp(rejected) == 0) {
+		QCX_WriteByte(NULL, 0.5f, 27, 0U);
+		assert(!"fractional destination accepted");
+	}
+	if (setjmp(rejected) == 0) {
+		QCX_WriteLong(NULL, 0, NAN, 0U);
+		assert(!"nonfinite integer accepted");
+	}
+	if (setjmp(rejected) == 0) {
+		QCX_WriteEntity(NULL, 0, UINT32_MAX, 0U);
+		assert(!"invalid entity accepted");
+	}
+	assert(sv.reliable_datagram.cursize == 0);
+	return 0;
+}
