@@ -52,6 +52,7 @@ foreach(compat_variant IN ITEMS nq no_nq)
 endforeach()
 
 add_executable(qcx_nq_pr1_compat_test nq_pr1_compat_test.c
+	${PROJECT_SOURCE_DIR}/src/nq_compat.c
 	${PROJECT_SOURCE_DIR}/src/nq_messages.c
 	${PROJECT_SOURCE_DIR}/src/common.c ${PROJECT_SOURCE_DIR}/src/bothtools.c)
 set_target_properties(qcx_nq_pr1_compat_test PROPERTIES
@@ -849,3 +850,24 @@ add_test(NAME qcx_label_contract
 		-DCMAKE_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/label_contract_test.cmake)
 qcx_set_test_labels(qcx_label_contract "qcx;fast;contract")
+add_executable(qcx_nq_behavior_test nq_behavior_test.c
+	${PROJECT_SOURCE_DIR}/src/nq_compat.c
+	${PROJECT_SOURCE_DIR}/src/pr2_cmds.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c)
+set_target_properties(qcx_nq_behavior_test PROPERTIES
+	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(qcx_nq_behavior_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_definitions(qcx_nq_behavior_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_compile_options(qcx_nq_behavior_test PRIVATE
+	-UNDEBUG -ffunction-sections -fdata-sections)
+if(APPLE)
+	target_link_options(qcx_nq_behavior_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_nq_behavior_test PRIVATE -Wl,--gc-sections)
+	target_link_libraries(qcx_nq_behavior_test PRIVATE m)
+endif()
+target_link_libraries(qcx_nq_behavior_test PRIVATE Qc2cppHost::contract)
+add_test(NAME qcx_nq_behavior COMMAND qcx_nq_behavior_test)
+set_tests_properties(qcx_nq_behavior PROPERTIES LABELS "qcx;fast")

@@ -24,5 +24,9 @@ void QCX_TestObserverEdictThink(struct edict_s *thinking);
 void QCX_TestObserverEdictTouch(struct edict_s *touched, struct edict_s *toucher);
 void QCX_TestObserverRestoreReplicationBegin(void);
 void QCX_TestObserverRestoreReplicationComplete(void);
+void QCX_TestObserverNqPreThink(struct edict_s *player, const float velocity[3], float teleport_time);
+void QCX_TestObserverNqPostThink(struct edict_s *player, const float velocity[3]);
+void QCX_TestObserverNqWaterJump(struct edict_s *player, float waterjumptime);
+void QCX_TestObserverNewMissiles(uint32_t netquake);
 
 #endif

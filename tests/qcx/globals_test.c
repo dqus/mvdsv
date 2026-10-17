@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <setjmp.h>
 #include <string.h>
 
 #include "qwsvdef.h"
@@ -13,10 +14,19 @@ _Static_assert(_Generic(QCX_Globals(),
 
 static const qcx_game_api_v1_t *active_game;
 static qbool qcx_active;
+static jmp_buf globals_error;
+static qbool expect_globals_error;
 static globalvars_t legacy_globals;
 globalvars_t *pr_global_struct = &legacy_globals;
 float *pr_globals = (float *)&legacy_globals;
 server_t sv;
+
+void SV_Error(char *message, ...)
+{
+	(void)message;
+	assert(expect_globals_error);
+	longjmp(globals_error, 1);
+}
 
 static union {
 	long double alignment;
@@ -77,7 +87,22 @@ static void assert_global_field_validation(void)
 		fields->global_fields.descriptors, 3U * sizeof(*descriptors),
 		_Alignof(qcx_engine_field_descriptor_v1_t), (void **)&descriptors) == QCX_PLUGIN_OK);
 	const qcx_engine_field_descriptor_v1_t saved_coop = descriptors[1];
+	const qcx_engine_field_descriptor_v1_t saved_deathmatch = descriptors[0];
 	const qcx_engine_field_table_v1_t saved_table = fields->global_fields;
+	descriptors[0].access_flags = QCX_ENGINE_FIELD_HOST_WRITE;
+	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
+	descriptors[0] = saved_deathmatch;
+	float *live_deathmatch = NULL;
+	assert(active_game->memory_view(active_game->context,
+		fields->globals_base + descriptors[0].offset, sizeof(float), _Alignof(float),
+		(void **)&live_deathmatch) == QCX_PLUGIN_OK);
+	assert(QCX_GameDeathmatch() == 1.0f);
+	*live_deathmatch = 0.0f;
+	assert(QCX_GameDeathmatch() == 0.0f);
+	/* Reset/restore writes in place: the binding must observe the new value. */
+	*live_deathmatch = 7.0f;
+	assert(QCX_GameDeathmatch() == 7.0f);
+	*live_deathmatch = 1.0f;
 
 	fields->reserved0 = 1U;
 	assert(!QCX_ConfigureGlobals(9.0f, 9.0f, 9.0f));
@@ -163,6 +188,12 @@ int main(int argc, char **argv)
 	assert(QCX_SetMapName("dm6"));
 	QCX_ClearGlobals();
 	qcx_active = false;
+	expect_globals_error = true;
+	if (setjmp(globals_error) == 0) {
+		(void)QCX_GameDeathmatch();
+		assert(!"unpublished deathmatch binding remained readable");
+	}
+	expect_globals_error = false;
 	assert(QCX_Globals() == NULL);
 	assert(pr_global_struct == &legacy_globals);
 	assert(pr_globals == (float *)&legacy_globals);

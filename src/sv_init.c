@@ -607,7 +607,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		NQ_ResetMessages();
 	}
 
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake())
 	{
 		// register the cvars that NetQuake provides for mod use
 		const char **var, *nqcvars[] = {"gamecfg", "scratch1", "scratch2", "scratch3", "scratch4",
@@ -620,7 +620,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	PR_ValidatePreparedRestore(restoring_qc2cpp);
 
 	// run the frame start qc function to let progs check cvars
-	if (!restoring_qc2cpp && !pr_nqprogs)
+	if (!restoring_qc2cpp && !PR_GameIsNetQuake())
 		SV_ProgStartFrame (false);
 
 	// ********* External Entity support (.ent file(s) in gamedir/maps) pinched from ZQuake *********

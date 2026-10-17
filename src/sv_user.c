@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "game_compat.h"
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#endif
 #if defined(QCX_ENABLED)
 #include "qcx/restore_session.h"
 #endif
@@ -3905,10 +3909,13 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 		pr_global_struct->self = EDICT_TO_PROG(sv_player);
 		PR_GameClientPreThink(0);
 
-		if (pr_nqprogs)
+		if (PR_GameIsNetQuake())
 		{
 			sv_player->v->teleport_time = old_teleport_time;
 			VectorCopy (oldvelocity, sv_player->v->velocity);
+#if defined(QCX_TESTS)
+			QCX_TestObserverNqPreThink(sv_player, oldvelocity, old_teleport_time);
+#endif
 		}
 
 		if ( onground && originalvel[2] < 0 && sv_player->v->velocity[2] == 0 &&
@@ -3992,8 +3999,12 @@ FIXME
 	// get player state back out of pmove
 	sv_client->jump_held = pmove.jump_held;
 	sv_player->v->teleport_time = pmove.waterjumptime;
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake()) {
 		sv_player->v->flags = ((int)sv_player->v->flags & ~FL_WATERJUMP) | (pmove.waterjumptime ? FL_WATERJUMP : 0);
+#if defined(QCX_TESTS)
+		QCX_TestObserverNqWaterJump(sv_player, pmove.waterjumptime);
+#endif
+	}
 	sv_player->v->waterlevel = pmove.waterlevel;
 	sv_player->v->watertype = pmove.watertype;
 	if (pmove.onground)
@@ -4343,13 +4354,18 @@ void SV_PostRunCmd(void)
 			sv_player->v->velocity[2] = originalvel[2];
 		}
 
-		if (pr_nqprogs)
+		if (PR_GameIsNetQuake()) {
 			VectorCopy (originalvel, sv_player->v->velocity);
+#if defined(QCX_TESTS)
+			QCX_TestObserverNqPostThink(sv_player, originalvel);
+#endif
+		}
 
-		if (pr_nqprogs)
+		if (PR_GameIsNetQuake()) {
 			SV_RunNQNewmis ();
-		else
+		} else {
 			SV_RunNewmis ();
+		}
 
 #ifdef MVD_PEXT1_SERVERSIDEWEAPON
 		SV_ServerSideWeaponLogic_PostPostThink(sv_client, &ssw);

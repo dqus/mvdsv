@@ -62,6 +62,8 @@ cvar_t sv_mintic;
 cvar_t sv_maxtic;
 cvar_t sv_maxfps;
 
+qbool PR_GameIsNetQuake(void) { return false; }
+
 void SV_Error(char *error, ...)
 {
 	(void)error;
