@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #include "nq_messages.h"
+#include "nq_compat.h"
 
 static tokenizecontext_t pr1_tokencontext;
 
@@ -197,19 +198,7 @@ ok:
 	}
 	else if (pr_nqprogs)
 	{
-		// hacks to make NQ progs happy
-		if (!strcmp(PR1_GetString(e->v->model), "maps/b_explob.bsp"))
-		{
-			VectorClear (e->v->mins);
-			VectorSet (e->v->maxs, 32, 32, 64);
-		}
-		else
-		{
-			// FTE does this, so we do, too; I'm not sure if it makes a difference
-			VectorSet (e->v->mins, -16, -16, -16);
-			VectorSet (e->v->maxs, 16, 16, 16);
-		}
-		VectorSubtract (e->v->maxs, e->v->mins, e->v->size);
+		NQ_ApplyModelBounds(e, PR1_GetString(e->v->model));
 		SV_LinkEdict (e, false);
 	}
 }
@@ -883,9 +872,8 @@ void PF_localcmd (void)
 
 	str = G_STRING(OFS_PARM0);
 
-	if (pr_nqprogs && !strcmp(str, "restart\n"))
+	if (pr_nqprogs && NQ_QueueLocalCommand(str))
 	{
-		Cbuf_AddText (va("map %s\n", sv.mapname));
 		return;
 	}
 
@@ -1155,12 +1143,9 @@ void PF_cvar (void)
 		return;
 	}
 
-	if (pr_nqprogs && !pr_globals[35]/* deathmatch */
-		&& (!strcmp(str, "timelimit") || !strcmp(str, "samelevel"))
-	)
-	{
-		// workaround for NQ progs bug: timelimit and samelevel are checked in SP/coop
-		G_FLOAT(OFS_RETURN) = 0.0;
+	float override;
+	if (pr_nqprogs && NQ_CvarOverride(str, pr_globals[35] /* PR1 deathmatch */, &override)) {
+		G_FLOAT(OFS_RETURN) = override;
 		return;
 	}
 

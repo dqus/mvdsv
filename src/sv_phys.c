@@ -24,6 +24,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qwsvdef.h"
 #include "game_compat.h"
 #include "nq_messages.h"
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#endif
 
 /*
 
@@ -890,6 +893,9 @@ void SV_RunEntity (edict_t *ent)
 */
 void SV_RunNQNewmis (void)
 {
+#if defined(QCX_TESTS)
+	QCX_TestObserverNewMissiles(1U);
+#endif
 	edict_t	*ent;
 	double save_frametime;
 	int i, pl;
@@ -927,8 +933,12 @@ void SV_RunNewmis (void)
 	edict_t	*ent;
 	double save_frametime;
 
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake()) {
 		return;
+	}
+#if defined(QCX_TESTS)
+	QCX_TestObserverNewMissiles(0U);
+#endif
 
 	if (!pr_global_struct->newmis)
 		return;
