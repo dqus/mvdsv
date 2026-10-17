@@ -341,8 +341,8 @@ foreach(required IN ITEMS
 endforeach()
 
 foreach(required IN ITEMS
-	"QCMS V1 saves are unsupported"
-	"QCX_SaveIsV1Image")
+	"QCMS V1/V2 saves are unsupported"
+	"QCX_SaveIsLegacyImage")
 	string(FIND "${save_source}" "${required}" position)
 	if(position EQUAL -1)
 		message(FATAL_ERROR "src/qcx/save.c missing QCMS V1 diagnostic: ${required}")

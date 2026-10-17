@@ -89,6 +89,7 @@ typedef struct qcx_save_metadata_s {
 	uint32_t map_bsp_checksum;
 	uint32_t entity_capacity;
 	uint32_t client_slot_capacity;
+	uint32_t compatibility_profile;
 } qcx_save_metadata_t;
 
 typedef enum qcx_save_role_e {
