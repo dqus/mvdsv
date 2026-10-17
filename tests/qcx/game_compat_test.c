@@ -16,6 +16,7 @@ static jmp_buf load_error;
 static unsigned close_calls;
 static unsigned init_calls;
 static uint32_t fixture_profile;
+static uint32_t prepared_profile;
 static qcx_plugin_status_t fixture_status;
 static qcx_game_api_v1_t fixture_game;
 
@@ -33,6 +34,8 @@ void QCX_BindMovementServices(qcx_host_api_v1_t *host) { (void)host; }
 void QCX_BindNetworkServices(qcx_host_api_v1_t *host) { (void)host; }
 void QCX_ClearGlobals(void) {}
 void QCX_ClearEntities(void) {}
+qbool QCX_PreparedGameProfileMatches(uint32_t profile)
+{ return prepared_profile == 0U || prepared_profile == profile; }
 
 static qcx_guest_address_t fixture_init(void *context, int32_t time, uint32_t seed)
 {
@@ -143,6 +146,17 @@ int main(void)
 	assert(!QCX_Active() && QCX_GameCompatibility() == 0U);
 	load_profile(QCX_GAME_PROFILE_QUAKEWORLD);
 	QCX_UnloadProgs();
+	prepared_profile = QCX_GAME_PROFILE_NETQUAKE;
+	fixture_profile = QCX_GAME_PROFILE_QUAKEWORLD;
+	const unsigned closes_before_mismatch = close_calls;
+	if (setjmp(load_error) == 0) {
+		QCX_LoadProgs(QCX_TRANSPORT_NATIVE);
+		assert(!"fresh startup accepted artifact conflicting with prepared save");
+	}
+	assert(close_calls == closes_before_mismatch + 1U);
+	assert(QCX_GameCompatibility() == 0U && !QCX_Active());
+	assert(prepared_profile == QCX_GAME_PROFILE_NETQUAKE && init_calls == 0U);
+	prepared_profile = 0U;
 	assert(init_calls == 0U && memcmp(&globals, &original, sizeof(globals)) == 0);
 	assert(pr_global_struct == &globals && progs == NULL);
 	return 0;

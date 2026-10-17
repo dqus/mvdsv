@@ -21,6 +21,7 @@ typedef struct qcx_restore_plan_s {
 qbool QCX_SaveGame(const char *name);
 qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_size);
 qbool QCX_HasPreparedLoadGame(void);
+qbool QCX_PreparedGameProfileMatches(uint32_t profile);
 /* After successful preflight and old-world teardown, before guest load/init:
  * apply saved mode cvars and install indexed resource names. */
 qbool QCX_PrepareLoadStartup(void);

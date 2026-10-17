@@ -25,6 +25,7 @@ from qc2cpp_acceptance import (
     prepare_game_directory,
     server_command,
     wait_events,
+    wait_restore_session,
 )
 
 
@@ -147,6 +148,28 @@ class ProcessRunnerTests(unittest.TestCase):
                         process, lambda events: True,
                         timeout=0.2, description="waiting for ready",
                     )
+            finally:
+                process.close()
+
+    def test_wait_restore_session_uses_its_overall_deadline_during_map_load(self):
+        command = (
+            "import sys, time\n"
+            "for line in sys.stdin:\n"
+            "    if line.strip() == 'quit':\n"
+            "        break\n"
+            "    time.sleep(1.2)\n"
+            "    print('{\"qc2cpp_test_restore_session\":{\"waiting\":true}}', flush=True)\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            process = RunningProcess([sys.executable, "-c", command],
+                                     pathlib.Path(directory) / "server.log")
+            try:
+                observation = wait_restore_session(process, lambda session: session["waiting"],
+                    timeout=4, description="waiting for restored map")
+                self.assertTrue(observation["waiting"])
+                with self.assertRaisesRegex(ProcessFailure, "timed out.*qc2cpp_test_restore_session"):
+                    wait_restore_session(process, lambda session: True,
+                        timeout=0.1, description="bounded slow response")
             finally:
                 process.close()
 

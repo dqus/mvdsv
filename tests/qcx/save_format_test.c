@@ -8,7 +8,7 @@
 
 enum {
 	qcms_version_v1 = 1,
-	qcms_version_v2 = 2,
+	qcms_version_v3 = 3,
 	metadata_section = 1,
 	engine_section = 2,
 	roster_section = 3,
@@ -25,7 +25,8 @@ typedef struct save_bytes_s {
 	uint32_t size;
 } save_bytes_t;
 
-typedef struct v2_offsets_s {
+typedef struct v3_offsets_s {
+	uint32_t compatibility_profile;
 	uint32_t world_entity_flags;
 	uint32_t client_slot_capacity;
 	uint32_t player_entity_flags;
@@ -40,7 +41,7 @@ typedef struct v2_offsets_s {
 	uint32_t roster_section_id;
 	uint32_t roster_payload_size;
 	uint32_t second_player_entity_flags;
-} v2_offsets_t;
+} v3_offsets_t;
 
 static void append_bytes(save_bytes_t *out, const void *bytes, uint32_t size)
 {
@@ -92,7 +93,7 @@ static void append_section(save_bytes_t *out, uint32_t id, const save_bytes_t *s
 	append_bytes(out, section->bytes, section->size);
 }
 
-static void append_metadata_v2(save_bytes_t *metadata, v2_offsets_t *offsets)
+static void append_metadata_v3(save_bytes_t *metadata, v3_offsets_t *offsets)
 {
 	append_string(metadata, "game");
 	append_string(metadata, "e1m1");
@@ -100,9 +101,11 @@ static void append_metadata_v2(save_bytes_t *metadata, v2_offsets_t *offsets)
 	append_u32(metadata, fixture_entity_capacity);
 	offsets->client_slot_capacity = metadata->size;
 	append_u32(metadata, fixture_client_slot_capacity);
+	offsets->compatibility_profile = metadata->size;
+	append_u32(metadata, 1U); /* QuakeWorld artifact, not an inferred default. */
 }
 
-static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
+static void append_engine_v3(save_bytes_t *engine, v3_offsets_t *offsets,
 	uint32_t lightstyle_count, const char *model, const char *sound)
 {
 	uint32_t entity;
@@ -136,7 +139,7 @@ static void append_engine_v2(save_bytes_t *engine, v2_offsets_t *offsets,
 	append_f32(engine, 2.0f); /* teamplay */
 }
 
-static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
+static void append_roster_v1(save_bytes_t *roster, v3_offsets_t *offsets,
 	const char *team)
 {
 	uint32_t parm;
@@ -159,7 +162,7 @@ static void append_roster_v1(save_bytes_t *roster, v2_offsets_t *offsets,
 	}
 }
 
-static save_bytes_t make_v2_with_engine(const char *team, v2_offsets_t *offsets,
+static save_bytes_t make_v3_with_engine(const char *team, v3_offsets_t *offsets,
 	uint32_t lightstyle_count, const char *model, const char *sound)
 {
 	save_bytes_t out = {0};
@@ -171,12 +174,12 @@ static save_bytes_t make_v2_with_engine(const char *team, v2_offsets_t *offsets,
 	uint32_t engine_payload;
 	uint32_t roster_payload;
 	memset(offsets, 0, sizeof(*offsets));
-	append_metadata_v2(&metadata, offsets);
-	append_engine_v2(&engine, offsets, lightstyle_count, model, sound);
+	append_metadata_v3(&metadata, offsets);
+	append_engine_v3(&engine, offsets, lightstyle_count, model, sound);
 	append_roster_v1(&roster, offsets, team);
 	append_bytes(&guest, "QC", 2);
 	append_bytes(&out, "QCMS", 4);
-	append_u32(&out, qcms_version_v2);
+	append_u32(&out, qcms_version_v3);
 	append_section(&out, metadata_section, &metadata, &metadata_payload);
 	offsets->second_section_id = out.size;
 	append_section(&out, engine_section, &engine, &engine_payload);
@@ -184,6 +187,7 @@ static save_bytes_t make_v2_with_engine(const char *team, v2_offsets_t *offsets,
 	append_section(&out, roster_section, &roster, &roster_payload);
 	append_section(&out, guest_section, &guest, NULL);
 	offsets->client_slot_capacity += metadata_payload;
+	offsets->compatibility_profile += metadata_payload;
 	offsets->world_entity_flags += engine_payload;
 	offsets->player_entity_flags += engine_payload;
 	offsets->saved_slot += roster_payload;
@@ -198,9 +202,9 @@ static save_bytes_t make_v2_with_engine(const char *team, v2_offsets_t *offsets,
 	return out;
 }
 
-static save_bytes_t make_valid_v2(const char *team, v2_offsets_t *offsets)
+static save_bytes_t make_valid_v3(const char *team, v3_offsets_t *offsets)
 {
-	return make_v2_with_engine(team, offsets, 64U, "M:1:progs/player.mdl",
+	return make_v3_with_engine(team, offsets, 64U, "M:1:progs/player.mdl",
 		"S:1:misc/menu.wav");
 }
 
@@ -216,7 +220,7 @@ static void append_roster_record(save_bytes_t *record, uint32_t saved_slot,
 	for (parm = 0U; parm < 16U; ++parm) append_f32(record, (float)parm);
 }
 
-static void append_second_roster_record(save_bytes_t *save, const v2_offsets_t *offsets,
+static void append_second_roster_record(save_bytes_t *save, const v3_offsets_t *offsets,
 	uint32_t saved_slot, const char *name)
 {
 	save_bytes_t record = {0};
@@ -272,10 +276,52 @@ static void require_rejected(const uint8_t *bytes, uint32_t size)
 	assert(image == NULL);
 }
 
-static void test_parses_and_reencodes_v2_with_a_roster(void)
+static void test_compatibility_profile_codec(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
+	for (uint32_t profile = 1U; profile <= 2U; ++profile) {
+		save_bytes_t valid = input;
+		overwrite_u32(&valid, offsets.compatibility_profile, profile);
+		qcx_save_image_t *image = NULL;
+		uint8_t *encoded = NULL;
+		uint32_t size = 0;
+		assert(QCX_SaveParse(valid.bytes, valid.size, &image) == QCX_PLUGIN_OK);
+		assert(image->metadata.compatibility_profile == profile);
+		assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+		assert(size == valid.size && memcmp(encoded, valid.bytes, size) == 0);
+		free(encoded);
+		QCX_SaveImageFree(image);
+	}
+	const uint32_t invalid[] = {0U, 3U, UINT32_MAX};
+	for (unsigned index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+		save_bytes_t bad = input;
+		overwrite_u32(&bad, offsets.compatibility_profile, invalid[index]);
+		require_rejected(bad.bytes, bad.size);
+	}
+	/* A complete old V2 container, not merely a truncated version header. */
+	save_bytes_t old = input;
+	memmove(old.bytes + offsets.compatibility_profile,
+		old.bytes + offsets.compatibility_profile + 4U,
+		old.size - offsets.compatibility_profile - 4U);
+	old.size -= 4U;
+	overwrite_u32(&old, 4U, 2U);
+	overwrite_u32(&old, 12U, offsets.second_section_id - 16U - 4U);
+	require_rejected(old.bytes, old.size);
+	/* Framing remains complete, but the metadata profile has only three bytes. */
+	save_bytes_t short_profile = input;
+	memmove(short_profile.bytes + offsets.compatibility_profile + 3U,
+		short_profile.bytes + offsets.compatibility_profile + 4U,
+		short_profile.size - offsets.compatibility_profile - 4U);
+	--short_profile.size;
+	overwrite_u32(&short_profile, 12U, offsets.second_section_id - 16U - 1U);
+	require_rejected(short_profile.bytes, short_profile.size);
+}
+
+static void test_parses_and_reencodes_v3_with_a_roster(void)
+{
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *round_trip = NULL;
 	uint8_t *encoded = NULL;
@@ -315,8 +361,8 @@ static void test_parses_and_reencodes_v2_with_a_roster(void)
 
 static void test_accepts_an_empty_roster_team(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("", &offsets);
 	qcx_save_image_t *image = NULL;
 	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
 	QCX_SaveImageFree(image);
@@ -328,8 +374,8 @@ static void test_extended_sound_precaches_round_trip(void)
 		"S:4095:misc/menu.wav"};
 	const uint32_t slots[] = {255U, 256U, 4095U};
 	for (uint32_t index = 0U; index < 3U; ++index) {
-		v2_offsets_t offsets;
-		const save_bytes_t input = make_v2_with_engine("red", &offsets, 64U,
+		v3_offsets_t offsets;
+		const save_bytes_t input = make_v3_with_engine("red", &offsets, 64U,
 			"M:1:progs/player.mdl", sounds[index]);
 		qcx_save_image_t *image = NULL;
 		uint8_t *encoded = NULL;
@@ -345,8 +391,8 @@ static void test_extended_sound_precaches_round_trip(void)
 
 static void test_full_extended_precache_catalog_round_trip(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *restored = NULL;
 	uint8_t *encoded = NULL;
@@ -378,8 +424,8 @@ static void test_full_extended_precache_catalog_round_trip(void)
 
 static void test_lightstyles_round_trip_as_text_not_resource_names(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *restored = NULL;
 	uint8_t *encoded = NULL;
@@ -406,13 +452,13 @@ static void test_lightstyles_round_trip_as_text_not_resource_names(void)
 
 static void test_lightstyle_wire_text_rejects_nul_and_oversize(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	/* The engine payload starts with version/time/serverflags/style count. */
 	const uint32_t first_style_length = offsets.second_section_id + 8U + 20U;
 	input.bytes[first_style_length + 4U] = '\0';
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	/* Keep the rest of the wire image valid: replace the original one-byte
 	 * style with 256 nonzero bytes and grow the engine section accordingly. */
 	const uint32_t first_style_bytes = first_style_length + 4U;
@@ -436,37 +482,37 @@ static void test_rejects_a_complete_v1_container(void)
 
 static void test_rejects_wrong_section_order(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.second_section_id, roster_section);
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_invalid_client_slot_capacity(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.client_slot_capacity, 0U);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.client_slot_capacity, fixture_entity_capacity);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.client_slot_capacity, QCX_SAVE_MAX_CLIENTS + 1U);
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_duplicate_slots_and_canonical_names(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	append_second_roster_record(&input, &offsets, 0U, "Bob");
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.second_player_entity_flags, 1U);
 	append_second_roster_record(&input, &offsets, 1U, "alice");
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.second_player_entity_flags, 1U);
 	append_second_roster_record(&input, &offsets, 1U, "alice");
 	input.bytes[offsets.name_bytes] |= 0x80U;
@@ -483,58 +529,58 @@ static void test_compares_names_like_quake(void)
 
 static void test_rejects_a_roster_slot_outside_its_bounds(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.saved_slot, fixture_client_slot_capacity);
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_a_roster_player_without_an_active_entity(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.player_entity_flags, 2U);
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_invalid_roster_record_values(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.spawned, 2U);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.role, 2U);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.name_length, 0U);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	{
 		const float nan_value = NAN;
 		memcpy(input.bytes + offsets.spawn_parm, &nan_value, sizeof(nan_value));
 	}
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	input.bytes[offsets.name_bytes] = 0x80U;
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	input.bytes[offsets.name_bytes + 1U] = '\t';
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_trailing_bytes(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	save_bytes_t input = make_valid_v3("red", &offsets);
 	input.bytes[input.size++] = 0U;
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_rejects_engine_errors_during_initial_parse(void)
 {
-	v2_offsets_t offsets;
-	save_bytes_t input = make_v2_with_engine("red", &offsets, 0U,
+	v3_offsets_t offsets;
+	save_bytes_t input = make_v3_with_engine("red", &offsets, 0U,
 		"M:1:progs/player.mdl", "S:1:misc/menu.wav");
 	require_rejected(input.bytes, input.size);
 	const char *invalid_resources[] = {
@@ -542,25 +588,25 @@ static void test_rejects_engine_errors_during_initial_parse(void)
 		"M:4096:progs/player.mdl", "S:4096:misc/menu.wav", "M:1:"
 	};
 	for (uint32_t index = 0U; index < sizeof(invalid_resources) / sizeof(invalid_resources[0]); ++index) {
-		input = make_v2_with_engine("red", &offsets, 64U, invalid_resources[index],
+		input = make_v3_with_engine("red", &offsets, 64U, invalid_resources[index],
 			"S:1:misc/menu.wav");
 		require_rejected(input.bytes, input.size);
 	}
-	input = make_v2_with_engine("red", &offsets, 64U,
+	input = make_v3_with_engine("red", &offsets, 64U,
 		"M:1:progs/player.mdl", "M:1:progs/other.mdl");
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.world_entity_flags, 2U);
 	require_rejected(input.bytes, input.size);
-	input = make_valid_v2("red", &offsets);
+	input = make_valid_v3("red", &offsets);
 	overwrite_u32(&input, offsets.second_player_entity_flags + 24U, 2U);
 	require_rejected(input.bytes, input.size);
 }
 
 static void test_encode_validates_constructed_engine_state(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	uint8_t *encoded = NULL;
 	uint32_t encoded_size = 0U;
@@ -573,8 +619,8 @@ static void test_encode_validates_constructed_engine_state(void)
 
 static void test_rejects_truncated_engine_and_other_sections(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	for (uint32_t size = 0U; size < input.size; ++size) {
 		require_rejected(input.bytes, size);
 	}
@@ -582,8 +628,8 @@ static void test_rejects_truncated_engine_and_other_sections(void)
 
 static void test_static_world_codec_and_bounds(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *restored = NULL;
 	uint8_t *encoded = NULL;
@@ -658,8 +704,8 @@ static void test_static_world_codec_and_bounds(void)
 
 static void test_engine_render_metadata_codec(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *restored = NULL;
 	uint8_t *encoded = NULL;
@@ -702,8 +748,8 @@ static void test_engine_render_metadata_codec(void)
 
 static void test_game_mode_codec_and_validation(void)
 {
-	v2_offsets_t offsets;
-	const save_bytes_t input = make_valid_v2("red", &offsets);
+	v3_offsets_t offsets;
+	const save_bytes_t input = make_valid_v3("red", &offsets);
 	qcx_save_image_t *image = NULL;
 	qcx_save_image_t *restored = NULL;
 	uint8_t *encoded = NULL;
@@ -749,13 +795,14 @@ int main(void)
 {
 	test_extended_sound_precaches_round_trip();
 	test_full_extended_precache_catalog_round_trip();
+	test_compatibility_profile_codec();
 	test_game_mode_codec_and_validation();
 	test_static_world_codec_and_bounds();
 	test_engine_render_metadata_codec();
 	test_lightstyles_round_trip_as_text_not_resource_names();
 	test_lightstyle_wire_text_rejects_nul_and_oversize();
 	test_rejects_engine_errors_during_initial_parse();
-	test_parses_and_reencodes_v2_with_a_roster();
+	test_parses_and_reencodes_v3_with_a_roster();
 	test_accepts_an_empty_roster_team();
 	test_rejects_a_complete_v1_container();
 	test_rejects_wrong_section_order();

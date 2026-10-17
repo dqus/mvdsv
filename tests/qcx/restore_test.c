@@ -56,12 +56,17 @@ static uint32_t flush_fs_calls;
 static qcx_restore_status_t guest_validation_status;
 static jmp_buf restore_error;
 static qbool expect_restore_error;
+static uint32_t active_profile = QCX_GAME_PROFILE_QUAKEWORLD;
+static unsigned session_installs;
+
+uint32_t QCX_GameCompatibility(void) { return active_profile; }
 
 qbool QCX_RestoreSessionBlocksSave(void) { return false; }
 qbool QCX_RestoreSessionInstall(const qcx_save_image_t *image, double monotonic_now)
 {
 	(void)image;
 	(void)monotonic_now;
+	++session_installs;
 	return true;
 }
 double Sys_DoubleTime(void) { return 100.0; }
@@ -155,6 +160,7 @@ static qcx_save_image_t make_valid_image(uint32_t world_flags, qbool restored_cl
 	image.metadata.map_bsp_checksum = UINT32_C(0x12345678);
 	image.metadata.entity_capacity = test_entity_capacity;
 	image.metadata.client_slot_capacity = 3U;
+	image.metadata.compatibility_profile = active_profile;
 	image.roster_count = restored_client ? 1U : 0U;
 	if (restored_client) {
 		image.roster[0].saved_slot = 0U;
@@ -193,6 +199,7 @@ static void reset_live_engine(void)
 	expected_validation_selection = 1U;
 	entity_capacity = test_entity_capacity;
 	create_path_calls = 0U;
+	session_installs = 0U;
 	flush_fs_calls = 0U;
 	sv.max_edicts = test_entity_capacity;
 	sv.time = 7.0;
@@ -275,7 +282,6 @@ static void test_signon_encoding_mismatch_rejects_before_restore(void)
 	assert(sv.time == 7.0);
 }
 
-#ifdef FTE_PEXT_FLOATCOORDS
 static void write_preflight_image(const char *directory, const char *name,
 	const qcx_save_image_t *image)
 {
@@ -291,6 +297,47 @@ static void write_preflight_image(const char *directory, const char *name,
 	free(bytes);
 }
 
+static void test_profile_mismatch_retains_world_and_prepared_image(const char *directory)
+{
+	for (uint32_t profile = 1U; profile <= 2U; ++profile) {
+		reset_live_engine();
+		active_profile = profile;
+		strcpy(fs_gamedir, directory);
+		char map_name[QCX_SAVE_NAME_CAPACITY] = "unchanged";
+		qcx_save_image_t prior = make_valid_image(true, false);
+		write_preflight_image(directory, "profile-prior", &prior);
+		assert(QCX_PrepareLoadGame("profile-prior", map_name, sizeof(map_name)));
+		assert(QCX_PreparedGameProfileMatches(profile));
+		assert(!QCX_PreparedGameProfileMatches(3U - profile));
+		qcx_save_image_t other = make_valid_image(true, true);
+		other.metadata.compatibility_profile = 3U - profile;
+		other.engine.time = 91.0;
+		write_preflight_image(directory, "profile-other", &other);
+		strcpy(map_name, "unchanged");
+		deathmatch.value = 4.0f;
+		coop.value = 1.0f;
+		teamplay.value = 2.0f;
+		assert(!QCX_PrepareLoadGame("profile-other", map_name, sizeof(map_name)));
+		assert(strcmp(map_name, "unchanged") == 0);
+		assert(QCX_PreparedGameProfileMatches(profile));
+		assert(!QCX_PreparedGameProfileMatches(3U - profile));
+		assert(guest_validation_calls == 0U && guest_restore_calls == 0U);
+		assert(selection_calls == 0U && link_calls == 0U && session_installs == 0U);
+		assert(sv.time == 7.0 && strcmp(sv.mapname, "e1m1") == 0);
+		assert(deathmatch.value == 4 && coop.value == 1 && teamplay.value == 2);
+		qcx_restore_plan_t plan = {0};
+		assert(QCX_PrepareRestore(&other, QCX_RESTORE_RESOURCES_EXACT, &plan)
+			== QCX_RESTORE_ENTITY_SET_MISMATCH);
+		assert_empty_plan(&plan);
+		assert(guest_validation_calls == 0U && session_installs == 0U);
+		assert(QCX_CommitPreparedLoadGame());
+		assert(sv.time == 42.5); /* Still the original prepared save. */
+		assert(QCX_PreparedGameProfileMatches(3U - profile)); /* No prepared image. */
+	}
+	active_profile = QCX_GAME_PROFILE_QUAKEWORLD;
+}
+
+#ifdef FTE_PEXT_FLOATCOORDS
 static void test_preflight_uses_next_map_encoding_and_retains_prepared_load(
 	const char *directory, uint32_t saved_coord_bytes)
 {
@@ -782,6 +829,7 @@ static void test_invalid_mode_does_not_mutate_current_world(void)
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
+	test_profile_mismatch_retains_world_and_prepared_image(argv[1]);
 	test_game_mode_round_trip_keeps_float_precision();
 	test_invalid_mode_does_not_mutate_current_world();
 #ifdef FTE_PEXT_FLOATCOORDS
