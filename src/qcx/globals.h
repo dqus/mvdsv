@@ -6,6 +6,7 @@
 
 globalvars_t *QCX_Globals(void);
 int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay);
+float QCX_GameDeathmatch(void);
 void QCX_ClearGlobals(void);
 int QCX_SetMapName(const char *mapname);
 

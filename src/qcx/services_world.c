@@ -1,6 +1,9 @@
 #include "qwsvdef.h"
 
 #include "progs.h"
+#include "game_compat.h"
+#include "nq_compat.h"
+#include "qcx/globals.h"
 #include "qcx/entities.h"
 #include "qcx/service_support.h"
 #include "qcx/services.h"
@@ -26,6 +29,10 @@ static void QCX_SetModel(void *context, qcx_entity_id_t slot, const uint8_t *nam
 	edict_t *const entity = QCX_RequireServiceEdict(slot, "entity");
 	QCX_CopyText(name, name_size, local, sizeof(local), "model");
 	PF2_setmodel(entity, local);
+	if (PR_GameIsNetQuake() && local[0] != '*') {
+		NQ_ApplyModelBounds(entity, local);
+		SV_LinkEdict(entity, false);
+	}
 }
 
 static void QCX_SetSize(void *context, qcx_entity_id_t slot, const float mins[3],
@@ -169,6 +176,13 @@ static float QCX_Cvar(void *context, const uint8_t *name, qcx_byte_count_t name_
 	QCX_ObserveGameplayImport(context);
 	char local[MAX_QPATH];
 	QCX_CopyText(name, name_size, local, sizeof(local), "cvar");
+	if (PR_GameIsNetQuake() && !strcasecmp(local, "pr_checkextension")) {
+		return 1.0f;
+	}
+	float override;
+	if (PR_GameIsNetQuake() && NQ_CvarOverride(local, QCX_GameDeathmatch(), &override)) {
+		return override;
+	}
 	return Cvar_Value(local);
 }
 
@@ -191,6 +205,9 @@ static void QCX_LocalCmd(void *context, const uint8_t *text, qcx_byte_count_t te
 	QCX_ObserveGameplayImport(context);
 	char local[MAXCMDBUF];
 	QCX_CopyText(text, text_size, local, sizeof(local), "localcmd");
+	if (PR_GameIsNetQuake() && NQ_QueueLocalCommand(local)) {
+		return;
+	}
 	Cbuf_AddText(local);
 }
 

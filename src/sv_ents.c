@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "game_compat.h"
 
 /* Convert existing typed baselines/statics without changing legacy storage. */
 void SV_RD_FromLegacy(rd_entity_state_t *to, const entity_state_t *from)
@@ -734,9 +735,9 @@ static void SV_EmitPacketEntities(client_t *client, packet_entities_t *to, sizeb
 static int TranslateEffects (edict_t *ent)
 {
 	int fx = (int)ent->v->effects;
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake())
 		fx &= ~EF_MUZZLEFLASH;
-	if (pr_nqprogs && (fx & EF_DIMLIGHT)) {
+	if (PR_GameIsNetQuake() && (fx & EF_DIMLIGHT)) {
 		if ((int)ent->v->items & IT_QUAD)
 			fx |= EF_BLUE;
 		if ((int)ent->v->items & IT_INVULNERABILITY)
@@ -1190,7 +1191,7 @@ qbool SV_EntityVisibleToClient (client_t* client, int e, byte* pvs)
 {
 	edict_t* ent = EDICT_NUM (e);
 
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake())
 	{
 		// don't send the player's model to himself
 		if (e < MAX_CLIENTS + 1 && svs.clients[e-1].state != cs_free)
@@ -1335,7 +1336,7 @@ void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder)
 		// from ZQuake unless using protocol extensions.
 		// max_edicts = min(sv.num_edicts, MAX_EDICTS);
 
-		for (e = (pr_nqprogs && !replacement) ? 1 : MAX_CLIENTS + 1, ent = EDICT_NUM(e); e < sv.num_edicts; e++, ent = NEXT_EDICT(ent))
+		for (e = (PR_GameIsNetQuake() && !replacement) ? 1 : MAX_CLIENTS + 1, ent = EDICT_NUM(e); e < sv.num_edicts; e++, ent = NEXT_EDICT(ent))
 		{
 			if (!SV_EntityVisibleToClient(client, e, pvs)) {
 				if (fofs_visibility) {
@@ -1453,7 +1454,7 @@ void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder)
 	}
 
 	// Translate NQ progs' EF_MUZZLEFLASH to svc_muzzleflash
-	if (pr_nqprogs)
+	if (PR_GameIsNetQuake())
 	{
 		for (e=1, ent=EDICT_NUM(e) ; e < sv.num_edicts ; e++, ent = NEXT_EDICT(ent))
 		{
@@ -1511,7 +1512,7 @@ void SV_SetVisibleEntitiesForBot (client_t* client)
 	}
 
 	// Other entities
-	for (e = pr_nqprogs ? 1 : MAX_CLIENTS + 1; e < sv.num_edicts; e++)
+	for (e = PR_GameIsNetQuake() ? 1 : MAX_CLIENTS + 1; e < sv.num_edicts; e++)
 	{
 		edict_t* ent = EDICT_NUM (e);
 
