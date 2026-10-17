@@ -9,6 +9,7 @@ option(MVDSV_QC2CPP_NATIVE "Enable the qc2cpp native game transport" OFF)
 option(MVDSV_QC2CPP_WASM "Enable the qc2cpp Wasm game transport" OFF)
 option(MVDSV_QC2CPP_TESTS "Build qc2cpp transport tests" OFF)
 option(USE_PR2 "Enable PR2 program dispatch" ON)
+option(MVDSV_NQPROGS "Enable existing NetQuake game compatibility" OFF)
 set(QC2CPP_COMPILER "" CACHE FILEPATH
 	"Optional qc2cpp compiler used by external generated-fixture tests")
 set(QC2CPP_CHECKER "" CACHE FILEPATH
@@ -72,6 +73,7 @@ set(SRC_COMMON
 	"${DIR_SRC}/crc.c"
 	"${DIR_SRC}/cvar.c"
 	"${DIR_SRC}/fs.c"
+	"${DIR_SRC}/game_compat.c"
 	"${DIR_SRC}/hash.c"
 	"${DIR_SRC}/mathlib.c"
 	"${DIR_SRC}/md4.c"
@@ -241,6 +243,9 @@ endif()
 
 # Set defines for the build
 target_compile_definitions(${PROJECT_NAME} PRIVATE SERVERONLY)
+if(MVDSV_NQPROGS)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE WITH_NQPROGS)
+endif()
 if(USE_PR2)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_PR2)
 endif()
