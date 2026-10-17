@@ -81,7 +81,7 @@ void MVD_MSG_WriteCoord(const float value) { (void)value; abort(); }
 static void reset_messages(void)
 {
 	SZ_Init(&sv.reliable_datagram, reliable, sizeof(reliable));
-	NQP_Reset();
+	NQ_ResetMessages();
 }
 
 static void check_bytes(const byte *expected, size_t count)
@@ -121,6 +121,12 @@ static void test_gunshot_and_reset(void)
 	write_byte(MSG_BROADCAST, 27); /* svc_killedmonster */
 	const byte killed[] = {27};
 	check_bytes(killed, sizeof(killed));
+	reset_messages();
+	/* Preserve PR1's exact float destination tests (QCX rejects fractions). */
+	G_FLOAT(OFS_PARM0) = 1.5f;
+	G_FLOAT(OFS_PARM1) = 27.0f;
+	PF_WriteByte();
+	check_bytes(killed, sizeof(killed));
 }
 
 static void test_destinations_unknown_and_incremental(void)
@@ -151,20 +157,18 @@ static void test_intermission_and_lightning(void)
 	check_bytes(intermission, sizeof(intermission));
 	reset_messages();
 	/* Build a complete NQ packet with real scalar encoders. */
-	MSG_WriteByte(&nqp_buf, 23);
-	MSG_WriteByte(&nqp_buf, 5); /* TE_LIGHTNING1 */
-	MSG_WriteShort(&nqp_buf, 257);
+	NQ_WriteByte(MSG_ALL, 23);
+	NQ_WriteByte(MSG_ALL, 5); /* TE_LIGHTNING1 */
+	NQ_WriteShort(MSG_ALL, 257);
 	for (int index = 1; index <= 6; ++index) {
-		MSG_WriteCoord(&nqp_buf, (float)index);
+		NQ_WriteCoord(MSG_ALL, (float)index);
 	}
-	NQP_Process();
 	const byte lightning[] = {23, 5, 1, 1, 8, 0, 16, 0, 24, 0, 32, 0, 40, 0, 48, 0};
 	check_bytes(lightning, sizeof(lightning));
 	reset_messages();
-	MSG_WriteByte(&nqp_buf, 3); /* NQ svc_updatestat -> QW long stat */
-	MSG_WriteChar(&nqp_buf, -1);
-	MSG_WriteLong(&nqp_buf, -123);
-	NQP_Process();
+	NQ_WriteByte(MSG_ALL, 3); /* NQ svc_updatestat -> QW long stat */
+	NQ_WriteChar(MSG_ALL, -1);
+	NQ_WriteLong(MSG_ALL, -123);
 	const byte stat[] = {38, 255, 133, 255, 255, 255};
 	check_bytes(stat, sizeof(stat));
 }

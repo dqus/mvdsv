@@ -9,6 +9,61 @@
 #include <string.h>
 
 #include "qwsvdef.h"
+#include "game_compat.h"
+#include "nq_messages.h"
+
+/* This fixture asserts QW routing; the common NQ implementation is covered by
+ * nq_messages_test.c. Any accidental NQ dispatch is an immediate failure. */
+qbool PR_GameIsNetQuake(void) { return false; }
+void NQ_WriteByte(int destination, int value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteChar(int destination, int value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteShort(int destination, int value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteLong(int destination, int value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteCoord(int destination, float value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteAngle(int destination, float value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteString(int destination, const char * value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+void NQ_WriteEntity(int destination, int value)
+{
+	(void)destination;
+	(void)value;
+	abort();
+}
+
 
 server_t sv;
 server_static_t svs;
