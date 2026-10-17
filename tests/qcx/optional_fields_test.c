@@ -76,6 +76,7 @@ static qcx_guest_address_t engine_fields(void *context)
 static const qcx_game_api_v1_t game = {
 	.abi_version = QCX_PLUGIN_ABI_VERSION_V1,
 	.struct_size = sizeof(game),
+	.compatibility_profile = QCX_GAME_PROFILE_QUAKEWORLD,
 	.memory_view = memory_view,
 	.engine_fields = engine_fields,
 };
