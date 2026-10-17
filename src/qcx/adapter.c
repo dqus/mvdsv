@@ -80,6 +80,12 @@ void QCX_LoadProgs(qcx_transport_kind_t transport_kind)
 		SV_Error("QCX NetQuake game requires MVDSV_NQPROGS support");
 	}
 #endif
+	if (!QCX_PreparedGameProfileMatches(QCX_GameCompatibility())) {
+		QCX_TransportClose(qcx_transport);
+		qcx_transport = NULL;
+		QCX_AdapterStateReset(&qcx_state);
+		SV_Error("QCX artifact compatibility does not match prepared save");
+	}
 }
 
 void QCX_InitProg(void)

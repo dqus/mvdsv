@@ -365,6 +365,7 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 		return QCX_RESTORE_MALFORMED_CHUNK;
 	}
 	if (image->metadata.entity_capacity != QCX_EntityCapacity()
+		|| image->metadata.compatibility_profile != QCX_GameCompatibility()
 		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| strcmp(image->metadata.map_name, sv.mapname) != 0
 		|| image->metadata.map_bsp_checksum != sv.map_checksum) {
@@ -580,6 +581,7 @@ qbool QCX_SaveGame(const char *name)
 	image.metadata.map_bsp_checksum = sv.map_checksum;
 	image.metadata.entity_capacity = entity_capacity;
 	image.metadata.client_slot_capacity = MAX_CLIENTS;
+	image.metadata.compatibility_profile = QCX_GameCompatibility();
 	image.guest_payload = guest;
 	if (QCX_SaveEncode(&image, &encoded, &encoded_size) != QCX_PLUGIN_OK) {
 		failure = "could not encode QCMS image";
@@ -648,10 +650,17 @@ qbool QCX_HasPreparedLoadGame(void)
 	return qcx_prepared_image != NULL;
 }
 
-static qbool QCX_SaveIsV1Image(const uint8_t *bytes, uint32_t size)
+qbool QCX_PreparedGameProfileMatches(uint32_t profile)
+{
+	return qcx_prepared_image == NULL
+		|| qcx_prepared_image->metadata.compatibility_profile == profile;
+}
+
+static qbool QCX_SaveIsLegacyImage(const uint8_t *bytes, uint32_t size)
 {
 	return bytes != NULL && size >= 8U && memcmp(bytes, "QCMS", 4U) == 0
-		&& bytes[4] == 1U && bytes[5] == 0U && bytes[6] == 0U && bytes[7] == 0U;
+		&& (bytes[4] == 1U || bytes[4] == 2U)
+		&& bytes[5] == 0U && bytes[6] == 0U && bytes[7] == 0U;
 }
 
 qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_size)
@@ -666,9 +675,17 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 	}
 	parse_status = QCX_SaveParse(bytes, size, &image);
 	if (parse_status != QCX_PLUGIN_OK) {
-		if (QCX_SaveIsV1Image(bytes, size)) {
-			Con_Printf("qc2cpp restore rejected: QCMS V1 saves are unsupported; create a new save.\n");
+		if (QCX_SaveIsLegacyImage(bytes, size)) {
+			Con_Printf("qc2cpp restore rejected: QCMS V1/V2 saves are unsupported; create a new save.\n");
 		}
+		QCX_SaveImageFree(image);
+		free(bytes);
+		return false;
+	}
+	const uint32_t loaded_profile = QCX_GameCompatibility();
+	if (loaded_profile != 0U && loaded_profile != image->metadata.compatibility_profile) {
+		Con_Printf("qc2cpp restore compatibility mismatch: saved=%u, loaded=%u.\n",
+			image->metadata.compatibility_profile, loaded_profile);
 		QCX_SaveImageFree(image);
 		free(bytes);
 		return false;
