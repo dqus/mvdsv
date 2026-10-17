@@ -363,6 +363,7 @@ qcx_plugin_status_t qcx_game_plugin_query_v1(const qcx_host_api_v1_t *host,
 			QCX_PLUGIN_ABI_VERSION_V1,
 #endif
 		.struct_size = sizeof(*game),
+		.compatibility_profile = QCX_GAME_PROFILE_QUAKEWORLD,
 		.init = fixture_init, .shutdown = fixture_shutdown,
 		.engine_fields = fixture_engine_fields_address, .global_memory = fixture_global_memory_address,
 		.load_entities = fixture_load_entities, .start_frame = fixture_start_frame,

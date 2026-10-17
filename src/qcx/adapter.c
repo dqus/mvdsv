@@ -40,6 +40,12 @@ const qcx_game_api_v1_t *QCX_Game(void)
 	return qcx_transport == NULL ? NULL : QCX_TransportGame(qcx_transport);
 }
 
+uint32_t QCX_GameCompatibility(void)
+{
+	const qcx_game_api_v1_t *game = QCX_Game();
+	return game == NULL ? 0U : game->compatibility_profile;
+}
+
 qcx_transport_kind_t QCX_GameTransportKind(void)
 {
 	return QCX_TransportKind(qcx_transport);
@@ -62,9 +68,18 @@ void QCX_LoadProgs(qcx_transport_kind_t transport_kind)
 	const qcx_plugin_status_t status = QCX_TransportOpen(transport_kind,
 		fs_gamedir, sv_progsname.string, &qcx_host, &qcx_transport, &diagnostic);
 	if (status != QCX_PLUGIN_OK) {
+		QCX_AdapterStateReset(&qcx_state);
 		SV_Error("QCX %s transport failed to load %s: %.*s", QCX_TransportName(transport_kind),
 			sv_progsname.string, (int)diagnostic.message_size, diagnostic.message);
 	}
+#ifndef WITH_NQPROGS
+	if (QCX_GameCompatibility() == QCX_GAME_PROFILE_NETQUAKE) {
+		QCX_TransportClose(qcx_transport);
+		qcx_transport = NULL;
+		QCX_AdapterStateReset(&qcx_state);
+		SV_Error("QCX NetQuake game requires MVDSV_NQPROGS support");
+	}
+#endif
 }
 
 void QCX_InitProg(void)

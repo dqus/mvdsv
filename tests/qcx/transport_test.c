@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 	assert(transport != NULL);
 	assert(QCX_TransportKind(transport) == QCX_TRANSPORT_NATIVE);
 	assert(QCX_TransportGame(transport) != NULL);
+	assert(QCX_TransportGame(transport)->compatibility_profile == QCX_GAME_PROFILE_QUAKEWORLD);
 	QCX_TransportClose(transport);
 	assert(QCX_TransportKind(NULL) == QCX_TRANSPORT_NONE);
 
