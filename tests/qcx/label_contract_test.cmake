@@ -13,6 +13,7 @@ if(NOT ctest_result EQUAL 0)
 endif()
 
 set(expected_fast
+	qcx_nq_pr1_compat
 	qcx_naming
 	qcx_transport
 	qcx_adapter_state
