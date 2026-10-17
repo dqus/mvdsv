@@ -1162,8 +1162,17 @@ void PF_clear_strtbl(void);
 void PR_InitPatchTables (void)
 {
 	int i;
+	qbool nq_layout = pr_nqprogs && progs != NULL;
+#ifdef USE_PR2
+	nq_layout = nq_layout && sv_vm == NULL;
+#endif
+#ifdef QCX_ENABLED
+	nq_layout = nq_layout && !QCX_Active();
+#endif
 
-	if (pr_nqprogs)
+	/* Only PR1 bytecode has NQ offsets. Other backends use canonical layout,
+	 * even when stale PR1 detection or a QCX NQ profile is present. */
+	if (nq_layout)
 	{
 		memcpy (pr_globaloffsetpatch, pr_globaloffsetpatch_nq, sizeof(pr_globaloffsetpatch));
 		for (i = 0; i < 106; i++)

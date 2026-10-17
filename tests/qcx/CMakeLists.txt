@@ -1,3 +1,34 @@
+foreach(compat_variant IN ITEMS nq no_nq)
+	set(compat_target qcx_game_compat_${compat_variant}_test)
+	add_executable(${compat_target} game_compat_test.c
+		${PROJECT_SOURCE_DIR}/src/game_compat.c
+		${PROJECT_SOURCE_DIR}/src/qcx/adapter.c
+		${PROJECT_SOURCE_DIR}/src/qcx/adapter_state.c
+		${PROJECT_SOURCE_DIR}/src/pr_edict.c)
+	set_target_properties(${compat_target} PROPERTIES
+		C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+	target_include_directories(${compat_target} PRIVATE
+		${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+	target_compile_definitions(${compat_target} PRIVATE
+		QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+	if(compat_variant STREQUAL "nq")
+		target_compile_definitions(${compat_target} PRIVATE WITH_NQPROGS)
+		set(compat_test qcx_game_compat)
+	else()
+		set(compat_test qcx_game_compat_no_nq)
+	endif()
+	target_compile_options(${compat_target} PRIVATE
+		-UNDEBUG -ffunction-sections -fdata-sections)
+	if(APPLE)
+		target_link_options(${compat_target} PRIVATE -Wl,-dead_strip)
+	elseif(UNIX)
+		target_link_options(${compat_target} PRIVATE -Wl,--gc-sections)
+	endif()
+	target_link_libraries(${compat_target} PRIVATE Qc2cppHost::contract)
+	add_test(NAME ${compat_test} COMMAND ${compat_target})
+	set_tests_properties(${compat_test} PROPERTIES LABELS "qcx;fast")
+endforeach()
+
 add_executable(qcx_nq_pr1_compat_test nq_pr1_compat_test.c
 	${PROJECT_SOURCE_DIR}/src/common.c ${PROJECT_SOURCE_DIR}/src/bothtools.c)
 set_target_properties(qcx_nq_pr1_compat_test PROPERTIES

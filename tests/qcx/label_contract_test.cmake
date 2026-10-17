@@ -13,6 +13,8 @@ if(NOT ctest_result EQUAL 0)
 endif()
 
 set(expected_fast
+	qcx_game_compat
+	qcx_game_compat_no_nq
 	qcx_nq_pr1_compat
 	qcx_naming
 	qcx_transport

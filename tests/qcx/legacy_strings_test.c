@@ -38,6 +38,7 @@ static qcx_plugin_status_t fixture_memory_view(void *context,
 static const qcx_game_api_v1_t game = {
 	.abi_version = QCX_PLUGIN_ABI_VERSION_V1,
 	.struct_size = sizeof(game),
+	.compatibility_profile = QCX_GAME_PROFILE_QUAKEWORLD,
 	.memory_view = fixture_memory_view,
 };
 
