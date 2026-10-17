@@ -3,6 +3,7 @@
 
 import argparse
 import pathlib
+import struct
 import subprocess
 import tempfile
 import time
@@ -17,6 +18,8 @@ from qc2cpp_acceptance import (
     roster_client_command,
     server_command,
     wait_events,
+    observe_restore_session,
+    wait_restore_session,
 )
 from qc2cpp_process import RunningProcess
 from qwsp_monster_acceptance import (
@@ -226,6 +229,38 @@ def restore_qwsp_state(process, name, expected, *, context):
     return restored
 
 
+def assert_profile_mismatch_keeps_waiting_session(process, basedir, save_path):
+    image = bytearray(save_path.read_bytes())
+    if image[:8] != b"QCMS\x03\x00\x00\x00":
+        raise ProcessFailure("profile rejection test requires a current QCMS image")
+    section, size = struct.unpack_from("<II", image, 8)
+    if section != 1 or struct.unpack_from("<I", image, 16 + size - 4)[0] != 1:
+        raise ProcessFailure("QWSP save did not publish QuakeWorld metadata")
+    struct.pack_into("<I", image, 16 + size - 4, 2)  # Valid other profile.
+    (basedir / "qw" / "save" / "other-profile.sav").write_bytes(image)
+    session = observe_restore_session(process)
+    if not session["waiting"] or session["available"] == 0:
+        raise ProcessFailure(f"profile rejection did not start with a waiting roster: {session}")
+    snapshot = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=8)
+    events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+    modes = process.observe("qc2cpp_test_game_mode", "qc2cpp_test_game_mode", timeout=8)
+    process.send("load other-profile")
+    after = process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12)
+    after_session = observe_restore_session(process)
+    after_events = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+    after_modes = process.observe("qc2cpp_test_game_mode", "qc2cpp_test_game_mode", timeout=8)
+    if after_session != session or after_modes != modes:
+        raise ProcessFailure(f"profile mismatch changed roster/pause/mode: "
+                             f"{session} -> {after_session}; {modes} -> {after_modes}")
+    for key in ("map", "time", "globals_address"):
+        if after[key] != snapshot[key]:
+            raise ProcessFailure(f"profile mismatch changed live {key}: {snapshot} -> {after}")
+    for key in ("init_count", "normal_unpublish_count", "restore_replication_begin_count",
+                "restore_replication_complete_count"):
+        if after_events[key] != events[key]:
+            raise ProcessFailure(f"profile mismatch entered {key}: {events} -> {after_events}")
+
+
 def run_direct_suite(server, artifacts, assets, output, mode, client):
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qwr-{mode[0]}-", dir="/tmp"))
@@ -282,6 +317,20 @@ def run_direct_suite(server, artifacts, assets, output, mode, client):
             process.observe("qc2cpp_test_snapshot", "qc2cpp_test_snapshot", timeout=12), "e1m1")
         restore_qwsp_state(process, "qwsp-map", map_saved,
             context="map-change QWSP restore")
+
+        # Preserve a real nonempty restore wait across failed preflight.
+        _, profile_save = save_qwsp_state(process, basedir, "qwsp-profile")
+        before_close = process.observe("qc2cpp_test_events", "qc2cpp_test_events", timeout=8)
+        close_client(client_process)
+        client_process = None
+        wait_events(process, lambda events: events["client_disconnect_count"]
+                    > before_close["client_disconnect_count"], timeout=12,
+                    description="profile test client did not disconnect")
+        process.send("qcx_restore_wait_timeout 0\nload qwsp-profile")
+        wait_restore_session(process,
+            lambda session: session["waiting"] and session["available"] > 0,
+            timeout=12, description="profile test roster did not wait")
+        assert_profile_mismatch_keeps_waiting_session(process, basedir, profile_save)
     except ProcessFailure as error:
         raise ProcessFailure(f"{error}; server log preserved in {run_root}") from error
     finally:

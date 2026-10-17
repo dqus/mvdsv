@@ -7,7 +7,7 @@
 #include <string.h>
 
 enum {
-	QCX_SAVE_VERSION = 2,
+	QCX_SAVE_VERSION = 3,
 	QCX_SAVE_METADATA_SECTION = 1,
 	QCX_SAVE_ENGINE_SECTION = 2,
 	QCX_SAVE_ROSTER_SECTION = 3,
@@ -210,7 +210,9 @@ static bool QCX_SaveValidMetadata(const qcx_save_metadata_t *metadata,
 		|| metadata->entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY
 		|| metadata->client_slot_capacity == 0U
 		|| metadata->client_slot_capacity > QCX_SAVE_MAX_CLIENTS
-		|| metadata->client_slot_capacity >= metadata->entity_capacity) {
+		|| metadata->client_slot_capacity >= metadata->entity_capacity
+		|| (metadata->compatibility_profile != QCX_GAME_PROFILE_QUAKEWORLD
+			&& metadata->compatibility_profile != QCX_GAME_PROFILE_NETQUAKE)) {
 		return false;
 	}
 	for (uint32_t index = 0U; index < *game_size; ++index) {
@@ -237,6 +239,7 @@ static bool QCX_SaveParseMetadata(const uint8_t *bytes, uint32_t size,
 		|| !QCX_SaveReadU32(&reader, &metadata->map_bsp_checksum)
 		|| !QCX_SaveReadU32(&reader, &metadata->entity_capacity)
 		|| !QCX_SaveReadU32(&reader, &metadata->client_slot_capacity)
+		|| !QCX_SaveReadU32(&reader, &metadata->compatibility_profile)
 		|| reader.cursor != reader.end) {
 		return false;
 	}
@@ -740,7 +743,8 @@ static bool QCX_SaveWriteMetadata(qcx_save_writer_t *writer,
 		&& QCX_SaveWriteString(writer, metadata->map_name, map_size)
 		&& QCX_SaveWriteU32(writer, metadata->map_bsp_checksum)
 		&& QCX_SaveWriteU32(writer, metadata->entity_capacity)
-		&& QCX_SaveWriteU32(writer, metadata->client_slot_capacity);
+		&& QCX_SaveWriteU32(writer, metadata->client_slot_capacity)
+		&& QCX_SaveWriteU32(writer, metadata->compatibility_profile);
 }
 
 static bool QCX_SaveWriteRoster(qcx_save_writer_t *writer,
@@ -905,7 +909,7 @@ qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,
 		|| !QCX_SaveEngineSize(image, &engine_size)) {
 		return QCX_PLUGIN_BAD_ARGUMENT;
 	}
-	metadata_size = 4U + game_size + 4U + map_size + 12U;
+	metadata_size = 4U + game_size + 4U + map_size + 16U;
 	if (!QCX_SaveAddSize(&total_size, 8U) || !QCX_SaveAddSize(&total_size, metadata_size)
 		|| !QCX_SaveAddSize(&total_size, 8U)
 		|| !QCX_SaveAddSize(&total_size, engine_size)

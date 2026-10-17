@@ -241,7 +241,7 @@ def wait_restore_session(process, predicate, *, timeout, description):
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:
-        last = observe_restore_session(process, timeout=min(1, deadline - time.monotonic()))
+        last = observe_restore_session(process, timeout=deadline - time.monotonic())
         if predicate(last):
             return last
         time.sleep(0.05)

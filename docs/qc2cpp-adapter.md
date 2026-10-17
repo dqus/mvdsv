@@ -161,9 +161,13 @@ is rejected during startup; there is no compatibility copy fallback.
 
 ## Saves, failures, and verification
 
-QCMS V2 saves are backend-neutral: native and Wasm restore each other's saves
-when logical game, map, entity capacity, and engine-state identity match.
-QCMS does not convert legacy QuakeC saves, and QCMS V1 files are explicitly
+QCMS V3 saves are backend-neutral: native and Wasm restore each other's saves
+when logical game, compatibility profile (QW/NQ), map, entity capacity, and
+engine-state identity match. The profile comes from the game artifact; loading
+a save cannot change it. Profile mismatch is rejected before replacing the
+current map or restore session, and checked again before initializing an
+artifact for a prepared load.
+QCMS does not convert legacy QuakeC saves, and QCMS V1/V2 files are explicitly
 rejected: create a new save after upgrading.
 
 `qcx/save_format` owns the engine-section codec. Engine section version 5 stores
