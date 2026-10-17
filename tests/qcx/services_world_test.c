@@ -36,6 +36,14 @@ static unsigned int slot_lookups;
 static jmp_buf validation_error;
 static qbool expect_error;
 
+qbool PR_GameIsNetQuake(void) { return false; }
+float QCX_GameDeathmatch(void) { abort(); }
+void NQ_ApplyModelBounds(edict_t *edict, const char *model)
+{ (void)edict; (void)model; abort(); }
+qbool NQ_CvarOverride(const char *name, float mode, float *value)
+{ (void)name; (void)mode; (void)value; abort(); }
+qbool NQ_QueueLocalCommand(const char *text) { (void)text; abort(); }
+
 void SV_Error(char *error, ...)
 {
 	(void)error;

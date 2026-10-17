@@ -49,9 +49,55 @@ typedef struct qcx_test_observer_s {
 	uint32_t qwsp_monster_slot;
 	uint32_t qwsp_monster_think_dispatches;
 	float qwsp_monster_last_think_time;
+	uint32_t nq_prethink, nq_postthink, nq_waterjump, nq_missiles, qw_missiles;
+	uint32_t nq_state_mismatches;
 } qcx_test_observer_t;
 
 static qcx_test_observer_t observer;
+
+void QCX_TestObserverNqPreThink(edict_t *player, const float velocity[3], float teleport_time)
+{
+	++observer.nq_prethink;
+	if (memcmp(player->v->velocity, velocity, sizeof(vec3_t)) != 0
+		|| player->v->teleport_time != teleport_time) {
+		++observer.nq_state_mismatches;
+	}
+}
+
+void QCX_TestObserverNqPostThink(edict_t *player, const float velocity[3])
+{
+	++observer.nq_postthink;
+	if (memcmp(player->v->velocity, velocity, sizeof(vec3_t)) != 0) {
+		++observer.nq_state_mismatches;
+	}
+}
+
+void QCX_TestObserverNqWaterJump(edict_t *player, float waterjumptime)
+{
+	++observer.nq_waterjump;
+	if ((((int)player->v->flags & FL_WATERJUMP) != 0) != (waterjumptime != 0.0f)) {
+		++observer.nq_state_mismatches;
+	}
+}
+
+void QCX_TestObserverNewMissiles(uint32_t netquake)
+{
+	if (netquake != 0U) {
+		++observer.nq_missiles;
+	} else {
+		++observer.qw_missiles;
+	}
+}
+
+static void QCX_TestNqCompat_f(void)
+{
+	Con_Printf("{\"qc2cpp_test_nq_compat\":{\"profile\":%u,\"prethink\":%u,"
+		"\"postthink\":%u,\"waterjump\":%u,\"nq_missiles\":%u,"
+		"\"qw_missiles\":%u,\"mismatches\":%u}}\n",
+		QCX_GameCompatibility(), observer.nq_prethink, observer.nq_postthink,
+		observer.nq_waterjump, observer.nq_missiles, observer.qw_missiles,
+		observer.nq_state_mismatches);
+}
 static int forced_next_client_userid = -1;
 extern int sv_playermodel;
 static void QCX_TestReuseUserId_f(void);
@@ -283,6 +329,7 @@ static void QCX_TestReleaseClient_f(void)
 
 void QCX_TestObserverRegisterCommands(void)
 {
+	Cmd_AddCommand("qc2cpp_test_nq_compat", QCX_TestNqCompat_f);
 	Cmd_AddCommand("qc2cpp_test_snapshot", QCX_TestSnapshot_f);
 	Cmd_AddCommand("qc2cpp_test_events", QCX_TestEvents_f);
 	Cmd_AddCommand("qc2cpp_test_reuse_userid", QCX_TestReuseUserId_f);

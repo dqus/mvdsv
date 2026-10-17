@@ -80,6 +80,7 @@ set(SRC_COMMON
 	"${DIR_SRC}/net.c"
 	"${DIR_SRC}/net_chan.c"
 	"${DIR_SRC}/nq_messages.c"
+	"${DIR_SRC}/nq_compat.c"
 	"${DIR_SRC}/pmove.c"
 	"${DIR_SRC}/pmovetst.c"
 	"${DIR_SRC}/pr2_cmds.c"

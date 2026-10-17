@@ -14,6 +14,7 @@ static qcx_byte_count_t qcx_global_object_size;
 static globalvars_t *qcx_previous_global_struct;
 static float *qcx_previous_globals;
 static qbool qcx_globals_bound;
+static float *qcx_deathmatch;
 
 globalvars_t *QCX_Globals(void)
 {
@@ -69,7 +70,8 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 		return 0;
 	}
 	const qcx_engine_field_spec_t specs[] = {
-		{"deathmatch", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
+		{"deathmatch", "qc.f32", sizeof(float), _Alignof(float),
+			QCX_ENGINE_FIELD_HOST_READ | QCX_ENGINE_FIELD_HOST_WRITE},
 		{"coop", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
 		{"teamplay", "qc.f32", sizeof(float), _Alignof(float), QCX_ENGINE_FIELD_HOST_WRITE},
 	};
@@ -90,6 +92,7 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 		*coop_global = coop;
 	}
 	*teamplay_global = teamplay;
+	qcx_deathmatch = deathmatch_global;
 	if (!qcx_globals_bound) {
 		qcx_previous_global_struct = pr_global_struct;
 		qcx_previous_globals = pr_globals;
@@ -98,6 +101,14 @@ int QCX_ConfigureGlobals(float deathmatch, float coop, float teamplay)
 		qcx_globals_bound = true;
 	}
 	return 1;
+}
+
+float QCX_GameDeathmatch(void)
+{
+	if (!qcx_globals_bound || qcx_deathmatch == NULL) {
+		SV_Error("qc2cpp deathmatch global is not bound");
+	}
+	return *qcx_deathmatch;
 }
 
 void QCX_ClearGlobals(void)
@@ -110,6 +121,7 @@ void QCX_ClearGlobals(void)
 		qcx_globals_bound = false;
 	}
 	qcx_globals = NULL;
+	qcx_deathmatch = NULL;
 	qcx_globals_available = 0;
 	qcx_global_object_base = 0U;
 	qcx_global_object_size = 0U;
