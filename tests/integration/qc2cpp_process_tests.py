@@ -2,6 +2,7 @@
 """Unit tests for the bounded qc2cpp acceptance process runner."""
 
 import pathlib
+import subprocess
 import sys
 import tempfile
 import time
@@ -30,6 +31,19 @@ from qc2cpp_acceptance import (
 
 
 class ProcessRunnerTests(unittest.TestCase):
+    def test_input_identity_records_explicit_nq_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "input"
+            source.write_bytes(b"fixture")
+            output = root / "ids"
+            script = pathlib.Path(__file__).with_name("write_qc2cpp_input_ids.cmake")
+            result = subprocess.run(["cmake", f"-DOUTPUT={output}", f"-DCOMPILER={source}",
+                f"-DCHECKER={source}", f"-DMANIFEST={source}", "-DGAME_PROFILE=nq",
+                "-P", str(script)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("game_profile=nq\n", output.read_text())
+
     def test_missing_event_fails(self):
         with self.assertRaisesRegex(ProcessFailure, "missing event"):
             wait_for_events([], ["loaded"])

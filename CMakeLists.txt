@@ -18,6 +18,10 @@ set(QC2CPP_QW_MANIFEST "" CACHE FILEPATH
 	"Optional QW progs.src manifest used by external acceptance tests")
 set(QC2CPP_QWSP_MANIFEST "" CACHE FILEPATH
 	"Optional QW single-player manifest used by external acceptance tests")
+set(QC2CPP_ID1_MANIFEST "" CACHE FILEPATH
+	"Optional unchanged NetQuake id1 manifest used by external acceptance tests")
+set(QC2CPP_NQ_REFERENCE_SERVER "" CACHE FILEPATH "Retained pre-feature PR1 NQ reference server")
+set(QC2CPP_NQ_REFERENCE_PROGS "" CACHE FILEPATH "Same-source PR1 NQ reference progs.dat")
 set(QC2CPP_WASI_SDK_ROOT "" CACHE PATH
 	"WASI SDK root used to build the qc2cpp Wasm acceptance game")
 set(QC2CPP_ASSET_DIR "" CACHE PATH

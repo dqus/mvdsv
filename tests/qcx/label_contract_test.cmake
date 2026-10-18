@@ -62,6 +62,12 @@ set(expected_fast
 	qcx_label_contract)
 
 set(expected_integration
+	qc2cpp_nq_gameplay_native
+	qc2cpp_nq_gameplay_wasm
+	qc2cpp_nq_restore_native
+	qc2cpp_nq_restore_wasm
+	qc2cpp_nq_restore_native_wasm
+	qc2cpp_nq_restore_wasm_native
 	qcx_reentry_fixture
 	qc2cpp_optional_fields_native_build
 	qc2cpp_optional_fields_wasm_build
