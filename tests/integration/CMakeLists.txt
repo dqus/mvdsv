@@ -578,3 +578,112 @@ foreach(test_name IN ITEMS
 		set_tests_properties(${test_name} PROPERTIES LABELS "qcx;integration;external")
 	endif()
 endforeach()
+
+# Unchanged id1 is opt-in and always publishes NQ metadata. These child builds
+# are separate from QW/QWSP and never replace normal user launch artifacts.
+if(NOT "${QC2CPP_ID1_MANIFEST}" STREQUAL "")
+    if(NOT MVDSV_NQPROGS OR NOT EXISTS "${QC2CPP_ID1_MANIFEST}")
+        message(FATAL_ERROR "id1 acceptance requires MVDSV_NQPROGS and a valid QC2CPP_ID1_MANIFEST")
+    endif()
+    get_filename_component(nq_manifest "${QC2CPP_ID1_MANIFEST}" ABSOLUTE)
+    get_filename_component(nq_directory "${nq_manifest}" DIRECTORY)
+    get_filename_component(nq_qcc "${nq_directory}" DIRECTORY)
+    get_filename_component(nq_source_root "${nq_qcc}" DIRECTORY)
+    if(NOT nq_source_root STREQUAL qc2cpp_source_root)
+        message(FATAL_ERROR "QC2CPP_ID1_MANIFEST must belong to the same qc2cpp source tree")
+    endif()
+    get_filename_component(nq_compiler "${QC2CPP_COMPILER}" ABSOLUTE)
+    get_filename_component(nq_checker "${QC2CPP_CHECKER}" ABSOLUTE)
+    if(("${QC2CPP_NQ_REFERENCE_SERVER}" STREQUAL "" AND NOT "${QC2CPP_NQ_REFERENCE_PROGS}" STREQUAL "")
+            OR (NOT "${QC2CPP_NQ_REFERENCE_SERVER}" STREQUAL "" AND "${QC2CPP_NQ_REFERENCE_PROGS}" STREQUAL ""))
+        message(FATAL_ERROR "NQ reference server and progs must be configured together")
+    endif()
+    set(nq_root "${CMAKE_BINARY_DIR}/qc2cpp-acceptance")
+    set(nq_generated "${nq_root}/id1-generated")
+    file(GLOB nq_sources CONFIGURE_DEPENDS "${nq_directory}/*.qc")
+    file(GLOB_RECURSE nq_resources CONFIGURE_DEPENDS
+        "${nq_source_root}/runtime/*" "${nq_source_root}/tools/qc2cpp-check/*")
+    add_custom_command(OUTPUT "${nq_generated}/CMakeLists.txt"
+        COMMAND "${nq_compiler}" "${nq_manifest}" -o "${nq_generated}" --game-profile nq
+        DEPENDS "${nq_compiler}" "${nq_manifest}" ${nq_sources} ${nq_resources}
+            "${nq_source_root}/cmake/WasmToolchain.cmake"
+        VERBATIM)
+    set(nq_asset_targets)
+    set(nq_modes)
+    foreach(mode IN ITEMS native wasm)
+        string(TOUPPER "${mode}" upper_mode)
+        if(NOT MVDSV_QC2CPP_${upper_mode})
+            continue()
+        endif()
+        list(APPEND nq_modes "${mode}")
+        set(nq_${mode}_build "${nq_root}/id1-${mode}")
+        if(mode STREQUAL "native")
+            set(nq_game "${nq_${mode}_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            set(nq_options -DQC2CPP_NATIVE_PLUGIN=ON)
+            set(nq_wasi_root "")
+            set(nq_clean)
+            set(nq_check COMMAND "${nq_checker}" --compile-commands "${nq_${mode}_build}"
+                --generated-project "${nq_generated}")
+        else()
+            set(nq_game "${nq_${mode}_build}/game.wasm")
+            set(nq_options "-DCMAKE_TOOLCHAIN_FILE=${nq_generated}/cmake/WasmToolchain.cmake"
+                "-DQC_WASI_SDK_ROOT=${QC2CPP_WASI_SDK_ROOT}")
+            set(nq_wasi_root "${QC2CPP_WASI_SDK_ROOT}")
+            # Match the other disposable Wasm builds: toolchain INIT linker
+            # flags must not remain cached from an earlier generated project.
+            set(nq_clean COMMAND ${CMAKE_COMMAND} -E remove_directory "${nq_${mode}_build}")
+            set(nq_check)
+        endif()
+        add_custom_command(OUTPUT "${nq_game}"
+            ${nq_clean}
+            COMMAND ${CMAKE_COMMAND} -S "${nq_generated}" -B "${nq_${mode}_build}"
+                -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Debug ${nq_options}
+            COMMAND ${CMAKE_COMMAND} --build "${nq_${mode}_build}" --target game
+            ${nq_check}
+            COMMAND ${CMAKE_COMMAND} "-DOUTPUT=${nq_root}/id1-${mode}-input-ids.txt"
+                "-DCOMPILER=${nq_compiler}" "-DCHECKER=${nq_checker}" "-DMANIFEST=${nq_manifest}"
+                "-DWASI_SDK_ROOT=${nq_wasi_root}" -DGAME_PROFILE=nq
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/write_qc2cpp_input_ids.cmake"
+            DEPENDS "${nq_generated}/CMakeLists.txt" "${nq_checker}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/write_qc2cpp_input_ids.cmake"
+            VERBATIM)
+        add_custom_target(qc2cpp_nq_${mode}_assets DEPENDS "${nq_game}")
+        add_dependencies(qc2cpp_nq_${mode}_assets mvdsv)
+        list(APPEND nq_asset_targets qc2cpp_nq_${mode}_assets)
+    endforeach()
+    add_custom_target(qc2cpp_nq_acceptance_assets DEPENDS ${nq_asset_targets})
+    if("${QC2CPP_FTE_CLIENT}" STREQUAL "" OR "${QC2CPP_ASSET_DIR}" STREQUAL "")
+        message(FATAL_ERROR "id1 gameplay acceptance requires QC2CPP_FTE_CLIENT and QC2CPP_ASSET_DIR")
+    endif()
+    foreach(source_mode IN LISTS nq_modes)
+        set(nq_reference_args)
+        if(source_mode STREQUAL "native" AND NOT "${QC2CPP_NQ_REFERENCE_SERVER}" STREQUAL "")
+            set(nq_reference_args --reference-server "${QC2CPP_NQ_REFERENCE_SERVER}"
+                --reference-progs "${QC2CPP_NQ_REFERENCE_PROGS}")
+        endif()
+        add_test(NAME qc2cpp_nq_gameplay_${source_mode}
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/nq_acceptance.py"
+                --suite gameplay --source-mode ${source_mode}
+                --server $<TARGET_FILE:mvdsv> --source-artifacts "${nq_${source_mode}_build}"
+                --assets "${QC2CPP_ASSET_DIR}" --client "${QC2CPP_FTE_CLIENT}"
+                --output "${nq_root}/runs/nq-gameplay-${source_mode}" ${nq_reference_args})
+        set_tests_properties(qc2cpp_nq_gameplay_${source_mode} PROPERTIES
+            LABELS "qcx;integration;external" TIMEOUT 120)
+        foreach(destination_mode IN LISTS nq_modes)
+            if(source_mode STREQUAL destination_mode)
+                set(nq_case "${source_mode}")
+            else()
+                set(nq_case "${source_mode}_${destination_mode}")
+            endif()
+            add_test(NAME qc2cpp_nq_restore_${nq_case}
+                COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/nq_acceptance.py"
+                    --suite restore --source-mode ${source_mode} --destination-mode ${destination_mode}
+                    --server $<TARGET_FILE:mvdsv> --source-artifacts "${nq_${source_mode}_build}"
+                    --destination-artifacts "${nq_${destination_mode}_build}"
+                    --assets "${QC2CPP_ASSET_DIR}" --client "${QC2CPP_FTE_CLIENT}"
+                    --output "${nq_root}/runs/nq-restore-${nq_case}")
+            set_tests_properties(qc2cpp_nq_restore_${nq_case} PROPERTIES
+                LABELS "qcx;integration;external" TIMEOUT 180)
+        endforeach()
+    endforeach()
+endif()

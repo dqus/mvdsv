@@ -28,5 +28,9 @@ void QCX_TestObserverNqPreThink(struct edict_s *player, const float velocity[3],
 void QCX_TestObserverNqPostThink(struct edict_s *player, const float velocity[3]);
 void QCX_TestObserverNqWaterJump(struct edict_s *player, float waterjumptime);
 void QCX_TestObserverNewMissiles(uint32_t netquake);
+void QCX_TestObserverNqProjectile(void);
+void QCX_TestObserverNqMuzzleFlash(void);
+void QCX_TestObserverNqIntermission(void);
+void QCX_TestObserverNqInput(uint32_t buttons);
 
 #endif
