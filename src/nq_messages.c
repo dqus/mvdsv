@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "qwsvdef.h"
 #include "nq_messages.h"
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#endif
 
 /* One server-owned incremental NQ stream, reset at map/physics boundaries.
  * Preserve the PR1 translator's reliable output and ignored destinations. */
@@ -150,6 +153,9 @@ static void NQP_Process (void)
 			nqp_expect = (p - nqp_buf_data) + 1;
 		}
 		else if (cmd == svc_intermission) {
+#if defined(QCX_TESTS)
+			QCX_TestObserverNqIntermission();
+#endif
 			int i;
 			NQP_Flush (1);
 			for (i = 0; i < 3; i++)

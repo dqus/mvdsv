@@ -229,14 +229,14 @@ def restore_qwsp_state(process, name, expected, *, context):
     return restored
 
 
-def assert_profile_mismatch_keeps_waiting_session(process, basedir, save_path):
+def assert_profile_mismatch_keeps_waiting_session(process, basedir, save_path, *, profile=1):
     image = bytearray(save_path.read_bytes())
     if image[:8] != b"QCMS\x03\x00\x00\x00":
         raise ProcessFailure("profile rejection test requires a current QCMS image")
     section, size = struct.unpack_from("<II", image, 8)
-    if section != 1 or struct.unpack_from("<I", image, 16 + size - 4)[0] != 1:
-        raise ProcessFailure("QWSP save did not publish QuakeWorld metadata")
-    struct.pack_into("<I", image, 16 + size - 4, 2)  # Valid other profile.
+    if section != 1 or struct.unpack_from("<I", image, 16 + size - 4)[0] != profile:
+        raise ProcessFailure("save did not publish the selected artifact profile")
+    struct.pack_into("<I", image, 16 + size - 4, 3 - profile)  # Valid other profile.
     (basedir / "qw" / "save" / "other-profile.sav").write_bytes(image)
     session = observe_restore_session(process)
     if not session["waiting"] or session["available"] == 0:
@@ -261,7 +261,7 @@ def assert_profile_mismatch_keeps_waiting_session(process, basedir, save_path):
             raise ProcessFailure(f"profile mismatch entered {key}: {events} -> {after_events}")
 
 
-def run_direct_suite(server, artifacts, assets, output, mode, client):
+def run_direct_suite(server, artifacts, assets, output, mode, client, *, profile=1):
     output.mkdir(parents=True, exist_ok=True)
     run_root = pathlib.Path(tempfile.mkdtemp(prefix=f"qwr-{mode[0]}-", dir="/tmp"))
     basedir = prepare_game_directory(run_root, assets, artifacts, mode)
@@ -330,7 +330,7 @@ def run_direct_suite(server, artifacts, assets, output, mode, client):
         wait_restore_session(process,
             lambda session: session["waiting"] and session["available"] > 0,
             timeout=12, description="profile test roster did not wait")
-        assert_profile_mismatch_keeps_waiting_session(process, basedir, profile_save)
+        assert_profile_mismatch_keeps_waiting_session(process, basedir, profile_save, profile=profile)
     except ProcessFailure as error:
         raise ProcessFailure(f"{error}; server log preserved in {run_root}") from error
     finally:

@@ -22,6 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #include "game_compat.h"
+#if defined(QCX_TESTS)
+#include "qcx/test_observer.h"
+#endif
 
 /* Convert existing typed baselines/statics without changing legacy storage. */
 void SV_RD_FromLegacy(rd_entity_state_t *to, const entity_state_t *from)
@@ -1338,6 +1341,9 @@ void SV_WriteNQMuzzleFlashes(sizebuf_t *msg)
 			ent->v->effects = (int)ent->v->effects & ~EF_MUZZLEFLASH;
 			if (msg && msg->maxsize - msg->cursize >= 3) {
 				SZ_Write(msg, data, sizeof(data));
+#if defined(QCX_TESTS)
+				QCX_TestObserverNqMuzzleFlash();
+#endif
 			}
 		}
 	}
