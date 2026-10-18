@@ -921,6 +921,9 @@ void SV_RunNQNewmis (void)
 		save_frametime = sv_frametime;
 		sv_frametime = 0.05;
 		SV_RunEntity (ent);
+#if defined(QCX_TESTS)
+		QCX_TestObserverNqProjectile();
+#endif
 		sv_frametime = save_frametime;
 		return;
 	}

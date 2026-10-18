@@ -35,6 +35,10 @@ if(NOT model_presence_call_count EQUAL 2)
 	message(FATAL_ERROR
 		"sv_ents.c must contain exactly two PR_EntityHasModel(ent) calls")
 endif()
+# Test-only protocol observations do not select a production string backend.
+# Ignore only this exact guarded include; keep rejecting other QCX headers.
+string(REPLACE "#if defined(QCX_TESTS)\n#include \"qcx/test_observer.h\"\n#endif"
+	"" entity_send_source "${entity_send_source}")
 if(entity_send_source MATCHES "QCX_EntityHasModel|#include[ \t]+[<\"]qcx/")
 	message(FATAL_ERROR "sv_ents.c must not select the QCX model-presence backend")
 endif()

@@ -3857,6 +3857,11 @@ void SV_RunCmd (usercmd_t *ucmd, qbool inside, qbool second_attempt) //bliP: 24/
 
 	// copy humans' intentions to progs
 	sv_player->v->button0 = ucmd->buttons & 1;
+#if defined(QCX_TESTS)
+	if (PR_GameIsNetQuake()) {
+		QCX_TestObserverNqInput(ucmd->buttons);
+	}
+#endif
 	sv_player->v->button2 = (ucmd->buttons & 2) >> 1;
 	sv_player->v->button1 = (ucmd->buttons & 4) >> 2;
 	if (ucmd->impulse)

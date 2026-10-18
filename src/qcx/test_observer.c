@@ -51,6 +51,9 @@ typedef struct qcx_test_observer_s {
 	float qwsp_monster_last_think_time;
 	uint32_t nq_prethink, nq_postthink, nq_waterjump, nq_missiles, qw_missiles;
 	uint32_t nq_state_mismatches;
+	uint32_t nq_jump_frames, nq_water_frames, nq_projectiles, nq_muzzleflashes, nq_intermissions;
+	vec3_t nq_home;
+	uint32_t nq_attack_inputs;
 } qcx_test_observer_t;
 
 static qcx_test_observer_t observer;
@@ -67,6 +70,12 @@ void QCX_TestObserverNqPreThink(edict_t *player, const float velocity[3], float 
 void QCX_TestObserverNqPostThink(edict_t *player, const float velocity[3])
 {
 	++observer.nq_postthink;
+	if (player->v->velocity[2] > 100.0f && !((int)player->v->flags & FL_ONGROUND)) {
+		++observer.nq_jump_frames;
+	}
+	if (player->v->waterlevel > 0.0f) {
+		++observer.nq_water_frames;
+	}
 	if (memcmp(player->v->velocity, velocity, sizeof(vec3_t)) != 0) {
 		++observer.nq_state_mismatches;
 	}
@@ -98,6 +107,17 @@ static void QCX_TestNqCompat_f(void)
 		observer.nq_waterjump, observer.nq_missiles, observer.qw_missiles,
 		observer.nq_state_mismatches);
 }
+
+void QCX_TestObserverNqProjectile(void) { ++observer.nq_projectiles; }
+void QCX_TestObserverNqMuzzleFlash(void) { ++observer.nq_muzzleflashes; }
+void QCX_TestObserverNqIntermission(void) { ++observer.nq_intermissions; }
+void QCX_TestObserverNqInput(uint32_t buttons)
+{
+	if ((buttons & 1U) != 0U) {
+		++observer.nq_attack_inputs;
+	}
+}
+
 static int forced_next_client_userid = -1;
 extern int sv_playermodel;
 static void QCX_TestReuseUserId_f(void);
@@ -114,6 +134,7 @@ static void QCX_TestGameMode_f(void);
 static void QCX_TestQwspMonster_f(void);
 static void QCX_TestQwspSave_f(void);
 static void QCX_TestRestoreSession_f(void);
+static void QCX_TestNqGameplay_f(void);
 static void QCX_TestStuffClient_f(void);
 static void QCX_TestReleaseClient_f(void);
 static void QCX_TestObserverSendRestoreMarker(const char *marker);
@@ -330,6 +351,7 @@ static void QCX_TestReleaseClient_f(void)
 void QCX_TestObserverRegisterCommands(void)
 {
 	Cmd_AddCommand("qc2cpp_test_nq_compat", QCX_TestNqCompat_f);
+	Cmd_AddCommand("qc2cpp_test_nq_gameplay", QCX_TestNqGameplay_f);
 	Cmd_AddCommand("qc2cpp_test_snapshot", QCX_TestSnapshot_f);
 	Cmd_AddCommand("qc2cpp_test_events", QCX_TestEvents_f);
 	Cmd_AddCommand("qc2cpp_test_reuse_userid", QCX_TestReuseUserId_f);
@@ -791,6 +813,88 @@ static client_t *QCX_TestFindQwspPlayer(void)
 		}
 	}
 	return NULL;
+}
+
+static qbool QCX_TestPlacePlayerInWater(edict_t *player)
+{
+	vec3_t point;
+	for (point[2] = sv.worldmodel->mins[2] + 32; point[2] < sv.worldmodel->maxs[2]; point[2] += 64) {
+		for (point[1] = sv.worldmodel->mins[1] + 32; point[1] < sv.worldmodel->maxs[1]; point[1] += 64) {
+			for (point[0] = sv.worldmodel->mins[0] + 32; point[0] < sv.worldmodel->maxs[0]; point[0] += 64) {
+				if (SV_PointContents(point) != CONTENTS_WATER) {
+					continue;
+				}
+				const trace_t trace = SV_Trace(point, player->v->mins, player->v->maxs,
+					point, MOVE_NOMONSTERS, player);
+				if (!trace.startsolid && !trace.allsolid) {
+					VectorCopy(point, player->v->origin);
+					VectorClear(player->v->velocity);
+					SV_LinkEdict(player, false);
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+static void QCX_TestNqGameplay_f(void)
+{
+	client_t *const client = QCX_TestFindQwspPlayer();
+	qbool ready = client != NULL && Cmd_Argc() == 2;
+	if (ready) {
+		edict_t *const player = client->edict;
+		const char *action = Cmd_Argv(1);
+		if (!strcmp(action, "prepare")) {
+			VectorCopy(player->v->origin, observer.nq_home);
+			/* Fixture setup only: keep damage from making timing random, and
+			 * provide a rocket launcher. Actual firing remains unmodified QC. */
+			player->v->flags = (int)player->v->flags | FL_GODMODE;
+			player->v->items = (int)player->v->items | IT_ROCKET_LAUNCHER;
+			player->v->ammo_rockets = 10;
+		} else if (!strcmp(action, "water")) {
+			ready = QCX_TestPlacePlayerInWater(player);
+		} else if (!strcmp(action, "home")) {
+			VectorCopy(observer.nq_home, player->v->origin);
+			VectorClear(player->v->velocity);
+			player->v->teleport_time = 0;
+			SV_LinkEdict(player, false);
+		} else if (!strcmp(action, "exit")) {
+			ready = false;
+			for (int slot = 1; slot < sv.num_edicts; ++slot) {
+				edict_t *const trigger = &sv.edicts[slot];
+				char classname[64];
+				if (trigger->e.free || trigger->v == NULL || trigger->v->solid != SOLID_TRIGGER
+					|| !QCX_TestCopyLegacyString(trigger->v->classname, classname, sizeof(classname))
+					|| strcmp(classname, "trigger_changelevel")) {
+					continue;
+				}
+				for (unsigned axis = 0; axis < 3; ++axis) {
+					player->v->origin[axis] = (trigger->v->absmin[axis] + trigger->v->absmax[axis]) * 0.5f;
+				}
+				VectorClear(player->v->velocity);
+				SV_LinkEdict(player, true); /* Actual trigger/touch and scheduled QC think. */
+				ready = true;
+				break;
+			}
+		} else if (strcmp(action, "read")) {
+			ready = false;
+		}
+	}
+	const qbool intermission = client != NULL && client->edict->v->modelindex == 0
+		&& client->edict->v->movetype == MOVETYPE_NONE && client->edict->v->health > 0;
+	Con_Printf("{\"qc2cpp_test_nq_gameplay\":{\"ready\":%s,\"jump_frames\":%u,"
+		"\"water_frames\":%u,\"projectiles\":%u,\"muzzleflashes\":%u,"
+		"\"intermission\":%s,\"intermissions\":%u,\"postthink\":%u,"
+		"\"time\":%.6f,\"health\":%.1f,\"weapon\":%.1f,\"button0\":%.1f,"
+		"\"impulse\":%.1f,\"ammo_rockets\":%.1f,\"attack_inputs\":%u,\"deadflag\":%.1f,\"chat\":%d}}\n", ready ? "true" : "false",
+		observer.nq_jump_frames, observer.nq_water_frames, observer.nq_projectiles,
+		observer.nq_muzzleflashes, intermission ? "true" : "false", observer.nq_intermissions,
+		observer.nq_postthink, sv.time, client == NULL ? 0 : client->edict->v->health,
+		client == NULL ? 0 : client->edict->v->weapon, client == NULL ? 0 : client->edict->v->button0,
+		client == NULL ? 0 : client->edict->v->impulse, client == NULL ? 0 : client->edict->v->ammo_rockets,
+		observer.nq_attack_inputs, client == NULL ? 0 : client->edict->v->deadflag,
+		client == NULL ? 0 : atoi(Info_Get(&client->_userinfoshort_ctx_, "chat")));
 }
 
 static void QCX_TestReportQwspMonster(void)
