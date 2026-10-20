@@ -30,6 +30,7 @@ set(expected_fast
 	qcx_globals_boundary
 	qcx_entities
 	qcx_services_world
+	qcx_registercvar
 	qcx_client
 	qcx_sprint
 	qcx_ambient_sound

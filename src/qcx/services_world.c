@@ -200,6 +200,23 @@ static void QCX_CvarSet(void *context, const uint8_t *name, qcx_byte_count_t nam
 	}
 }
 
+static float QCX_RegisterCvar(void *context, const uint8_t *name, qcx_byte_count_t name_size,
+	const uint8_t *value, qcx_byte_count_t value_size)
+{
+	QCX_ObserveGameplayImport(context);
+	char local_name[MAX_QPATH];
+	char local_value[MAX_INFO_STRING];
+	/* Copy and validate both spans before creating anything. Engine creation
+	 * owns its copies; neither backend may retain guest string storage. */
+	QCX_CopyText(name, name_size, local_name, sizeof(local_name), "cvar");
+	QCX_CopyText(value, value_size, local_value, sizeof(local_value), "cvar value");
+	if (local_name[0] == '\0' || Cvar_Find(local_name) != NULL || Cmd_Exists(local_name)) {
+		return 0.0f;
+	}
+	Cvar_Create(local_name, local_value, 0);
+	return 1.0f;
+}
+
 static void QCX_LocalCmd(void *context, const uint8_t *text, qcx_byte_count_t text_size)
 {
 	QCX_ObserveGameplayImport(context);
@@ -255,4 +272,5 @@ void QCX_BindWorldServices(qcx_host_api_v1_t *host)
 	host->makestatic = QCX_MakeStatic;
 	host->changelevel = QCX_ChangeLevel;
 	host->cvar_set = QCX_CvarSet;
+	host->registercvar = QCX_RegisterCvar;
 }

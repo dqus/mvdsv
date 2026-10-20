@@ -358,6 +358,29 @@ target_compile_definitions(qcx_services_world_test PRIVATE
 target_link_libraries(qcx_services_world_test PRIVATE Qc2cppHost::contract)
 add_test(NAME qcx_services_world COMMAND qcx_services_world_test)
 
+add_executable(qcx_registercvar_test registercvar_test.c
+	${PROJECT_SOURCE_DIR}/src/cvar.c
+	${PROJECT_SOURCE_DIR}/src/common.c
+	${PROJECT_SOURCE_DIR}/src/bothtools.c
+	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c)
+set_target_properties(qcx_registercvar_test PROPERTIES
+	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
+target_include_directories(qcx_registercvar_test PRIVATE
+	${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/qwprot/src)
+target_compile_definitions(qcx_registercvar_test PRIVATE
+	QCX_ENABLED=1 SERVERONLY USE_PR2 __LITTLE_ENDIAN__Q__)
+target_compile_options(qcx_registercvar_test PRIVATE
+	-UNDEBUG -ffunction-sections -fdata-sections)
+if(APPLE)
+	target_link_options(qcx_registercvar_test PRIVATE -Wl,-dead_strip)
+elseif(UNIX)
+	target_link_options(qcx_registercvar_test PRIVATE -Wl,--gc-sections)
+	target_link_libraries(qcx_registercvar_test PRIVATE m)
+endif()
+target_link_libraries(qcx_registercvar_test PRIVATE Qc2cppHost::contract)
+add_test(NAME qcx_registercvar COMMAND qcx_registercvar_test)
+set_tests_properties(qcx_registercvar PROPERTIES LABELS "qcx;fast")
+
 add_executable(qcx_client_test
 
 	client_test.c
