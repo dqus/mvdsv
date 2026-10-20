@@ -6,6 +6,7 @@ qcx_import_setsize_v1	world	qc2cpp_services_world	writes bounds, size and relink
 qcx_import_sound_v1	network	qc2cpp_client	uses the normal engine sound service with a checked sample name
 qcx_import_spawn_v1	world	qc2cpp_services_world	allocates an active engine edict and returns its slot
 qcx_import_remove_v1	world	qc2cpp_services_world	frees the exact engine edict slot
+qcx_import_nextent_v1	world	qcx_services_world	returns the next non-free engine slot after the cursor or world at the current high-water mark
 qcx_import_traceline_v1	movement	qc2cpp_reentry	preserves engine trace result and returns a canonical entity slot
 qcx_import_checkclient_v1	movement	qc2cpp_reentry	uses the legacy PVS checkclient operation with canonical entity slots
 qcx_import_precache_sound_v1	world	qc2cpp_services_world	persists and records a loading-phase sound name
