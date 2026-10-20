@@ -49,7 +49,7 @@ foreach(service_source IN ITEMS
 	list(LENGTH observed observed_count)
 	math(EXPR gameplay_import_observers "${gameplay_import_observers} + ${observed_count}")
 endforeach()
-if(NOT gameplay_import_observers EQUAL 43)
+if(NOT gameplay_import_observers EQUAL 44)
 	message(FATAL_ERROR
 		"every QCX gameplay host import must observe the init lifecycle; found ${gameplay_import_observers}")
 endif()
