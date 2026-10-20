@@ -27,13 +27,13 @@ def write_fields(game, destination):
             if use == "Transient":
                 continue
             kind = declarations.get(field, "")
-            if kind in ("float", "qcx_mask_float_t"):
+            if kind in ("float", "qcx_mask_float_t", "MaskFloat", "qc::MaskFloat"):
                 code = 1
             elif kind in ("EntitySlot", "qcx_shared_entity_slot_t"):
                 code = 2
-            elif kind in ("qc::Vec3", "qc::SharedVec3", "qcx_vec3f_t"):
+            elif kind in ("Vec3", "qc::Vec3", "qc::SharedVec3", "qcx_vec3f_t"):
                 code = 3
-            elif kind == "qc::String":
+            elif kind in ("String", "qc::String"):
                 code = 4
             elif any(word in kind for word in ("Function<", "Callback<", "Field<")):
                 code = 5
