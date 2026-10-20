@@ -66,6 +66,20 @@ static void QCX_Remove(void *context, qcx_entity_id_t slot)
 	ED_Free(QCX_RequireServiceEdict(slot, "entity"));
 }
 
+static qcx_entity_id_t QCX_NextEnt(void *context, qcx_entity_id_t after)
+{
+	QCX_ObserveGameplayImport(context);
+	QCX_RequireServiceEdict(after, "nextent start");
+
+	for (uint32_t slot = after + 1U;
+		slot < (uint32_t)sv.num_edicts; ++slot) {
+		if (!sv.edicts[slot].e.free) {
+			return slot;
+		}
+	}
+	return 0U;
+}
+
 static uint32_t QCX_MapMetadata(void *context, qcx_entity_id_t slot,
 	const uint8_t *key, qcx_byte_count_t key_size, const uint8_t *value,
 	qcx_byte_count_t value_size)
@@ -259,6 +273,7 @@ void QCX_BindWorldServices(qcx_host_api_v1_t *host)
 	host->setsize = QCX_SetSize;
 	host->spawn = QCX_Spawn;
 	host->remove = QCX_Remove;
+	host->nextent = QCX_NextEnt;
 	host->map_metadata = QCX_MapMetadata;
 	host->map_admit = QCX_MapAdmit;
 	host->map_time = QCX_MapTime;

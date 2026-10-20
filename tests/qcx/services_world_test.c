@@ -35,6 +35,7 @@ static int persistent_allocations;
 static unsigned int slot_lookups;
 static jmp_buf validation_error;
 static qbool expect_error;
+static qbool testing_nextent;
 
 qbool PR_GameIsNetQuake(void) { return false; }
 float QCX_GameDeathmatch(void) { abort(); }
@@ -56,6 +57,9 @@ void SV_Error(char *error, ...)
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
 	++slot_lookups;
+	if (testing_nextent) {
+		return slot < 8U ? &sv.edicts[slot] : NULL;
+	}
 	return slot == 0U ? &test_entity : slot == 1U ? &test_spawned : NULL;
 }
 
@@ -290,6 +294,38 @@ static void test_lightstyle_text_limits(qcx_host_api_v1_t *host)
 	expect_error = false;
 }
 
+static void test_nextent(qcx_host_api_v1_t *host)
+{
+	testing_nextent = true;
+	sv.num_edicts = 6;
+	for (unsigned int slot = 0U; slot < 8U; ++slot) {
+		sv.edicts[slot].v = &test_entity_state;
+		sv.edicts[slot].e.free = true;
+	}
+	assert(host->nextent(host->context, 0U) == 0U);
+	sv.edicts[2].e.free = false;
+	sv.edicts[5].e.free = false;
+	sv.edicts[7].e.free = false; /* Outside the current high-water mark. */
+	assert(host->nextent(host->context, 0U) == 2U);
+	assert(host->nextent(host->context, 2U) == 5U);
+	assert(host->nextent(host->context, 5U) == 0U);
+	assert(host->nextent(host->context, 7U) == 0U);
+	sv.edicts[2].e.free = true; /* A removed cursor is still usable. */
+	assert(host->nextent(host->context, 2U) == 5U);
+	sv.edicts[3].e.free = false; /* Each query sees current allocation state. */
+	assert(host->nextent(host->context, 2U) == 3U);
+	sv.num_edicts = 8;
+	assert(host->nextent(host->context, 5U) == 7U);
+	expect_error = true;
+	if (setjmp(validation_error) == 0) {
+		host->nextent(host->context, UINT32_MAX);
+		assert(!"invalid nextent cursor accepted");
+	}
+	expect_error = false;
+	testing_nextent = false;
+	sv.num_edicts = 0;
+}
+
 int main(void)
 {
 	test_entity.v = &test_entity_state;
@@ -301,6 +337,7 @@ int main(void)
 		.fatal = test_fatal,
 	};
 	QCX_BindWorldServices(&host);
+	test_nextent(&host);
 	assert(host.setorigin != NULL);
 	assert(host.setmodel != NULL);
 	assert(host.setsize != NULL);
