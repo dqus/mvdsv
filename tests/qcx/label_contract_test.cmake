@@ -63,6 +63,8 @@ set(expected_fast
 	qcx_label_contract)
 
 set(expected_integration
+	qcx_registercvar_native_acceptance
+	qcx_registercvar_wasm_acceptance
 	qc2cpp_nq_gameplay_native
 	qc2cpp_nq_gameplay_wasm
 	qc2cpp_nq_restore_native
