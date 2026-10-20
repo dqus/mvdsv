@@ -1,4 +1,5 @@
 import	implementation	test	behavior
+qcx_import_registercvar_v1	world	qcx_registercvar	creates an absent cvar without changing existing value, flags or callback
 qcx_import_setorigin_v1	world	qc2cpp_services_world	copies origin, resets antilag and relinks
 qcx_import_setmodel_v1	world	qc2cpp_services_world	writes semantic model and applies precached model index
 qcx_import_setsize_v1	world	qc2cpp_services_world	writes bounds, size and relinks
