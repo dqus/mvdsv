@@ -155,6 +155,9 @@ void *Hunk_AllocName(int size, const char *name)
 void SV_FlushSignon(void) { }
 float Cvar_Value(const char *name) { assert(!strcmp(name, "skill")); return 2.0f; }
 cvar_t *Cvar_Find(const char *name) { assert(!strcmp(name, "skill")); return &deathmatch; }
+qbool Cmd_Exists(const char *name) { (void)name; abort(); }
+cvar_t *Cvar_Create(const char *name, char *value, int flags)
+{ (void)name; (void)value; (void)flags; abort(); }
 void Cvar_Set(cvar_t *var, char *value) { assert(var == &deathmatch); assert(!strcmp(value, "3")); ++cvar_set; }
 void Cbuf_AddText(const char *text) { strlcpy(queued_command, text, sizeof(queued_command)); }
 char *va(const char *format, ...)
