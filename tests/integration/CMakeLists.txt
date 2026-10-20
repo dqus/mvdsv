@@ -579,6 +579,49 @@ foreach(test_name IN ITEMS
 	endif()
 endforeach()
 
+# Small registercvar game: real NQ-profile imports, no client or AD dependency.
+set(reg_root "${CMAKE_BINARY_DIR}/qc2cpp-acceptance/registercvar")
+set(reg_fixture "${PROJECT_SOURCE_DIR}/tests/qcx/fixtures/registercvar")
+set(reg_generated "${reg_root}/generated")
+add_custom_command(OUTPUT "${reg_generated}/CMakeLists.txt"
+    COMMAND "${qc2cpp_compiler}" "${reg_fixture}/progs.src"
+        -o "${reg_generated}" --game-profile nq
+    DEPENDS "${qc2cpp_compiler}" "${reg_fixture}/progs.src"
+        "${reg_fixture}/registercvar.qc" ${qc2cpp_generated_resource_inputs}
+    VERBATIM)
+set(reg_assets)
+foreach(mode IN ITEMS native wasm)
+    string(TOUPPER "${mode}" upper_mode)
+    if(NOT MVDSV_QC2CPP_${upper_mode})
+        continue()
+    endif()
+    set(reg_build "${reg_root}/${mode}")
+    if(mode STREQUAL "native")
+        set(reg_game "${reg_build}/game${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(reg_options -DQC2CPP_NATIVE_PLUGIN=ON)
+    else()
+        set(reg_game "${reg_build}/game.wasm")
+        set(reg_options "-DCMAKE_TOOLCHAIN_FILE=${reg_generated}/cmake/WasmToolchain.cmake"
+            "-DQC_WASI_SDK_ROOT=${QC2CPP_WASI_SDK_ROOT}")
+    endif()
+    add_custom_command(OUTPUT "${reg_game}"
+        COMMAND ${CMAKE_COMMAND} -S "${reg_generated}" -B "${reg_build}"
+            -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Debug ${reg_options}
+        COMMAND ${CMAKE_COMMAND} --build "${reg_build}" --target game
+        DEPENDS "${reg_generated}/CMakeLists.txt"
+        VERBATIM)
+    add_custom_target(qcx_registercvar_${mode}_assets DEPENDS "${reg_game}")
+    add_dependencies(qcx_registercvar_${mode}_assets mvdsv)
+    list(APPEND reg_assets qcx_registercvar_${mode}_assets)
+    add_test(NAME qcx_registercvar_${mode}_acceptance
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/registercvar_acceptance.py"
+            --server $<TARGET_FILE:mvdsv> --assets "${qc2cpp_assets}"
+            --artifacts "${reg_build}" --mode ${mode} --output "${reg_root}/runs")
+    set_tests_properties(qcx_registercvar_${mode}_acceptance PROPERTIES
+        LABELS "qcx;integration;external" TIMEOUT 90)
+endforeach()
+add_custom_target(qcx_registercvar_acceptance_assets DEPENDS ${reg_assets})
+
 # Unchanged id1 is opt-in and always publishes NQ metadata. These child builds
 # are separate from QW/QWSP and never replace normal user launch artifacts.
 if(NOT "${QC2CPP_ID1_MANIFEST}" STREQUAL "")
