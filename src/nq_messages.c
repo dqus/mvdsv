@@ -25,6 +25,26 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qcx/test_observer.h"
 #endif
 
+void NQ_Particle(const float origin[3], const float direction[3], float color, float count)
+{
+	int replacement = 0;
+	int replacement_count = 0;
+	/* Match the original PR1 float comparisons before SV_StartParticle's
+	 * integer conversion. Other colours intentionally have no QW fallback. */
+	if (count == 255) {
+		replacement = TE_EXPLOSION;
+	} else if (color == 73) {
+		replacement = TE_BLOOD;
+		replacement_count = 1;
+	} else if (color == 225) {
+		replacement = TE_LIGHTNINGBLOOD;
+	}
+	vec3_t org, dir;
+	VectorCopy(origin, org);
+	VectorCopy(direction, dir);
+	SV_StartParticle(org, dir, color, count, replacement, replacement_count);
+}
+
 /* One server-owned incremental NQ stream, reset at map/physics boundaries.
  * Preserve the PR1 translator's reliable output and ignored destinations. */
 enum { NQ_MSG_ONE = 1, NQ_MSG_INIT = 3 };
