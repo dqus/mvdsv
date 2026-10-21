@@ -235,7 +235,13 @@ switch (nqp_buf_data[1]) {
   }
 
   case NQ_TE_EXPLOSION2:
-		nqp_expect = 10;
+		if (nqp_buf.cursize < 10)
+			goto waitformore;
+		/* NQ type 12 is QW blood. Fall back to a plain explosion and
+		 * consume both palette bytes before parsing the next message. */
+		nqp_buf_data[1] = TE_EXPLOSION;
+		NQP_Flush (8);
+		NQP_Skip (2);
 		break;
   default:
 		Con_Printf ("WARNING: progs.dat sent an unsupported svc_temp_entity: %i\n", nqp_buf_data[1]);
