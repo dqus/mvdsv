@@ -45,3 +45,4 @@ qcx_import_setspawnparms_v1	network	qc2cpp_client	writes sixteen spawn parameter
 qcx_import_logfrag_v1	network	qc2cpp_client	writes a normal QW frag log record for two selected clients
 qcx_import_infokey_v1	network	qc2cpp_client	reads userinfo through semantic client selection, not string offsets
 qcx_import_multicast_v1	network	qc2cpp_client	uses the normal multicast operation with a checked origin
+qcx_import_particle_v1	network	qcx_nq_messages	uses the same default NQ-to-QW particle fallback as PR1 without a VM dependency

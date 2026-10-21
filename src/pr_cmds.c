@@ -514,25 +514,8 @@ static void PF_particle (void)
 	}
 	else
 	{
-		// To aid porting of NQ mods, if the extra arguments are not provided, try
-		// to figure out what progs want by inspecting color and count
-		if (count == 255)
-		{
-			replacement_te = TE_EXPLOSION;		// count is not used
-		}
-		else if (color == 73)
-		{
-			replacement_te = TE_BLOOD;
-			replacement_count = 1;	// FIXME: use count / <some value>?
-		}
-		else if (color == 225)
-		{
-			replacement_te = TE_LIGHTNINGBLOOD;	// count is not used
-		}
-		else
-		{
-			replacement_te = 0;		// don't send anything
-		}
+		NQ_Particle(org, dir, color, count);
+		return;
 	}
 
 	SV_StartParticle (org, dir, color, count, replacement_te, replacement_count);

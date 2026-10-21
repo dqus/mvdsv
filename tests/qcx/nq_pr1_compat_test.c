@@ -21,6 +21,20 @@ static int print_level, links, warnings;
 static cmodel_t inline_model;
 static entvars_t entity_states[2];
 static byte reliable[4096];
+static int particle_color, particle_count, particle_replacement, particle_replacement_count;
+static unsigned particle_calls;
+
+void SV_StartParticle(vec3_t origin, vec3_t direction, int color, int count,
+	int replacement, int replacement_count)
+{
+	assert(origin[0] == 1.5f && origin[1] == -2.0f && origin[2] == 3.25f);
+	assert(direction[0] == -0.5f && direction[1] == 0.25f && direction[2] == 1.0f);
+	particle_color = color;
+	particle_count = count;
+	particle_replacement = replacement;
+	particle_replacement_count = replacement_count;
+	++particle_calls;
+}
 
 char *PR1_GetString(int index)
 {
@@ -173,6 +187,38 @@ static void test_intermission_and_lightning(void)
 	check_bytes(stat, sizeof(stat));
 }
 
+static void test_particle(void)
+{
+	VectorSet(G_VECTOR(OFS_PARM0), 1.5f, -2.0f, 3.25f);
+	VectorSet(G_VECTOR(OFS_PARM1), -0.5f, 0.25f, 1.0f);
+	const struct { float color, count; int replacement, replacement_count; } cases[] = {
+		{0, 255, TE_EXPLOSION, 0}, {73, 255, TE_EXPLOSION, 0},
+		{73, 8.75f, TE_BLOOD, 1}, {225, 4, TE_LIGHTNINGBLOOD, 0},
+		{73.5f, 8, 0, 0}, {73, 255.5f, TE_BLOOD, 1}, {40, 8, 0, 0},
+	};
+	for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+		pr_argc = 4;
+		G_FLOAT(OFS_PARM2) = cases[i].color;
+		G_FLOAT(OFS_PARM3) = cases[i].count;
+		PF_particle();
+		assert(particle_color == (int)cases[i].color && particle_count == (int)cases[i].count);
+		assert(particle_replacement == cases[i].replacement);
+		assert(particle_replacement_count == cases[i].replacement_count);
+	}
+	pr_argc = 5;
+	G_FLOAT(OFS_PARM4) = TE_GUNSHOT;
+	PF_particle();
+	assert(particle_replacement == TE_GUNSHOT && particle_replacement_count == 1);
+	pr_argc = 6;
+	G_FLOAT(OFS_PARM5) = 7.75f;
+	PF_particle();
+	assert(particle_replacement == TE_GUNSHOT && particle_replacement_count == 7);
+	G_FLOAT(OFS_PARM4) = 0;
+	PF_particle();
+	assert(particle_replacement == 0 && particle_replacement_count == 7);
+	assert(particle_calls == 10U);
+}
+
 static void test_builtins(void)
 {
 	G_INT(OFS_PARM0) = 1;
@@ -226,5 +272,6 @@ int main(void)
 	test_destinations_unknown_and_incremental();
 	test_intermission_and_lightning();
 	test_builtins();
+	test_particle();
 	return 0;
 }

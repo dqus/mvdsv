@@ -18,6 +18,20 @@ static byte reliable[4096];
 static entvars_t states[258];
 static jmp_buf rejected;
 static qbool expect_rejection;
+static unsigned particle_calls;
+static int particle_replacement, particle_replacement_count;
+
+void SV_StartParticle(vec3_t origin, vec3_t direction, int color, int count,
+	int replacement, int replacement_count)
+{
+	assert(origin[0] == 1.5f && origin[1] == -2.0f && origin[2] == 3.25f);
+	assert(direction[0] == -0.5f && direction[1] == 0.25f && direction[2] == 1.0f);
+	(void)color;
+	(void)count;
+	particle_replacement = replacement;
+	particle_replacement_count = replacement_count;
+	++particle_calls;
+}
 
 qbool PR_GameIsNetQuake(void) { return netquake; }
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
@@ -61,6 +75,42 @@ void PF2_WriteEntity(int to, int value, edict_t *entity)
 
 /* Exercise the actual QCX validation/routing functions, not a copied adapter. */
 #include "../../src/qcx/services_network.c"
+
+static void test_particle(void)
+{
+	const float origin[3] = {1.5f, -2.0f, 3.25f};
+	const float direction[3] = {-0.5f, 0.25f, 1.0f};
+	const struct { float color, count; int replacement, replacement_count; } cases[] = {
+		{0, 255, TE_EXPLOSION, 0}, {73, 255, TE_EXPLOSION, 0},
+		{73, 8.75f, TE_BLOOD, 1}, {225, 4, TE_LIGHTNINGBLOOD, 0},
+		{73.5f, 8, 0, 0}, {73, 255.5f, TE_BLOOD, 1}, {40, 8, 0, 0},
+	};
+	for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+		QCX_Particle(NULL, origin, direction, cases[i].color, cases[i].count);
+		assert(particle_replacement == cases[i].replacement);
+		assert(particle_replacement_count == cases[i].replacement_count);
+	}
+	assert(particle_calls == 7U);
+	expect_rejection = true;
+	if (setjmp(rejected) == 0) {
+		QCX_Particle(NULL, NULL, direction, 73, 8);
+		assert(!"NULL origin accepted");
+	}
+	if (setjmp(rejected) == 0) {
+		QCX_Particle(NULL, origin, NULL, 73, 8);
+		assert(!"NULL direction accepted");
+	}
+	if (setjmp(rejected) == 0) {
+		QCX_Particle(NULL, origin, direction, NAN, 8);
+		assert(!"NaN color accepted");
+	}
+	if (setjmp(rejected) == 0) {
+		QCX_Particle(NULL, origin, direction, 73, INFINITY);
+		assert(!"infinite count accepted");
+	}
+	assert(particle_calls == 7U);
+	expect_rejection = false;
+}
 
 static void emit_byte(int value)
 {
@@ -222,6 +272,7 @@ static void test_reset_and_ignored_destinations(void)
 }
 int main(void)
 {
+	test_particle();
 	sv.edicts[0].v = &states[0];
 	sv.edicts[1].v = &states[1];
 	sv.edicts[257].v = &states[257];
