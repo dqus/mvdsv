@@ -222,13 +222,13 @@ static void test_packets(void)
 	check(lightning, sizeof(lightning));
 	reset();
 	emit_byte(23);
-	emit_byte(12); /* NQ_TE_EXPLOSION2: retain the baseline parser's raw form. */
+	emit_byte(12); /* NQ_TE_EXPLOSION2 becomes an ordinary QW explosion. */
 	for (int i = 1; i <= 3; ++i) {
 		emit_coord((float)i);
 	}
 	emit_angle(90);
 	emit_angle(180);
-	const byte explosion[] = {23, 12, 8, 0, 16, 0, 24, 0, 64, 128};
+	const byte explosion[] = {23, 3, 8, 0, 16, 0, 24, 0};
 	check(explosion, sizeof(explosion));
 	reset();
 	emit_byte(8);
@@ -245,6 +245,26 @@ static void test_packets(void)
 	emit_byte(30);
 	const byte intermission[] = {30, 8, 0, 240, 255, 24, 0, 0, 64, 128};
 	check(intermission, sizeof(intermission));
+}
+static void test_explosion2_message_boundary(void)
+{
+	reset();
+	/* Exact NQ effect from AD ad_e1m1, Wasm sequence 2171. */
+	emit_byte(23);
+	emit_byte(12);
+	emit_coord(-925.625f);
+	emit_coord(-26.375f);
+	emit_coord(-32.0f);
+	assert(sv.reliable_datagram.cursize == 0);
+	emit_byte(35);
+	assert(sv.reliable_datagram.cursize == 0);
+	emit_byte(8);
+	const byte explosion[] = {23, 3, 19, 227, 45, 255, 0, 255};
+	check(explosion, sizeof(explosion));
+	/* Both palette bytes must be consumed, not treated as subsequent opcodes. */
+	emit_byte(27);
+	const byte followed[] = {23, 3, 19, 227, 45, 255, 0, 255, 27};
+	check(followed, sizeof(followed));
 }
 static void test_reset_and_ignored_destinations(void)
 {
@@ -282,6 +302,7 @@ int main(void)
 	for (unsigned route = 0U; route < 2U; ++route) {
 		through_qcx = route != 0U;
 		test_packets();
+		test_explosion2_message_boundary();
 		test_reset_and_ignored_destinations();
 	}
 	through_qcx = true;
