@@ -143,6 +143,23 @@ static void test_gunshot_and_reset(void)
 	check_bytes(killed, sizeof(killed));
 }
 
+static void test_explosion2_fallback(void)
+{
+	reset_messages();
+	write_byte(MSG_BROADCAST, 23);
+	write_byte(MSG_BROADCAST, 12);
+	write_coord(-925.625f);
+	write_coord(-26.375f);
+	write_coord(-32.0f);
+	assert(sv.reliable_datagram.cursize == 0);
+	write_byte(MSG_BROADCAST, 35);
+	assert(sv.reliable_datagram.cursize == 0);
+	write_byte(MSG_BROADCAST, 8);
+	write_byte(MSG_BROADCAST, 27);
+	const byte expected[] = {23, 3, 19, 227, 45, 255, 0, 255, 27};
+	check_bytes(expected, sizeof(expected));
+}
+
 static void test_destinations_unknown_and_incremental(void)
 {
 	reset_messages();
@@ -269,6 +286,7 @@ int main(void)
 	sv.model_precache[2] = strings[6];
 	sv.model_precache[3] = strings[7];
 	test_gunshot_and_reset();
+	test_explosion2_fallback();
 	test_destinations_unknown_and_incremental();
 	test_intermission_and_lightning();
 	test_builtins();
