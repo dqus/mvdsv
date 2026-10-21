@@ -15,6 +15,14 @@
 /* This fixture asserts QW routing; the common NQ implementation is covered by
  * nq_messages_test.c. Any accidental NQ dispatch is an immediate failure. */
 qbool PR_GameIsNetQuake(void) { return false; }
+static unsigned particle_calls;
+void NQ_Particle(const float origin[3], const float direction[3], float color, float count)
+{
+	assert(origin[0] == 1 && origin[1] == 2 && origin[2] == 3);
+	assert(direction[0] == -1 && direction[1] == 0 && direction[2] == 1);
+	assert(color == 73.5f && count == 8.75f);
+	++particle_calls;
+}
 void NQ_WriteByte(int destination, int value)
 {
 	(void)destination;
@@ -330,6 +338,10 @@ int main(void)
 
 	QCX_BindNetworkServices(&host);
 	assert(host.sound != NULL);
+	assert(host.particle != NULL);
+	const float particle_origin[3] = {1, 2, 3}, particle_direction[3] = {-1, 0, 1};
+	host.particle(host.context, particle_origin, particle_direction, 73.5f, 8.75f);
+	assert(particle_calls == 1U);
 	assert(host.stuffcmd != NULL);
 	assert(host.bprint != NULL);
 	assert(host.sprint != NULL);

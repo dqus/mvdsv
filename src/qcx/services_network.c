@@ -48,6 +48,19 @@ static void QCX_Sound(void *context, qcx_entity_id_t entity, float channel,
 		QCX_RequireInt(volume * 255.0f, "sound volume"), attenuation);
 }
 
+static void QCX_Particle(void *context, const float origin[3], const float direction[3],
+	float color, float count)
+{
+	QCX_ObserveGameplayImport(context);
+	if (origin == NULL || direction == NULL) {
+		SV_Error("qc2cpp particle requires origin and direction");
+	}
+	/* Reject invalid numeric input before the legacy integer conversions. */
+	(void)QCX_RequireInt(color, "particle color");
+	(void)QCX_RequireInt(count, "particle count");
+	NQ_Particle(origin, direction, color, count);
+}
+
 static void QCX_StuffCmd(void *context, qcx_entity_id_t entity, const uint8_t *text,
 	qcx_byte_count_t text_size)
 {
@@ -251,6 +264,7 @@ void QCX_BindNetworkServices(qcx_host_api_v1_t *host)
 {
 	if (host == NULL) return;
 	host->sound = QCX_Sound;
+	host->particle = QCX_Particle;
 	host->stuffcmd = QCX_StuffCmd;
 	host->bprint = QCX_BPrint;
 	host->sprint = QCX_SPrint;
