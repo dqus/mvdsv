@@ -153,7 +153,7 @@ endif()
 
 list(SORT configured_integration)
 list(SORT observed_integration)
-if(NOT configured_integration STREQUAL observed_integration)
+if(NOT "${configured_integration}" STREQUAL "${observed_integration}")
 	message(FATAL_ERROR
 		"MVDSV integration tier differs: expected=${configured_integration} observed=${observed_integration}")
 endif()
