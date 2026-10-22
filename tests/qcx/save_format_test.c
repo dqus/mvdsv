@@ -322,6 +322,60 @@ static void test_accepts_an_empty_roster_team(void)
 	QCX_SaveImageFree(image);
 }
 
+static void test_extended_sound_precaches_round_trip(void)
+{
+	const char *sounds[] = {"S:255:misc/menu.wav", "S:256:misc/menu.wav",
+		"S:4095:misc/menu.wav"};
+	const uint32_t slots[] = {255U, 256U, 4095U};
+	for (uint32_t index = 0U; index < 3U; ++index) {
+		v2_offsets_t offsets;
+		const save_bytes_t input = make_v2_with_engine("red", &offsets, 64U,
+			"M:1:progs/player.mdl", sounds[index]);
+		qcx_save_image_t *image = NULL;
+		uint8_t *encoded = NULL;
+		uint32_t size = 0U;
+		assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+		assert(image->engine.precaches[1].slot == slots[index]);
+		assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+		assert(size == input.size && memcmp(encoded, input.bytes, size) == 0);
+		free(encoded);
+		QCX_SaveImageFree(image);
+	}
+}
+
+static void test_full_extended_precache_catalog_round_trip(void)
+{
+	v2_offsets_t offsets;
+	const save_bytes_t input = make_valid_v2("red", &offsets);
+	qcx_save_image_t *image = NULL;
+	qcx_save_image_t *restored = NULL;
+	uint8_t *encoded = NULL;
+	uint32_t size = 0U;
+	assert(QCX_SaveParse(input.bytes, input.size, &image) == QCX_PLUGIN_OK);
+	free(image->engine.precaches);
+	image->engine.precache_count = 8190U;
+	image->engine.precaches = calloc(8190U, sizeof(*image->engine.precaches));
+	assert(image->engine.precaches != NULL);
+	for (uint32_t index = 0U; index < 8190U; ++index) {
+		qcx_save_precache_t *entry = &image->engine.precaches[index];
+		entry->kind = index < 4095U ? 'M' : 'S';
+		entry->slot = index % 4095U + 1U;
+		strcpy(entry->name, entry->kind == 'M' ? "progs/player.mdl" : "misc/menu.wav");
+	}
+	assert(QCX_SaveEncode(image, &encoded, &size) == QCX_PLUGIN_OK);
+	assert(QCX_SaveParse(encoded, size, &restored) == QCX_PLUGIN_OK);
+	assert(restored->engine.precache_count == 8190U);
+	for (uint32_t index = 0U; index < 8190U; ++index) {
+		assert(restored->engine.precaches[index].kind == image->engine.precaches[index].kind);
+		assert(restored->engine.precaches[index].slot == image->engine.precaches[index].slot);
+		assert(strcmp(restored->engine.precaches[index].name,
+			image->engine.precaches[index].name) == 0);
+	}
+	free(encoded);
+	QCX_SaveImageFree(restored);
+	QCX_SaveImageFree(image);
+}
+
 static void test_lightstyles_round_trip_as_text_not_resource_names(void)
 {
 	v2_offsets_t offsets;
@@ -485,7 +539,7 @@ static void test_rejects_engine_errors_during_initial_parse(void)
 	require_rejected(input.bytes, input.size);
 	const char *invalid_resources[] = {
 		"progs/player.mdl", "X:1:progs/player.mdl", "M:0:progs/player.mdl",
-		"M:4096:progs/player.mdl", "S:256:misc/menu.wav", "M:1:"
+		"M:4096:progs/player.mdl", "S:4096:misc/menu.wav", "M:1:"
 	};
 	for (uint32_t index = 0U; index < sizeof(invalid_resources) / sizeof(invalid_resources[0]); ++index) {
 		input = make_v2_with_engine("red", &offsets, 64U, invalid_resources[index],
@@ -693,6 +747,8 @@ static void test_game_mode_codec_and_validation(void)
 
 int main(void)
 {
+	test_extended_sound_precaches_round_trip();
+	test_full_extended_precache_catalog_round_trip();
 	test_game_mode_codec_and_validation();
 	test_static_world_codec_and_bounds();
 	test_engine_render_metadata_codec();

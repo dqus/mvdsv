@@ -6,6 +6,7 @@
 #include "qwsvdef.h"
 
 server_t sv;
+qbool sv_error;
 
 static int bytes[4];
 static float coordinates[3];
@@ -108,10 +109,31 @@ static void test_invalid_sample(void)
 	assert(byte_count == 0U && coordinate_count == 0U);
 }
 
+static void test_extended_static_sound_is_rejected(void)
+{
+	const float origin[3] = { 0.0f, 0.0f, 0.0f };
+	for (unsigned int slot = 1U; slot < 256U; ++slot) {
+		sv.sound_precache[slot] = "other";
+	}
+	sv.sound_precache[256] = "extended";
+	sv.sound_precache[257] = NULL;
+	reset_output();
+	expect_error = true;
+	if (setjmp(validation_error) == 0) {
+		QCX_AmbientSound(NULL, origin, (const uint8_t *)"extended", 8U, 1.0f, 1.0f);
+		assert(!"extended static sound accepted");
+	}
+	expect_error = false;
+	assert(sv_error);
+	assert(byte_count == 0U && coordinate_count == 0U);
+	assert(strstr(diagnostic, "static sounds require ID <= 255") != NULL);
+}
+
 int main(void)
 {
 	test_precached_sound();
 	test_missing_precache();
 	test_invalid_sample();
+	test_extended_static_sound_is_rejected();
 	return 0;
 }
