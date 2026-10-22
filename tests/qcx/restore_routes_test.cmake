@@ -91,7 +91,7 @@ foreach(required IN ITEMS
 	endif()
 endforeach()
 string(FIND "${begin_source}" "if (QCX_RestoreSessionClientWaiting(sv_client)) return;" begin_wait_guard)
-string(FIND "${begin_source}" "if (sv_client->state == cs_spawned)" begin_state_check)
+string(FIND "${begin_source}" "if (sv_client->state != cs_connected)" begin_state_check)
 if(begin_wait_guard EQUAL -1 OR begin_state_check EQUAL -1 OR NOT begin_wait_guard LESS begin_state_check)
 	message(FATAL_ERROR "Cmd_Begin_f must reject waiting QCX clients before state changes")
 endif()
