@@ -328,7 +328,12 @@ add_test(NAME qcx_sprint COMMAND qcx_sprint_test)
 
 add_executable(qcx_ambient_sound_test ambient_sound_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
+	${PROJECT_SOURCE_DIR}/src/sv_send.c
 	${PROJECT_SOURCE_DIR}/src/pr2_cmds.c)
+# Keep the real catalog resolver while capturing console output in the test.
+set_source_files_properties(${PROJECT_SOURCE_DIR}/src/sv_send.c PROPERTIES
+	COMPILE_DEFINITIONS "Con_Printf=AmbientTestUnusedConPrintf;SV_ClientPrintf=AmbientTestUnusedClientPrintf"
+	COMPILE_OPTIONS "-Wno-unused-parameter")
 set_target_properties(qcx_ambient_sound_test PROPERTIES
 	C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF)
 target_include_directories(qcx_ambient_sound_test PRIVATE
