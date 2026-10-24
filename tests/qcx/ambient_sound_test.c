@@ -8,7 +8,7 @@
 server_t sv;
 qbool sv_error;
 
-static int bytes[4];
+static int bytes[6];
 static float coordinates[3];
 static unsigned int byte_count;
 static unsigned int coordinate_count;
@@ -34,8 +34,14 @@ void Con_Printf(char *format, ...)
 void MSG_WriteByte(sizebuf_t *buffer, int value)
 {
 	assert(buffer == &sv.signon);
-	assert(byte_count < 4U);
+	assert(byte_count < 6U);
 	bytes[byte_count++] = value;
+}
+
+void MSG_WriteShort(sizebuf_t *buffer, int value)
+{
+	MSG_WriteByte(buffer, value & 255);
+	MSG_WriteByte(buffer, (value >> 8) & 255);
 }
 
 void MSG_WriteCoord(sizebuf_t *buffer, float value)
@@ -109,7 +115,7 @@ static void test_invalid_sample(void)
 	assert(byte_count == 0U && coordinate_count == 0U);
 }
 
-static void test_extended_static_sound_is_rejected(void)
+static void test_extended_static_sound(void)
 {
 	const float origin[3] = { 0.0f, 0.0f, 0.0f };
 	for (unsigned int slot = 1U; slot < 256U; ++slot) {
@@ -118,15 +124,13 @@ static void test_extended_static_sound_is_rejected(void)
 	sv.sound_precache[256] = "extended";
 	sv.sound_precache[257] = NULL;
 	reset_output();
-	expect_error = true;
-	if (setjmp(validation_error) == 0) {
-		QCX_AmbientSound(NULL, origin, (const uint8_t *)"extended", 8U, 1.0f, 1.0f);
-		assert(!"extended static sound accepted");
-	}
-	expect_error = false;
-	assert(sv_error);
-	assert(byte_count == 0U && coordinate_count == 0U);
-	assert(strstr(diagnostic, "static sounds require ID <= 255") != NULL);
+	QCX_AmbientSound(NULL, origin, (const uint8_t *)"extended", 8U, 1.0f, 1.0f);
+	assert(byte_count == 6U && coordinate_count == 3U);
+	assert(bytes[0] == 94 && bytes[1] == 1);
+	assert(bytes[2] == 0 && bytes[3] == 1 && bytes[4] == 255 && bytes[5] == 64);
+	assert(diagnostic[0] == '\0');
+	assert(strcmp(sv.sound_precache[1], "other") == 0);
+	assert(strcmp(sv.sound_precache[256], "extended") == 0);
 }
 
 int main(void)
@@ -134,6 +138,6 @@ int main(void)
 	test_precached_sound();
 	test_missing_precache();
 	test_invalid_sample();
-	test_extended_static_sound_is_rejected();
+	test_extended_static_sound();
 	return 0;
 }
