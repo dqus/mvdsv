@@ -1,3 +1,6 @@
+# Tests use assert() for checks and setup; keep assertions enabled in Release.
+add_compile_options(-UNDEBUG)
+
 add_executable(qcx_nq_messages_test nq_messages_test.c
 	${PROJECT_SOURCE_DIR}/src/nq_messages.c
 	${PROJECT_SOURCE_DIR}/src/qcx/service_support.c
