@@ -34,6 +34,8 @@ class QWConnection:
         self.socket.settimeout(3)
         self.qport = self.socket.getsockname()[1]
         self.sequence = 1
+        self.incoming_sequence = 0
+        self.incoming_reliable = 0
         self.last_print = ""
 
     def close(self):
@@ -60,6 +62,8 @@ class QWConnection:
             if packet.startswith(b"\xff\xff\xff\xff"):
                 if packet[4:5] == b"j":
                     self.sequence = 1
+                    self.incoming_sequence = 0
+                    self.incoming_reliable = 0
                     return True
                 if packet[4:5] == b"n":
                     self.last_print = packet[5:].decode("latin1", errors="replace")
@@ -72,8 +76,91 @@ class QWConnection:
     def command(self, *commands):
         payload = b"".join(b"\x04" + command.encode("ascii") + b"\0"
                            for command in commands)
-        self.socket.send(struct.pack("<IIH", self.sequence, 0, self.qport) + payload)
+        acknowledgement = self.incoming_sequence | (self.incoming_reliable << 31)
+        self.socket.send(struct.pack("<IIH", self.sequence, acknowledgement, self.qport) + payload)
         self.sequence += 1
+
+    def receive_signon(self):
+        """Acknowledge replies and handle only the pre-serverdata handshake."""
+        self.socket.settimeout(0.1)
+        try:
+            packet = self.socket.recv(65535)
+        except socket.timeout:
+            return
+        finally:
+            self.socket.settimeout(3)
+        if packet.startswith(b"\xff\xff\xff\xff"):
+            return
+        if len(packet) < 8:
+            raise ProcessFailure("truncated QW sign-on header")
+        sequence, _ = struct.unpack_from("<II", packet)
+        reliable = sequence >> 31
+        sequence &= 0x7fffffff
+        if sequence <= self.incoming_sequence:
+            return
+        self.incoming_sequence = sequence
+        if reliable:
+            self.incoming_reliable ^= 1
+
+        commands = []
+        cursor = 8
+        while cursor < len(packet):
+            opcode = packet[cursor]
+            cursor += 1
+            if opcode == 1:  # svc_nop
+                continue
+            if opcode == 11:  # svc_serverdata: map/download parsing is not needed here.
+                break
+            if opcode == 24:  # svc_setpause during restore.
+                if cursor == len(packet):
+                    raise ProcessFailure("truncated QW pause message")
+                cursor += 1
+                continue
+            if opcode not in (8, 9, 51, 52):  # print / stufftext / setinfo / serverinfo
+                raise ProcessFailure(f"unexpected pre-serverdata opcode: {opcode}")
+            if opcode in (8, 51):
+                cursor += 1  # print level or client slot
+            for _ in range(2 if opcode in (51, 52) else 1):
+                end = packet.find(b"\0", cursor)
+                if end == -1:
+                    raise ProcessFailure("unterminated QW sign-on message")
+                text = packet[cursor:end].decode("latin1")
+                cursor = end + 1
+            if opcode in (51, 52):
+                continue  # Metadata is observed through the existing test API.
+            if opcode == 8:
+                self.last_print = text
+                continue
+            for line in text.splitlines():
+                if not line or line.startswith("//"):
+                    continue
+                if line == "cmd pext":
+                    commands.append("pext")  # This client negotiates no extensions.
+                elif line == "cmd new":
+                    commands.append("new")
+                else:
+                    challenge = re.fullmatch(r'packet \S+ "(ip \d+ -?\d+)"', line)
+                    if challenge is None:
+                        raise ProcessFailure(f"unexpected sign-on command: {line!r}")
+                    # All fixtures use the same local server and UDP endpoint.
+                    self.socket.send(b"\xff\xff\xff\xff" + challenge[1].encode("ascii") + b"\n")
+        self.command(*commands)
+
+    def begin(self, process, spawncount):
+        """Finish admission before the test-controlled spawn/begin attempt."""
+        self.command("new")
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            session = observe_restore_session(process)
+            client = next((client for client in session["clients"]
+                           if client["netchan_qport"] == self.qport), None)
+            if client is None:
+                raise ProcessFailure(f"sign-on client disappeared: {self.last_print}")
+            if client["state"] >= 3:  # cs_connected, including policy-blocked clients.
+                self.command(f"spawn {spawncount} 0", f"begin {spawncount}")
+                return
+            self.receive_signon()
+        raise ProcessFailure(f"QW sign-on did not reach cs_connected: {self.last_print}")
 
 
 class RestoreAuthorization(unittest.TestCase):
@@ -96,8 +183,7 @@ class RestoreAuthorization(unittest.TestCase):
                                           spectator="spec-pass" if saved_spectator else "0"):
                     raise ProcessFailure("source admission failed")
                 session = observe_restore_session(process)
-                connection.command("new", f'spawn {session["spawncount"]} 0',
-                                   f'begin {session["spawncount"]}')
+                connection.begin(process, session["spawncount"])
                 wait_restore_session(process,
                     lambda current: len(current["clients"]) == 1
                     and current["clients"][0]["state"] == 4,
@@ -124,8 +210,7 @@ class RestoreAuthorization(unittest.TestCase):
                 if not connection.connect(name, password="player-pass", spectator="0"):
                     raise ProcessFailure("two-player source admission failed")
                 session = observe_restore_session(process)
-                connection.command("new", f'spawn {session["spawncount"]} 0',
-                                   f'begin {session["spawncount"]}')
+                connection.begin(process, session["spawncount"])
             wait_restore_session(process,
                 lambda current: roster_client(current, "Saved") is not None
                 and roster_client(current, "Saved")["state"] == 4
@@ -211,8 +296,7 @@ class RestoreAuthorization(unittest.TestCase):
             self.assertEqual(client[key], "" if saved_spectator else "1")
 
     def begin(self, session):
-        self.connection.command("new", f'spawn {session["spawncount"]} 0',
-                                f'begin {session["spawncount"]}')
+        self.connection.begin(self.process, session["spawncount"])
 
     def check_coordinate_rejection_preserves_world(self, *, waiting):
         if waiting:
@@ -436,8 +520,7 @@ class RestoreAuthorization(unittest.TestCase):
         session, fallback = self.named_client(
             "Unmatched",
             lambda client: not client["waiting"] and client["spectator"])
-        fallback_connection.command("new", f'spawn {session["spawncount"]} 0',
-                                    f'begin {session["spawncount"]}')
+        fallback_connection.begin(self.process, session["spawncount"])
         _, active = self.named_client("Unmatched", lambda client: client["state"] == 4)
         self.assertTrue(active["spectator"])
 
@@ -448,8 +531,7 @@ class RestoreAuthorization(unittest.TestCase):
         session, fallback = self.named_client(
             "Unmatched",
             lambda client: not client["waiting"] and not client["spectator"])
-        fallback_connection.command("new", f'spawn {session["spawncount"]} 0',
-                                    f'begin {session["spawncount"]}')
+        fallback_connection.begin(self.process, session["spawncount"])
         _, active = self.named_client("Unmatched", lambda client: client["state"] == 4)
         self.assertFalse(active["spectator"])
         self.assertEqual(active["userinfo_spectator"], "")
