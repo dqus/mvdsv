@@ -10,6 +10,7 @@ foreach(name tape clock_rng capture)
 		-Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 	target_link_libraries(qcx_replay_${name}_test PRIVATE m)
 	add_test(NAME qcx_replay_${name} COMMAND qcx_replay_${name}_test)
+	set_tests_properties(qcx_replay_${name} PROPERTIES LABELS "qcx;fast;replay")
 endforeach()
 
 add_executable(qcx_replay_execution_test replay_execution_test.c
@@ -20,9 +21,11 @@ target_include_directories(qcx_replay_execution_test PRIVATE ${PROJECT_SOURCE_DI
 target_compile_options(qcx_replay_execution_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 target_link_libraries(qcx_replay_execution_test PRIVATE m)
 add_test(NAME qcx_replay_execution COMMAND qcx_replay_execution_test)
+set_tests_properties(qcx_replay_execution PROPERTIES LABELS "qcx;fast;replay")
 
 add_executable(qcx_replay_checkpoint_test replay_checkpoint_test.c
 	${PROJECT_SOURCE_DIR}/src/qcx/replay_checkpoint.c)
 target_include_directories(qcx_replay_checkpoint_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_options(qcx_replay_checkpoint_test PRIVATE -Wall -Wextra -Wpedantic -Werror -UNDEBUG)
 add_test(NAME qcx_replay_checkpoint COMMAND qcx_replay_checkpoint_test)
+set_tests_properties(qcx_replay_checkpoint PROPERTIES LABELS "qcx;fast;replay")

@@ -102,13 +102,21 @@ string(FIND "${begin_source}" "pending_qcx_client = QCX_RestoreSessionClientPend
 string(FIND "${begin_source}" "QCX_RestoreSessionCommitBegin(sv_client, &restoring_qcx_client)" begin_commit)
 string(FIND "${begin_source}" "sv_client->state = cs_spawned;" begin_spawned)
 string(FIND "${begin_source}" "if (!restoring_qcx_client && !waiting_qcx_client && !sv.loadgame)" begin_callbacks)
-string(FIND "${begin_source}" "SV_SpawnSpectator ();" spectator_spawn)
-string(FIND "${begin_source}" "PR_GameClientConnect(sv_client->spectator);" client_connect)
-string(FIND "${begin_source}" "PR_GamePutClientInServer(sv_client->spectator);" put_in_server)
+string(FIND "${begin_source}" "SV_BeginClientGameplay();" begin_gameplay)
+string(FIND "${sv_user}" "void SV_BeginClientGameplay(void)" gameplay_begin)
+if(gameplay_begin EQUAL -1 OR NOT gameplay_begin LESS begin_begin)
+	message(FATAL_ERROR "could not isolate SV_BeginClientGameplay")
+endif()
+math(EXPR gameplay_length "${begin_begin} - ${gameplay_begin}")
+string(SUBSTRING "${sv_user}" ${gameplay_begin} ${gameplay_length} gameplay_source)
+string(FIND "${gameplay_source}" "SV_SpawnSpectator();" spectator_spawn)
+string(FIND "${gameplay_source}" "PR_GameClientConnect(sv_client->spectator);" client_connect)
+string(FIND "${gameplay_source}" "PR_GamePutClientInServer(sv_client->spectator);" put_in_server)
 if(begin_commit EQUAL -1 OR spectator_spawn EQUAL -1 OR client_connect EQUAL -1
-	OR put_in_server EQUAL -1 OR NOT begin_wait_guard LESS begin_pending
+	OR put_in_server EQUAL -1 OR begin_gameplay EQUAL -1
+	OR NOT begin_wait_guard LESS begin_pending
 	OR NOT begin_pending LESS begin_commit OR NOT begin_commit LESS begin_spawned
-	OR NOT begin_spawned LESS begin_callbacks OR NOT begin_callbacks LESS spectator_spawn
+	OR NOT begin_spawned LESS begin_callbacks OR NOT begin_callbacks LESS begin_gameplay
 	OR NOT spectator_spawn LESS client_connect OR NOT client_connect LESS put_in_server)
 	message(FATAL_ERROR "Cmd_Begin_f must commit saved identity before marking spawned or running ordinary gameplay callbacks")
 endif()
@@ -184,6 +192,7 @@ static qbool QCX_RestoreSessionCommitBegin(client_t *client, qbool *spawned)
 static void assert_committed_identity(int spectator)
 {
 	int i;
+	assert(sv_client->state == cs_spawned);
 	assert(commits == 1 && spectator == saved_spectator);
 	assert(strcmp(sv_client->team, "red") == 0);
 	for (i = 0; i < NUM_SPAWN_PARMS; ++i) assert(globals.parms[i] == 200.0f + i);
@@ -207,6 +216,7 @@ static void ClientReliableWrite_Byte(client_t *client, int value) { (void)client
 static void MSG_WriteByte(int *message, int value) { (void)message; (void)value; }
 static void MSG_WriteAngle(int *message, float value) { (void)message; (void)value; }
 ]=])
+string(APPEND begin_harness "${gameplay_source}")
 string(APPEND begin_harness "${begin_source}")
 string(APPEND begin_harness [=[
 static void reset_begin(int spectator, int spawned)
