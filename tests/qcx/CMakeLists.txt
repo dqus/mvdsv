@@ -873,6 +873,7 @@ endforeach()
 add_test(NAME qcx_label_contract
 	COMMAND ${CMAKE_COMMAND}
 		-DMVDSV_BINARY_DIR=${PROJECT_BINARY_DIR}
+		-DMVDSV_QCX_REPLAY_PROBE=${MVDSV_QCX_REPLAY_PROBE}
 		-DCMAKE_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}
 		-P ${CMAKE_CURRENT_SOURCE_DIR}/label_contract_test.cmake)
 qcx_set_test_labels(qcx_label_contract "qcx;fast;contract")

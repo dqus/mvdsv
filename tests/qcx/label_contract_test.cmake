@@ -62,6 +62,15 @@ set(expected_fast
 	qc2cpp_profile_tool
 	qcx_label_contract)
 
+if(MVDSV_QCX_REPLAY_PROBE)
+	list(APPEND expected_fast
+		qcx_replay_tape
+		qcx_replay_clock_rng
+		qcx_replay_capture
+		qcx_replay_execution
+		qcx_replay_checkpoint)
+endif()
+
 set(expected_integration
 	qcx_registercvar_native_acceptance
 	qcx_registercvar_wasm_acceptance
