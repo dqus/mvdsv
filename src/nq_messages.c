@@ -166,7 +166,7 @@ static void NQP_Process (void)
 			NQP_Flush (2);
 			NQP_Skip (1);
 		}
-		else if (cmd == svc_finale) {
+		else if (cmd == svc_finale || cmd == svc_centerprint) {
 			byte *p = (byte *)memchr (nqp_buf_data + 1, 0, nqp_buf.cursize - 1);
 			if (!p)
 				goto waitformore;
