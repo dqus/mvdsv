@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real UDP capture smoke; no workload/CPU equivalence claim until replay exists."""
+"""Fresh QWSP UDP capture, checkpoint validation and bound measurement smoke."""
 import argparse
 import binascii
 import pathlib
@@ -152,11 +152,14 @@ def event_offsets(data):
         offset += 4 + size
 
 
-def replay(args, tape, label, expected):
+def replay(args, tape, label, expected, *, measuring=False):
     root = pathlib.Path(tempfile.mkdtemp(prefix="qcx-val-", dir="/tmp"))
     base = prepare_basedir(args, root / "run")
     command = server_command(args, base, available_udp_port())[:-2] + [
-        "-qcx-probe-replay", str(tape), "-qcx-probe-fields", str(args.output.resolve() / "fields.txt")]
+        "-qcx-probe-replay", str(tape), "-qcx-probe-fields", str(args.output.resolve() / "fields.txt"),
+        "-qcx-probe-schedule", str(args.output.resolve() / "validation.schedule")]
+    if measuring:
+        command += ["-qcx-probe-mode", "measure"]
     result = subprocess.run(command, capture_output=True, text=True, timeout=12)
     log = result.stdout + result.stderr
     (args.output / f"{label}.log").write_text(log)
@@ -167,6 +170,11 @@ def replay(args, tape, label, expected):
         raise RuntimeError(f"{label}: unexpected validation result, see log")
     if not expected and "diverged" not in log and "valid tape" not in log:
         raise RuntimeError(f"{label}: failed without input/state validation evidence")
+    if measuring and ok:
+        measurements = [json.loads(line[line.index('{'):])["qcx_probe_measurement"]
+                        for line in log.splitlines() if '{"qcx_probe_measurement"' in line]
+        if len(measurements) != 1 or measurements[0]["cpu_seconds"] <= 0:
+            raise RuntimeError("missing bounded measurement result")
     return rows[-1] if rows else {"rejected": True}
 
 
@@ -174,7 +182,13 @@ def integration(args):
     tape = capture(args)
     if tape is None:
         return
-    print("capture-to-replay:", replay(args, tape, "replay", True))
+    validated = replay(args, tape, "replay", True)
+    print("capture-to-replay:", validated)
+    measured = replay(args, tape, "measure", True, measuring=True)
+    for key in ("work", "state_guest", "state_engine", "begin", "end", "events"):
+        if measured["qcx_probe_execution"][key] != validated["qcx_probe_execution"][key]:
+            raise RuntimeError(f"measurement schedule changed validated {key}")
+    print("bound measurement:", measured)
     data = bytearray(tape.read_bytes())
     for kind, offset in event_offsets(data):
         if kind == 7:
