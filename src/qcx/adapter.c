@@ -337,11 +337,20 @@ qcx_restore_status_t QCX_SetSaveSelection(const uint8_t *bitmap, qcx_byte_count_
 	return result;
 }
 
-qcx_byte_count_t QCX_SaveGuest(uint8_t *out, qcx_byte_count_t capacity)
+qcx_byte_count_t QCX_MeasureGuestSave(void)
 {
-	const qcx_game_api_v1_t *const game = QCX_RequireGame("save");
+	const qcx_game_api_v1_t *const game = QCX_RequireGame("measure save");
 	QCX_AdapterStateEnter(&qcx_state);
-	const qcx_byte_count_t result = game->save(game->context, out, capacity);
+	const qcx_byte_count_t result = game->measure_save(game->context);
+	QCX_AdapterStateLeave(&qcx_state);
+	return result;
+}
+
+qcx_byte_count_t QCX_WriteGuestSave(uint8_t *out, qcx_byte_count_t capacity)
+{
+	const qcx_game_api_v1_t *const game = QCX_RequireGame("write save");
+	QCX_AdapterStateEnter(&qcx_state);
+	const qcx_byte_count_t result = game->write_save(game->context, out, capacity);
 	QCX_AdapterStateLeave(&qcx_state);
 	return result;
 }
