@@ -33,7 +33,9 @@ void QCX_ClientPostThink(qcx_entity_id_t self, float time, uint32_t spectator);
 void QCX_SetNewParms(float out_parms[16]);
 void QCX_SetChangeParms(qcx_entity_id_t self, float out_parms[16]);
 qcx_restore_status_t QCX_SetSaveSelection(const uint8_t *bitmap, qcx_byte_count_t size);
-qcx_byte_count_t QCX_SaveGuest(uint8_t *out, qcx_byte_count_t capacity);
+/* Paired at an idle boundary: keep gameplay and selection unchanged between calls. */
+qcx_byte_count_t QCX_MeasureGuestSave(void);
+qcx_byte_count_t QCX_WriteGuestSave(uint8_t *out, qcx_byte_count_t capacity);
 qcx_restore_status_t QCX_ValidateGuestRestore(const uint8_t *data, qcx_byte_count_t size,
 	const uint8_t *selection, qcx_byte_count_t selection_size);
 qcx_restore_status_t QCX_RestoreGuest(const uint8_t *data, qcx_byte_count_t size);

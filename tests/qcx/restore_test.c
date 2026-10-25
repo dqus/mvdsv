@@ -53,6 +53,7 @@ static uint8_t expected_validation_selection;
 static uint32_t entity_capacity = test_entity_capacity;
 static uint32_t create_path_calls;
 static uint32_t flush_fs_calls;
+static qcx_byte_count_t guest_write_result = 2U;
 static qcx_restore_status_t guest_validation_status;
 static jmp_buf restore_error;
 static qbool expect_restore_error;
@@ -82,13 +83,15 @@ qcx_restore_status_t QCX_SetSaveSelection(const uint8_t *bitmap, qcx_byte_count_
 	saved_selection = bitmap[0];
 	return QCX_RESTORE_OK;
 }
-qcx_byte_count_t QCX_SaveGuest(uint8_t *out, qcx_byte_count_t capacity)
+qcx_byte_count_t QCX_MeasureGuestSave(void)
 {
-	if (out != NULL) {
-		assert(capacity == 2U);
-		memcpy(out, "OK", 2U);
-	}
 	return 2U;
+}
+qcx_byte_count_t QCX_WriteGuestSave(uint8_t *out, qcx_byte_count_t capacity)
+{
+	assert(out != NULL && capacity == 2U);
+	memcpy(out, "OK", 2U);
+	return guest_write_result;
 }
 qcx_restore_status_t QCX_ValidateGuestRestore(const uint8_t *data, qcx_byte_count_t size,
 	const uint8_t *selection, qcx_byte_count_t selection_size)
@@ -826,6 +829,40 @@ static void test_invalid_mode_does_not_mutate_current_world(void)
 	}
 }
 
+static void test_rejected_guest_write_preserves_existing_file(const char *directory)
+{
+	char path[MAX_OSPATH], temporary[MAX_OSPATH];
+	const char prior[] = "existing complete save";
+	assert(snprintf(path, sizeof(path), "%s/save/write_reject.sav", directory) > 0);
+	assert(snprintf(temporary, sizeof(temporary), "%s.tmp", path) > 0);
+	const qcx_byte_count_t results[] = {0U, 1U};
+	for (unsigned int index = 0U; index < 2U; ++index) {
+		reset_live_engine();
+		sv.state = ss_active;
+		entity_capacity = MAX_CLIENTS + 1U;
+		sv.max_edicts = (int)entity_capacity;
+		sv.num_edicts = 1;
+		strcpy(fs_gamedir, directory);
+		FILE *file = fopen(path, "wb");
+		assert(file != NULL);
+		assert(fwrite(prior, 1U, sizeof(prior), file) == sizeof(prior));
+		assert(fclose(file) == 0);
+		guest_write_result = results[index];
+		assert(!QCX_SaveGame("write_reject"));
+		assert(create_path_calls == 0U && flush_fs_calls == 0U);
+		assert(sv.time == 7.0 && !sv.edicts[0].e.free);
+		file = fopen(path, "rb");
+		assert(file != NULL);
+		char actual[sizeof(prior)];
+		assert(fread(actual, 1U, sizeof(actual), file) == sizeof(actual));
+		assert(memcmp(actual, prior, sizeof(prior)) == 0 && fgetc(file) == EOF);
+		assert(fclose(file) == 0);
+		assert(access(temporary, F_OK) != 0);
+		assert(remove(path) == 0);
+	}
+	guest_write_result = 2U;
+}
+
 int main(int argc, char **argv)
 {
 	assert(argc == 2);
@@ -855,5 +892,6 @@ int main(int argc, char **argv)
 	test_checks_parsed_precaches_against_the_current_world();
 	test_prepared_resources_survive_image_disposal(argv[1]);
 	test_save_path_limits_preserve_existing_file();
+	test_rejected_guest_write_preserves_existing_file(argv[1]);
 	return 0;
 }
