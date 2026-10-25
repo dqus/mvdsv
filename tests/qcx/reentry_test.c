@@ -32,6 +32,10 @@ static int droptofloor_calls;
 static int pointcontents_calls;
 static int touch_call_count;
 static int think_call_count;
+enum think_schedule_mode {
+	THINK_UNCHANGED, THINK_PAST, THINK_EQUAL, THINK_ADVANCE, THINK_CLEAR, THINK_FREE,
+};
+static enum think_schedule_mode think_schedule;
 static qbool mutate_touch_time;
 static qbool qcx_active = true;
 static int legacy_call_count;
@@ -144,10 +148,25 @@ void QCX_EdictTouch(qcx_entity_id_t first, qcx_entity_id_t second, float time,
 	}
 }
 
+/* Bound a broken scheduler in the fixture instead of hanging the test suite. */
+static void schedule_think(edict_t *entity, float time)
+{
+	assert(think_call_count <= 8 && "non-advancing think repeated within one frame");
+	switch (think_schedule) {
+	case THINK_PAST: entity->v->nextthink = entity->v->ltime + 0.05f; break;
+	case THINK_EQUAL: entity->v->nextthink = time; break;
+	case THINK_ADVANCE: entity->v->nextthink = time + 0.125f; break;
+	case THINK_CLEAR: entity->v->nextthink = 0.0f; break;
+	case THINK_FREE: entity->e.free = true; break;
+	case THINK_UNCHANGED: break;
+	}
+}
+
 void QCX_EdictThink(qcx_entity_id_t self, float time, float frametime)
 {
 	QCX_EdictTouch(self, QCX_INVALID_ENTITY_ID, time, frametime);
 	++think_call_count;
+	schedule_think(&entities[self], time);
 }
 
 void QCX_EdictBlocked(qcx_entity_id_t first, qcx_entity_id_t second, float time,
@@ -274,6 +293,10 @@ void PR_ExecuteProgram(func_t function)
 {
 	++legacy_call_count;
 	legacy_function = function;
+	if (think_schedule != THINK_UNCHANGED) {
+		++think_call_count;
+		schedule_think(&entities[5], globals.time);
+	}
 }
 
 intptr_t QDECL VM_Call(vm_t *vm, int nargs, int callnum, ...)
@@ -342,6 +365,43 @@ static void expect_pr2_client_command_route(void)
 	command_result = 0U;
 	assert(!PR2_ClientCmd());
 	assert(command_call_count == 1);
+}
+
+/* Exercise the real scheduler through QCX and retained PR1 dispatch. */
+static void test_think_scheduling(void)
+{
+	for (unsigned route = 0; route < 2; ++route) {
+		qcx_active = route != 0;
+		sv.game_edicts = entity_states;
+		sv.edicts[0].v = &entity_states[0];
+		for (enum think_schedule_mode mode = THINK_PAST; mode <= THINK_FREE; ++mode) {
+			edict_t *entity = &entities[5];
+			memset(entity->v, 0, sizeof(*entity->v));
+			entity->e.free = false;
+			entity->v->think = 1;
+			entity->v->ltime = 1.0f;
+			entity->v->nextthink = mode == THINK_PAST ? 1.0f : 3.125f;
+			sv.time = 3.0;
+			sv_frametime = 0.5;
+			think_call_count = 0;
+			think_schedule = mode;
+			assert(SV_RunThink(entity) == (mode != THINK_FREE));
+			assert(think_call_count == (mode == THINK_ADVANCE ? 4 : 1));
+			if (mode == THINK_PAST) {
+				assert(entity->v->nextthink == entity->v->ltime + 0.05f);
+				sv.time += 0.5;
+				assert(SV_RunThink(entity) && think_call_count == 2);
+			} else if (mode == THINK_ADVANCE) {
+				assert(entity->v->nextthink == 3.625f);
+			}
+		}
+		entities[5].e.free = false;
+		entities[5].v->nextthink = 4.0f;
+		think_call_count = 0;
+		assert(SV_RunThink(&entities[5]) && think_call_count == 0);
+	}
+	think_schedule = THINK_UNCHANGED;
+	qcx_active = true;
 }
 
 int main(void)
@@ -498,5 +558,6 @@ int main(void)
 	assert(think_call_count == 1 && entities[5].v->nextthink == 0.0f);
 	assert(observed_first == 5U && observed_time == 3.0f);
 	assert(globals.self == 5U && globals.other == 0U && globals.time == 3.0f);
+	test_think_scheduling();
 	return 0;
 }
