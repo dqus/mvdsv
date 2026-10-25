@@ -266,6 +266,40 @@ static void test_explosion2_message_boundary(void)
 	const byte followed[] = {23, 3, 19, 227, 45, 255, 0, 255, 27};
 	check(followed, sizeof(followed));
 }
+static void test_centerprint_message_boundary(void)
+{
+	for (unsigned to = 0U; to < 2U; ++to) {
+		reset();
+		destination = to == 0U ? 0 : 2;
+		const unsigned before = warnings;
+		emit_byte(svc_centerprint);
+		assert(sv.reliable_datagram.cursize == 0 && warnings == before);
+		emit_string("hello");
+		const byte text[] = {svc_centerprint, 'h', 'e', 'l', 'l', 'o', 0};
+		check(text, sizeof(text));
+		emit_byte(svc_foundsecret);
+		const byte followed[] = {svc_centerprint, 'h', 'e', 'l', 'l', 'o', 0,
+			svc_foundsecret};
+		check(followed, sizeof(followed));
+
+		reset();
+		destination = to == 0U ? 0 : 2;
+		emit_byte(svc_centerprint);
+		emit_char('o');
+		emit_char('k');
+		assert(sv.reliable_datagram.cursize == 0);
+		emit_byte(0);
+		const byte fragmented[] = {svc_centerprint, 'o', 'k', 0};
+		check(fragmented, sizeof(fragmented));
+		emit_byte(svc_centerprint);
+		emit_string("");
+		emit_byte(svc_killedmonster);
+		const byte cleared[] = {svc_centerprint, 'o', 'k', 0,
+			svc_centerprint, 0, svc_killedmonster};
+		check(cleared, sizeof(cleared));
+		assert(warnings == before);
+	}
+}
 static void test_reset_and_ignored_destinations(void)
 {
 	reset();
@@ -303,6 +337,7 @@ int main(void)
 		through_qcx = route != 0U;
 		test_packets();
 		test_explosion2_message_boundary();
+		test_centerprint_message_boundary();
 		test_reset_and_ignored_destinations();
 	}
 	through_qcx = true;
