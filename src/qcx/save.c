@@ -555,7 +555,7 @@ qbool QCX_SaveGame(const char *name)
 		Con_Printf("qc2cpp save rejected: game rejected entity selection.\n");
 		return false;
 	}
-	required = QCX_SaveGuest(NULL, 0U);
+	required = QCX_MeasureGuestSave();
 	if (required == 0U || required > QCX_SAVE_MAX_GUEST_BYTES) {
 		Con_Printf("qc2cpp save rejected: invalid game snapshot size.\n");
 		return false;
@@ -563,7 +563,7 @@ qbool QCX_SaveGame(const char *name)
 	guest.size = required;
 	if (guest.size != 0U) {
 		guest.data = malloc(guest.size);
-		if (guest.data == NULL || QCX_SaveGuest(guest.data, guest.size) != guest.size) {
+		if (guest.data == NULL || QCX_WriteGuestSave(guest.data, guest.size) != guest.size) {
 			failure = "could not serialize game state";
 			goto done;
 		}

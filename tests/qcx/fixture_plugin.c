@@ -293,7 +293,9 @@ static qcx_plugin_status_t fixture_string_write(void *context, qcx_object_scope_
 }
 static qcx_restore_status_t fixture_selection(void *context, const uint8_t *bitmap, qcx_byte_count_t size)
 { (void)context; (void)bitmap; (void)size; return QCX_RESTORE_OK; }
-static qcx_byte_count_t fixture_save(void *context, uint8_t *out, qcx_byte_count_t capacity)
+static qcx_byte_count_t fixture_measure_save(void *context)
+{ (void)context; return 0U; }
+static qcx_byte_count_t fixture_write_save(void *context, uint8_t *out, qcx_byte_count_t capacity)
 { (void)context; (void)out; (void)capacity; return 0U; }
 static qcx_restore_status_t fixture_restore(void *context, const uint8_t *data, qcx_byte_count_t size, const uint8_t *selection, qcx_byte_count_t selection_size)
 { (void)context; (void)data; (void)size; (void)selection; (void)selection_size; return QCX_RESTORE_OK; }
@@ -378,7 +380,7 @@ qcx_plugin_status_t qcx_game_plugin_query_v1(const qcx_host_api_v1_t *host,
 		.client_say = fixture_client_say,
 		.clear_edict = fixture_clear_edict,
 		.string_write = fixture_string_write,
-		.set_save_selection = fixture_selection, .save = fixture_save,
+		.set_save_selection = fixture_selection, .measure_save = fixture_measure_save, .write_save = fixture_write_save,
 		.validate_restore = fixture_restore, .restore = fixture_validate_restore,
 		.memory_view = fixture_memory_view,
 	};
