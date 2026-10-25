@@ -1,4 +1,4 @@
-"""Diagnostic type inventory for the existing named QCGD codec, not a new ABI.
+"""Retained QWSP inventory checked against typed QCGD descriptions, not a new ABI.
 
 Only the retained generator's explicit schema/declaration forms are supported;
 unknown fields fail closed rather than guessing their serialized widths.
