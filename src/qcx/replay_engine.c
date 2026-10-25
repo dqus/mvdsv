@@ -363,8 +363,8 @@ void SV_QCXReplayInit(void)
 	Cmd_AddCommand("qcx_probe_status", Status_f);
 }
 
-/* QCGD names its fields but does not carry wire type tags. This diagnostic
- * inventory comes from the retained generated schemas, not from C layouts. */
+/* Check QCGD descriptions against this retained QWSP inventory, derived from
+ * generated schemas rather than C layouts. It is also part of timing provenance. */
 typedef struct { unsigned scope, kind; char name[128]; } field_kind_t;
 static field_kind_t field_kinds[8192];
 static size_t field_count;
@@ -443,10 +443,10 @@ static void Checkpoint(uint8_t out[CHECKPOINT_SIZE])
 	if (QCX_SetSaveSelection(bitmap, (QCX_EntityCapacity() + 7)/8) != QCX_RESTORE_OK) {
 		SV_Error("QCX replay logical selection failed");
 	}
-	size_t size = QCX_SaveGuest(NULL, 0);
+	size_t size = QCX_MeasureGuestSave();
 	uint8_t *data = malloc(size);
 	uint64_t guest;
-	if (!data || QCX_SaveGuest(data, size) != size
+	if (!size || !data || QCX_WriteGuestSave(data, size) != size
 		|| !QCX_ReplayLogicalHash(data, size, FieldKind, &guest)) {
 		SV_Error("QCX replay logical checkpoint: %s", QCX_ReplayCheckpointError());
 	}

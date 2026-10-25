@@ -6,9 +6,17 @@ and minping disabled. Replay executes the real command groups and physics,
 including the otherwise callback-free bot-frame bookkeeping. Output events
 retain damage/fixangle consumption without sending packets.
 
-Validation decodes the existing QCGD named logical codec: all durable globals
-and all active entities (plus world), including string bytes and symbolic
-function/field names. A diagnostic field inventory is derived from retained
+Validation decodes strict QCGD version 2: global and entity descriptions (names
+and wire types) appear once, followed by global values and slot/entity value
+records. Checkpoints pair `QCX_MeasureGuestSave` with `QCX_WriteGuestSave` at the
+same idle boundary, without changing the selection or running gameplay between
+them. The parsed canonical stream, including descriptions, enters the guest hash.
+
+The retained scalar QWSP field inventory is checked against those descriptions;
+arrays remain outside this diagnostic workload. Function/field signatures and
+symbolic names are decoded, never native callable representations. The hash
+covers all durable globals and all active entities (plus world), including
+string bytes and symbolic function/field names. The inventory comes from retained
 generated schemas; unknown declarations fail closed. There is no ABI change.
 Shared transient globals (self/other/world, time/frametime, direction and trace
 values), engine edict allocation/free/lifetime cells, physics clocks and
@@ -31,10 +39,13 @@ Pre/PostThink, think/touch/blocked, connect/put, allocations/frees, SetNewParms.
 Empty frames remain present; recursive >50ms halves remain one recorded command.
 
 `tests/integration/qcx_replay_process.py` runs real UDP two-client capture,
-capture-to-replay validation, changed-movement rejection and truncated-input
-rejection. Its `qcx_replay_fields.py` helper writes `-qcx-probe-fields` input
+capture-to-replay validation, schedule-bound measurement, changed-movement
+rejection and truncated-input rejection. Its `qcx_replay_fields.py` helper writes `-qcx-probe-fields` input
 from the retained generated tree beside the game artifact. Raw logs/tapes are
-ignored external build artifacts, not committed captures.
+ignored external build artifacts, not committed captures. Version-1 logical
+checkpoints/tapes are not compatible: capture a fresh tape and revalidate it with
+matching current game, server and inventory artifacts. Historical pinned runner
+inputs and hash checks are unchanged.
 
 MEASURE requires a successful validation schedule bound to the tape, game,
 logical inventory and server binary. The schedule supplies omitted libc RNG
