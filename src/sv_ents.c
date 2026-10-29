@@ -1658,6 +1658,7 @@ qbool SV_MVD_WriteRDEntities(qbool initial)
 	byte data[MAX_MSGLEN];
 	sizebuf_t msg;
 	int n = 1;
+	qbool first_snapshot = initial && !demo.rd_previous;
 	qbool first = true;
 	if (!demo.rd_previous) {
 		demo.rd_previous = Q_calloc(MAX_EDICTS, sizeof(*demo.rd_previous));
@@ -1721,6 +1722,10 @@ qbool SV_MVD_WriteRDEntities(qbool initial)
 				   (n - start) * sizeof(*demo.rd_previous));
 		}
 	} while (n < MAX_EDICTS);
+	/* The first snapshot is the stream base, including entities removed before
+	 * its first delta. Later destination snapshots must not replace that base. */
+	if (first_snapshot)
+		memcpy(demo.rd_previous, demo.rd_current, MAX_EDICTS * sizeof(*demo.rd_previous));
 	if (!initial) {
 		if (demo.recorder.datagram.overflowed) {
 			Sys_Printf("WARNING: NQ muzzle flashes overflowed in RD recording\n");
