@@ -280,6 +280,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	NET_InitServer();
 #endif
 
+	SV_MVD_FinishMap();
 	SV_SaveSpawnparms ();
 	for (i = 0; i < MAX_CLIENTS; ++i) {
 		SV_RD_ClearClient(&svs.clients[i]);
@@ -536,6 +537,8 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 			sv.max_edicts = min(sv.max_edicts, MAX_EDICTS_SAFE);
 		}
 	}
+
+	SV_MVD_ConfigureMap();
 
 	sv.checkpvs = (byte *)Hunk_AllocName(CM_PVSRowBytes(), "checkpvs");
 

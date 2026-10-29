@@ -509,7 +509,8 @@ inrange:
 	}
 
 	if (sv.mvdrecording && (!extended_sound
-	    || (demo.recorder.fteprotocolextensions & FTE_PEXT_SOUNDDBL))) {
+	    || (demo.recorder.fteprotocolextensions & FTE_PEXT_SOUNDDBL)
+	    || (demo.recorder.fteprotocolextensions2 & FTE_PEXT2_REPLACEMENTDELTAS))) {
 		if (mvd_only) {
 			mvdhidden_block_header_t header;
 			header.length = sv.multicast.cursize - 2;
@@ -1497,8 +1498,10 @@ void MVD_WriteStats(void)
 		stats[STAT_CELLS] = ent->v->ammo_cells;
 		stats[STAT_ACTIVEWEAPON] = ent->v->weapon;
 
-		if (ent->v->health > 0) // viewheight for PF_DEAD & PF_GIB is hardwired
+		/* RD carries corpse/gib viewheight explicitly instead of legacy flags. */
+		if (ent->v->health > 0 || SV_MVD_UsesRD()) {
 			stats[STAT_VIEWHEIGHT] = ent->v->view_ofs[2];
+		}
 
 		stats[STAT_ITEMS] = SV_ItemsStat(ent);
 
@@ -1594,21 +1597,26 @@ void SV_SendDemoMessage(void)
 	if (!demo.recorder.delta_sequence)
 		demo.recorder.delta_sequence = -1;
 
-	SV_WriteEntitiesToClient (&demo.recorder, &msg, true);
+	if (!SV_MVD_UsesRD()) {
+		SV_WriteEntitiesToClient (&demo.recorder, &msg, true);
 
-	if (msg.overflowed)
-	{
-		Sys_Printf("WARNING: msg overflowed in SV_SendDemoMessage\n");
-	}
-	else
-	{
-		if (msg.cursize)
+		if (msg.overflowed)
 		{
-			if (MVDWrite_Begin(dem_all, 0, msg.cursize))
+			Sys_Printf("WARNING: msg overflowed in SV_SendDemoMessage\n");
+		}
+		else
+		{
+			if (msg.cursize)
 			{
-				MVD_SZ_Write(msg.data, msg.cursize);
+				if (MVDWrite_Begin(dem_all, 0, msg.cursize))
+				{
+					MVD_SZ_Write(msg.data, msg.cursize);
+				}
 			}
 		}
+	}
+	else {
+		SV_WriteNQMuzzleFlashes(NULL);
 	}
 
 	SZ_Clear(&msg);
@@ -1632,11 +1640,21 @@ void SV_SendDemoMessage(void)
 
 	SZ_Clear (&demo.datagram);
 
+	if (SV_MVD_UsesRD()) {
+		SV_MVD_FlushCurrentFrame();
+		if (!SV_MVD_WriteRDEntities(false)) {
+			SV_MVDStop(4, false);
+			return;
+		}
+	}
+
 	demo.recorder.delta_sequence = demo.recorder.netchan.incoming_sequence&255;
 	demo.recorder.netchan.incoming_sequence++;
-	demo.frames[demo.parsecount & UPDATE_MASK].time = sv.time;
-	demo.frames[demo.parsecount & UPDATE_MASK].paused = sv.paused;
-	demo.frames[demo.parsecount & UPDATE_MASK].pause_duration = (int)bound(0, (curtime - demo.curtime) * 1000.0f, 255);
+	if (!SV_MVD_UsesRD()) {
+		demo.frames[demo.parsecount & UPDATE_MASK].time = sv.time;
+		demo.frames[demo.parsecount & UPDATE_MASK].paused = sv.paused;
+		demo.frames[demo.parsecount & UPDATE_MASK].pause_duration = (int)bound(0, (curtime - demo.curtime) * 1000.0f, 255);
+	}
 	demo.curtime = curtime;
 	demo.time = sv.time;
 
