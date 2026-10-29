@@ -122,7 +122,7 @@ unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_stat
 }
 
 /* Encode one complete base-RD payload into a bounded temporary message. */
-static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsigned int bits)
+static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsigned int bits, qbool floatcoords)
 {
 	unsigned int pred = UFP_MOVETYPE | UFP_WEAPONFRAME_OLD;
 	int i;
@@ -163,11 +163,20 @@ static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsig
 		}
 	}
 	if (bits & UF_ORIGINXY) {
-		MSG_WriteCoord(msg, s->origin[0]);
-		MSG_WriteCoord(msg, s->origin[1]);
+		if (floatcoords) {
+			MSG_WriteFloat(msg, s->origin[0]);
+			MSG_WriteFloat(msg, s->origin[1]);
+		} else {
+			MSG_WriteCoord(msg, s->origin[0]);
+			MSG_WriteCoord(msg, s->origin[1]);
+		}
 	}
 	if (bits & UF_ORIGINZ) {
-		MSG_WriteCoord(msg, s->origin[2]);
+		if (floatcoords) {
+			MSG_WriteFloat(msg, s->origin[2]);
+		} else {
+			MSG_WriteCoord(msg, s->origin[2]);
+		}
 	}
 	if (bits & UF_ANGLESXZ) {
 		if (bits & UF_PREDINFO) {
@@ -327,7 +336,7 @@ static qbool SV_RD_ValidState(const rd_entity_state_t *s, unsigned int bits)
 }
 
 /* Copy only a complete record; callers retain pending bits on failure. */
-qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits)
+qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords)
 {
 	byte data[256];
 	sizebuf_t record;
@@ -336,7 +345,7 @@ qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned
 	}
 	SZ_Init(&record, data, sizeof(data));
 	MSG_WriteShort(&record, state->number);
-	SV_RD_WritePayload(&record, state, bits);
+	SV_RD_WritePayload(&record, state, bits, floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) {
 		return false;
 	}
@@ -355,7 +364,7 @@ qbool SV_RD_WriteRemove(sizebuf_t *msg, int number)
 }
 
 /* Static payloads omit the entity reference; baselines include it. */
-qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered)
+qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered, qbool floatcoords)
 {
 	byte data[256];
 	sizebuf_t record;
@@ -368,7 +377,7 @@ qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool 
 	if (numbered) {
 		MSG_WriteShort(&record, state->number);
 	}
-	SV_RD_WritePayload(&record, state, UF_RESET | SV_RD_StateBits(&nullstate, state));
+	SV_RD_WritePayload(&record, state, UF_RESET | SV_RD_StateBits(&nullstate, state), floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) {
 		return false;
 	}
@@ -648,7 +657,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 			if (n <= MAX_CLIENTS && (bits & (UF_ANGLESXZ | UF_ANGLESY))) {
 				bits |= UF_PREDINFO;
 			}
-			if (!SV_RD_WriteEntity(msg, &rd->current[n], bits)) {
+			if (!SV_RD_WriteEntity(msg, &rd->current[n], bits, (client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) {
 				next = n;
 				break;
 			}
