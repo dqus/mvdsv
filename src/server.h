@@ -940,6 +940,13 @@ void SV_KickClient(client_t* client, const char* reason);
 //
 // sv_ents.c
 //
+/* Base FTE replacement-delta wire helpers, independent of legacy snapshots. */
+void SV_RD_InitState(rd_entity_state_t *state);
+unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_state_t *to);
+qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits);
+qbool SV_RD_WriteRemove(sizebuf_t *msg, int number);
+qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered);
+
 void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder);
 void SV_SetVisibleEntitiesForBot (client_t* client);
 
