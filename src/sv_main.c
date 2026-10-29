@@ -1392,6 +1392,9 @@ static void SVC_DirectConnect (void)
 
 #ifdef PROTOCOL_VERSION_FTE2
 	newcl->fteprotocolextensions2 = protextsupported2;
+	/* A client-supplied mask must not bypass the server's RD opt-in. */
+	if (!(svs.fteprotocolextensions2 & FTE_PEXT2_REPLACEMENTDELTAS))
+		newcl->fteprotocolextensions2 &= ~FTE_PEXT2_REPLACEMENTDELTAS;
 #endif // PROTOCOL_VERSION_FTE2
 
 #ifdef PROTOCOL_VERSION_MVD1
