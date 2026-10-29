@@ -56,6 +56,66 @@ cvar_t	sv_silentrecord		= {"sv_silentrecord",   "0"};
 
 cvar_t	extralogname		= {"extralogname",		"unset"}; // no sv_ prefix? WTF!
 
+void DestFlush(qbool complete);
+
+cvar_t sv_demo_format = {"sv_demo_format", "auto"};
+
+/* Selection depends on the allowed map capacity, never current occupancy. */
+static int SV_MVD_SelectFormat(const char *option, int capacity)
+{
+	if (!strcmp(option, "auto")) return capacity > 2048;
+	if (!strcmp(option, "rd")) return 1;
+	if (!strcmp(option, "legacy")) return capacity <= 2048 ? 0 : -1;
+	return -1;
+}
+
+/* Buffered output uses the format declared by its current recording epoch. */
+qbool SV_MVD_UsesRD(void)
+{
+	return (demo.recorder.fteprotocolextensions2 & FTE_PEXT2_REPLACEMENTDELTAS) != 0;
+}
+
+/* Flush queued metadata at the current clock without replaying pause time. */
+void SV_MVD_FlushCurrentFrame(void)
+{
+	demo_frame_t *frame = &demo.frames[demo.parsecount & UPDATE_MASK];
+
+	frame->time = sv.time;
+	frame->pause_duration = (int)bound(0, (curtime - demo.curtime) * 1000.0f, 255);
+	frame->paused = sv.paused && frame->pause_duration > 0;
+	SV_MVDWritePackets(demo.parsecount - demo.lastwritten + 1);
+	frame->paused = false;
+	frame->pause_duration = 0;
+	demo.curtime = curtime;
+	demo.time = sv.time;
+}
+
+/* Drain the old epoch before map memory, times or coordinate settings change. */
+void SV_MVD_FinishMap(void)
+{
+	if (sv.mvdrecording) {
+		SV_MVD_FlushCurrentFrame();
+		DestFlush(true);
+	}
+	SV_MVD_ClearRD();
+}
+
+/* Latch once after the game's map capacity is finalized; stream RD is deferred. */
+void SV_MVD_ConfigureMap(void)
+{
+	mvddest_t **link = &demo.dest;
+	sv.demo_format = SV_MVD_SelectFormat(sv_demo_format.string, sv.max_edicts);
+	while (*link) {
+		mvddest_t *dest = *link;
+		if (sv.demo_format < 0 || (sv.demo_format == 1 && dest->desttype == DEST_STREAM)) {
+			Con_Printf("Closing recording output: selected MVD format is unsupported.\n");
+			*link = dest->nextdest;
+			DestClose(dest, false);
+		}
+		else link = &dest->nextdest;
+	}
+}
+
 mvddest_t			*singledest;
 
 // only one .. is allowed (security)
@@ -629,7 +689,7 @@ static qbool SV_MVDWritePacketsEx (int num)
 		// find two frames
 		// one before the exact time (time - msec) and one after,
 		// then we can interpolte exact position for current frame
-		for (i = 0, cl = frame->clients, last_cl = demo.clients; i < MAX_CLIENTS; i++, cl++, last_cl++)
+		for (i = 0, cl = frame->clients, last_cl = demo.clients; !SV_MVD_UsesRD() && i < MAX_CLIENTS; i++, cl++, last_cl++)
 		{
 			if (cl->parsecount != demo.lastwritten)
 				continue; // not valid
@@ -948,8 +1008,10 @@ void SV_MVDStop (int reason, qbool mvdonly)
 		// stop and remove
 		DestCloseAllFlush(true, mvdonly);
 
-		if (!demo.dest)
+		if (!demo.dest) {
 			sv.mvdrecording = false;
+			SV_MVD_ClearRD();
+		}
 
 		if (reason == 4)
 			SV_BroadcastPrintf (PRINT_CHAT, "Error in MVD/QTV recording, recording stopped\n");
@@ -985,8 +1047,10 @@ void SV_MVDStop (int reason, qbool mvdonly)
 
 	numclosed = DestCloseAllFlush(false, mvdonly);
 
-	if (!demo.dest)
+	if (!demo.dest) {
 		sv.mvdrecording = false;
+		SV_MVD_ClearRD();
+	}
 
 	if (numclosed)
 	{
@@ -1056,6 +1120,17 @@ static void SV_WriteRecordMVDMessage (sizebuf_t *msg)
 	DemoWrite (&len, 4);
 
 	DemoWrite (msg->data, msg->cursize);
+}
+
+/* RD chunks bypass the bounded legacy frame accumulator after its metadata
+ * has been flushed. Initial messages respect the existing singledest scope. */
+qbool SV_MVD_WriteRDMessage(sizebuf_t *msg, qbool initial)
+{
+	if (initial) {
+		SV_WriteRecordMVDMessage(msg);
+		return sv.mvdrecording;
+	}
+	return MVD_WriteMessage(msg, 0);
 }
 
 /*
@@ -1133,6 +1208,20 @@ qbool SV_MVD_Record (mvddest_t *dest, qbool mapchange)
 {
 	int i;
 
+	if (sv.demo_format < 0 || (dest && dest->desttype == DEST_STREAM && sv.demo_format == 1)) {
+		Con_Printf("Cannot record: selected MVD format is unsupported for this output.\n");
+		return false;
+	}
+	if (!mapchange && dest && sv.mvdrecording && SV_MVD_UsesRD()) {
+		/* Bring old outputs to the new destination's snapshot base first. */
+		SV_MVD_FlushCurrentFrame();
+		if (!SV_MVD_WriteRDEntities(false)) {
+			SV_MVDStop(4, false);
+			return false;
+		}
+		DestFlush(true);
+	}
+
 	if (mapchange)
 	{
 		if (dest) // during mapchange dest must be NULL
@@ -1152,7 +1241,12 @@ qbool SV_MVD_Record (mvddest_t *dest, qbool mapchange)
 
     	// and here we memset() not whole demo_t struct, but part,
     	// so demo.dest and demo.pendingdest is not overwriten
+		SV_MVD_ClearRD();
 		memset(&demo, 0, offsetof(demo_t, mem_set_point));
+		if (sv.demo_format == 1) {
+			demo.prevtime = sv.time;
+			demo.curtime = curtime;
+		}
 
 		for (i = 0; i < UPDATE_BACKUP; i++)
 		{
@@ -1184,6 +1278,20 @@ qbool SV_MVD_Record (mvddest_t *dest, qbool mapchange)
 
 	// done
 	return true;
+}
+
+/* Admit file recording before allocating its file/cache; own failed starts. */
+static void SV_MVD_StartFile(char *name)
+{
+	mvddest_t *dest;
+
+	if (sv.demo_format < 0) {
+		Con_Printf("Cannot record: selected MVD format is unsupported.\n");
+		return;
+	}
+	dest = SV_InitRecordFile(name);
+	if (dest && !SV_MVD_Record(dest, false))
+		DestClose(dest, false);
 }
 
 static void SV_MVD_ReservePrecacheLists(mvddest_t *dest)
@@ -1308,8 +1416,9 @@ void SV_MVD_SendInitialGamestate(mvddest_t* dest)
 #endif
 
 #ifdef PROTOCOL_VERSION_FTE2
-	/* Recording retains its legacy entity codec, independent of live clients. */
-	demo.recorder.fteprotocolextensions2 &= ~FTE_PEXT2_REPLACEMENTDELTAS;
+	/* The map selects recording format independently of live client negotiation. */
+	if (sv.demo_format == 1) demo.recorder.fteprotocolextensions2 |= FTE_PEXT2_REPLACEMENTDELTAS;
+	else demo.recorder.fteprotocolextensions2 &= ~FTE_PEXT2_REPLACEMENTDELTAS;
 	if (demo.recorder.fteprotocolextensions2)
 	{
 		MSG_WriteLong(&buf, PROTOCOL_VERSION_FTE2);
@@ -1425,7 +1534,14 @@ void SV_MVD_SendInitialGamestate(mvddest_t* dest)
 				SZ_Clear (&buf);
 			}
 
-			if (demo.recorder.fteprotocolextensions & FTE_PEXT_SPAWNSTATIC2) {
+			if (SV_MVD_UsesRD()) {
+				rd_entity_state_t rd;
+				SV_RD_FromLegacy(&rd, s);
+				MSG_WriteByte(&buf, svc_fte_spawnstatic2);
+				if (!MSG_RD_WriteBaseline(&buf, &rd, false, (demo.recorder.mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0))
+					SV_Error("RD MVD static record does not fit");
+			}
+			else if (demo.recorder.fteprotocolextensions & FTE_PEXT_SPAWNSTATIC2) {
 				MSG_WriteByte(&buf, svc_fte_spawnstatic2);
 				SV_WriteDelta(&demo.recorder, &from, s, &buf, true);
 			}
@@ -1461,7 +1577,14 @@ void SV_MVD_SendInitialGamestate(mvddest_t* dest)
 				continue;
 			}
 
-			if (demo.recorder.fteprotocolextensions & FTE_PEXT_SPAWNSTATIC2) {
+			if (SV_MVD_UsesRD()) {
+				rd_entity_state_t rd;
+				SV_RD_FromLegacy(&rd, s);
+				MSG_WriteByte(&buf, svc_fte_spawnbaseline2);
+				if (!MSG_RD_WriteBaseline(&buf, &rd, true, (demo.recorder.mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0))
+					SV_Error("RD MVD baseline record does not fit");
+			}
+			else if (demo.recorder.fteprotocolextensions & FTE_PEXT_SPAWNSTATIC2) {
 				MSG_WriteByte(&buf, svc_fte_spawnbaseline2);
 				SV_WriteDelta(&demo.recorder, &empty_baseline, s, &buf, true);
 			}
@@ -1554,7 +1677,7 @@ void SV_MVD_SendInitialGamestate(mvddest_t* dest)
 	}
 
 	// this set proper model origin and angles etc for players
-	for (i = 0; i < MAX_CLIENTS; i++)
+	for (i = 0; !SV_MVD_UsesRD() && i < MAX_CLIENTS; i++)
 	{
 		vec3_t origin, angles;
 		int j, flags;
@@ -1692,6 +1815,9 @@ void SV_MVD_SendInitialGamestate(mvddest_t* dest)
 		Sys_Error("SV_MVD_SendInitialGamestate: buf.cursize %d", buf.cursize);
 	}
 
+	if (SV_MVD_UsesRD() && !SV_MVD_WriteRDEntities(true))
+		SV_Error("Could not write RD MVD initial state");
+
 	// send all current light styles
 	for (i=0 ; i<MAX_LIGHTSTYLES ; i++)
 	{
@@ -1756,7 +1882,7 @@ void SV_MVD_Record_f (void)
 	//
 	// open the demo file and start recording
 	//
-	SV_MVD_Record (SV_InitRecordFile(name), false);
+	SV_MVD_StartFile(name);
 }
 
 /*
@@ -1854,7 +1980,7 @@ void SV_MVDEasyRecord_f (void)
 	snprintf(name4, sizeof(name4), "%s", va("%s/%s.xml", sv_demoDir.string, name4));
 	Cvar_Set(&extralogname, name4);
 
-	SV_MVD_Record (SV_InitRecordFile(name2), false);
+	SV_MVD_StartFile(name2);
 }
 
 //============================================================
@@ -1865,6 +1991,7 @@ static void MVD_Init (void)
 
 	memset(&demo, 0, sizeof(demo)); // clear whole demo struct at least once
 	
+	Cvar_Register (&sv_demo_format);
 	Cvar_Register (&sv_demofps);
 	Cvar_Register (&sv_demoIdlefps);
 	Cvar_Register (&sv_demoPings);

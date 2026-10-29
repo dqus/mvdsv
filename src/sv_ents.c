@@ -751,7 +751,7 @@ static void SV_RD_BuildEntityState(rd_entity_state_t *state, edict_t *ent, int n
 		int up = bound(0, ((int)ent->v->maxs[2] + 32) / 8, 63);
 		state->solidsize = x | (down << 5) | (up << 10);
 	}
-	if (ent->v->owner && PROG_TO_EDICT(ent->v->owner) == client->edict) state->solidsize = 0;
+	if (client && ent->v->owner && PROG_TO_EDICT(ent->v->owner) == client->edict) state->solidsize = 0;
 #ifdef FTE_PEXT_TRANS
 	if (ent->xv.alpha > 0 && ent->xv.alpha < 1) state->trans = bound(0, (int)(ent->xv.alpha * 254), 254);
 #endif
@@ -865,6 +865,32 @@ SV_WritePlayersToClient
 =============
 */
 
+/* Shared player fields; live callers retain their recipient-specific omissions. */
+static void SV_RD_BuildPlayerFields(rd_entity_state_t *state, edict_t *ent, client_t *player, int pm)
+{
+	int i;
+	switch (pm) {
+	case PM_DEAD: state->pmovetype = MOVETYPE_TOSS; break;
+	case PM_SPECTATOR: case PM_OLD_SPECTATOR: state->pmovetype = MOVETYPE_NOCLIP; break;
+	case PM_FLY: state->pmovetype = MOVETYPE_FLY; break;
+	case PM_NONE: case PM_LOCK: state->pmovetype = MOVETYPE_NONE; break;
+	default: state->pmovetype = MOVETYPE_WALK; break;
+	}
+	if ((int)ent->v->flags & FL_ONGROUND) state->pmovetype |= 128;
+	if (player->jump_held) state->pmovetype |= 64;
+	if (pm != PM_DEAD) {
+		VectorCopy(ent->v->v_angle, state->angles);
+		state->angles[0] /= -3;
+	}
+	for (i = 0; i < 3; ++i) state->velocity[i] = bound(-32768, (int)(ent->v->velocity[i] * 8), 32767);
+	state->movement[0] = player->lastcmd.forwardmove;
+	state->movement[1] = player->lastcmd.sidemove;
+	state->movement[2] = player->lastcmd.upmove;
+	state->msec = bound(0, (int)(1000 * (sv.time - player->localtime)), 255);
+	state->weaponframe = bound(0, (int)ent->v->weaponframe, 32767);
+	if (player->spectator) state->modelindex = 0;
+}
+
 int SV_PMTypeForClient (client_t *cl);
 static void SV_WritePlayersToClient (client_t *client, client_frame_t *frame, byte *pvs, qbool disable_updates, sizebuf_t *msg)
 {
@@ -943,28 +969,12 @@ static void SV_WritePlayersToClient (client_t *client, client_frame_t *frame, by
 			rd_entity_state_t rd;
 			int pm = track_ent ? PM_LOCK : SV_PMTypeForClient(cl);
 			SV_RD_BuildEntityState(&rd, ent, j + 1, client);
-			switch (pm) {
-			case PM_DEAD: rd.pmovetype = MOVETYPE_TOSS; break;
-			case PM_SPECTATOR: case PM_OLD_SPECTATOR: rd.pmovetype = MOVETYPE_NOCLIP; break;
-			case PM_FLY: rd.pmovetype = MOVETYPE_FLY; break;
-			case PM_NONE: case PM_LOCK: rd.pmovetype = MOVETYPE_NONE; break;
-			default: rd.pmovetype = MOVETYPE_WALK; break;
+			SV_RD_BuildPlayerFields(&rd, ent, cl, pm);
+			if (ent == self_ent) {
+				memset(rd.movement, 0, sizeof(rd.movement));
+				rd.msec = 0;
 			}
-			if ((int)ent->v->flags & FL_ONGROUND) rd.pmovetype |= 128;
-			if (cl->jump_held) rd.pmovetype |= 64;
-			if (pm != PM_DEAD) {
-				VectorCopy(ent->v->v_angle, rd.angles);
-				rd.angles[0] /= -3;
-			}
-			for (i = 0; i < 3; ++i) rd.velocity[i] = bound(-32768, (int)(ent->v->velocity[i] * 8), 32767);
-			if (ent != self_ent) {
-				rd.movement[0] = cl->lastcmd.forwardmove;
-				rd.movement[1] = cl->lastcmd.sidemove;
-				rd.movement[2] = cl->lastcmd.upmove;
-				rd.msec = bound(0, (int)(1000 * (sv.time - cl->localtime)), 255);
-			}
-			if (ent == self_ent || client->spec_track == j + 1) rd.weaponframe = bound(0, (int)ent->v->weaponframe, 32767);
-			if (cl->spectator) rd.modelindex = 0;
+			if (ent != self_ent && client->spec_track != j + 1) rd.weaponframe = 0;
 			SV_RD_QueueEntity(client, &rd);
 			continue;
 		}
@@ -1504,6 +1514,84 @@ qbool SV_SkipCommsBotMessage(client_t* client)
 	extern cvar_t sv_serveme_fix;
 
 	return sv_serveme_fix.value && client->spectator && !strcmp(client->name, "[ServeMe]");
+}
+
+
+/* Free only the recorder's arrays; live clients retain their own ACK state. */
+void SV_MVD_ClearRD(void)
+{
+	Q_free(demo.rd_previous);
+	Q_free(demo.rd_current);
+}
+
+/* Collect the recorder's complete world, without a player's PVS/owner filters. */
+static void SV_MVD_CollectRD(void)
+{
+	int n;
+	memset(demo.rd_current, 0, MAX_EDICTS * sizeof(*demo.rd_current));
+	for (n = 1; n < sv.num_edicts; ++n) {
+		edict_t *ent = EDICT_NUM(n);
+		rd_entity_state_t *state = &demo.rd_current[n];
+		if (n <= MAX_CLIENTS) {
+			client_t *player = &svs.clients[n - 1];
+			if (player->state != cs_spawned || player->spectator) continue;
+			SV_RD_BuildEntityState(state, ent, n, NULL);
+			SV_RD_BuildPlayerFields(state, ent, player, SV_PMTypeForClient(player));
+		}
+		else {
+			if (ent->e.free || !SV_EntityVisibleToClient(&demo.recorder, n, NULL)) continue;
+			SV_RD_BuildEntityState(state, ent, n, NULL);
+		}
+	}
+}
+
+/* Each bounded message commits only after output accepts it. Initial snapshots
+ * target a new destination and must not change the ongoing recorder's base. */
+qbool SV_MVD_WriteRDEntities(qbool initial)
+{
+	byte data[MAX_MSGLEN];
+	sizebuf_t msg;
+	int n = 1;
+	qbool first = true;
+	if (!demo.rd_previous) demo.rd_previous = Q_calloc(MAX_EDICTS, sizeof(*demo.rd_previous));
+	if (!demo.rd_current) demo.rd_current = Q_calloc(MAX_EDICTS, sizeof(*demo.rd_current));
+	SV_MVD_CollectRD();
+	do {
+		int start = n;
+		SZ_Init(&msg, data, sizeof(data));
+		MSG_WriteByte(&msg, svc_fte_updateentities);
+		MSG_WriteFloat(&msg, sv.time);
+		if (initial && first) MSG_RD_WriteRemove(&msg, 0);
+		first = false;
+		msg.maxsize -= 2;
+		for (; n < MAX_EDICTS; ++n) {
+			rd_entity_state_t *state = &demo.rd_current[n];
+			rd_entity_state_t *previous = &demo.rd_previous[n];
+			unsigned int bits;
+			if (!state->number) {
+				if (initial || !previous->number) continue;
+				if (!MSG_RD_WriteRemove(&msg, n)) break;
+			}
+			else {
+				if (initial || !previous->number) {
+					rd_entity_state_t baseline;
+					SV_RD_FromLegacy(&baseline, &EDICT_NUM(n)->e.baseline);
+					bits = UF_RESET | MSG_RD_StateBits(&baseline, state);
+				}
+				else bits = MSG_RD_StateBits(previous, state);
+				if (!bits) continue;
+				if (n <= MAX_CLIENTS && (bits & (UF_ANGLESXZ | UF_ANGLESY))) bits |= UF_PREDINFO;
+				if (!MSG_RD_WriteEntity(&msg, state, bits, (demo.recorder.mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) break;
+			}
+		}
+		if (n == start) return false; // A single invalid record cannot make progress.
+		msg.maxsize = sizeof(data);
+		MSG_WriteShort(&msg, 0);
+		if (!SV_MVD_WriteRDMessage(&msg, initial)) return false;
+		if (!initial) memcpy(demo.rd_previous + start, demo.rd_current + start,
+			(n - start) * sizeof(*demo.rd_previous));
+	} while (n < MAX_EDICTS);
+	return true;
 }
 
 #endif // !CLIENTONLY

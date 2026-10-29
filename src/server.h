@@ -61,6 +61,7 @@ typedef struct packet_s
 #define MAP_NAME_LEN 64
 typedef struct
 {
+	int demo_format;                    // Map-latched MVD format: -1 refused, 0 legacy, 1 RD.
 	server_state_t	state;				// precache commands are only valid during load
 
 	double		time;
@@ -530,6 +531,8 @@ typedef struct
 	double			prevtime;
 
 	client_t		recorder;
+	rd_entity_state_t *rd_previous;     // Last successfully recorded RD entities.
+	rd_entity_state_t *rd_current;      // Scratch world for the current recording snapshot.
 
 	qbool			fixangle[MAX_CLIENTS];
 
@@ -1003,6 +1006,13 @@ void SV_MVDStop_f (void);
 qbool SV_MVDWritePackets (int num);
 void SV_MVD_SendInitialGamestate(mvddest_t *dest);
 qbool SV_MVD_Record (mvddest_t *dest, qbool mapchange);
+qbool SV_MVD_UsesRD(void);
+void SV_MVD_ConfigureMap(void);
+void SV_MVD_FinishMap(void);
+void SV_MVD_FlushCurrentFrame(void);
+void SV_MVD_ClearRD(void);
+qbool SV_MVD_WriteRDEntities(qbool initial);
+qbool SV_MVD_WriteRDMessage(sizebuf_t *msg, qbool initial);
 
 mvddest_t	*DestByName (char *name);
 void		DestClose (mvddest_t *d, qbool destroyfiles);
