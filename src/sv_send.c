@@ -401,7 +401,9 @@ MULTICAST_PVS	send to clients potentially visible from org
 MULTICAST_PHS	send to clients potentially hearable from org
 =================
 */
-void SV_MulticastEx (vec3_t origin, int to, const char *cl_reliable_key)
+/* Filter extended sounds without changing visibility or reliability routing. */
+static void SV_MulticastExFiltered(vec3_t origin, int to, const char *cl_reliable_key,
+                                  qbool extended_sound)
 {
 	client_t*   client;
 	byte*       mask;
@@ -451,6 +453,10 @@ void SV_MulticastEx (vec3_t origin, int to, const char *cl_reliable_key)
 			continue;
 		if (SV_SkipCommsBotMessage(client))
 			continue;
+		if (extended_sound
+		    && !(client->fteprotocolextensions & FTE_PEXT_SOUNDDBL)
+		    && !(client->fteprotocolextensions2 & FTE_PEXT2_REPLACEMENTDELTAS))
+			continue; // The legacy sound format cannot represent this ID.
 
 		if (!mask)
 			goto inrange; // multicast to all
@@ -502,7 +508,8 @@ inrange:
 			SZ_Write (&client->datagram, sv.multicast.data, sv.multicast.cursize);
 	}
 
-	if (sv.mvdrecording) {
+	if (sv.mvdrecording && (!extended_sound
+	    || (demo.recorder.fteprotocolextensions & FTE_PEXT_SOUNDDBL))) {
 		if (mvd_only) {
 			mvdhidden_block_header_t header;
 			header.length = sv.multicast.cursize - 2;
@@ -526,6 +533,11 @@ inrange:
 
 	SZ_Clear (&sv.multicast);
 }
+void SV_MulticastEx(vec3_t origin, int to, const char *cl_reliable_key)
+{
+	SV_MulticastExFiltered(origin, to, cl_reliable_key, false);
+}
+
 
 void SV_Multicast (vec3_t origin, int to)
 {
@@ -685,9 +697,10 @@ static void SV_WriteSoundPacket(sizebuf_t *msg, int entity, int channel,
                          const float origin[3])
 {
 	int packed = (entity << 3) | channel;
+	qbool extended = entity >= 1024 || sound_id > 255;
 
-	if (sound_id > 255) {
-		int flags = NQSND_LARGESOUND;
+	if (extended) {
+		int flags = sound_id > 255 ? NQSND_LARGESOUND : 0;
 
 		if (volume != DEFAULT_SOUND_PACKET_VOLUME) {
 			flags |= NQSND_VOLUME;
@@ -714,9 +727,12 @@ static void SV_WriteSoundPacket(sizebuf_t *msg, int entity, int channel,
 	if (attenuation != DEFAULT_SOUND_PACKET_ATTENUATION) {
 		MSG_WriteByte(msg, attenuation * 64);
 	}
-	if (sound_id > 255) {
+	if (extended) {
 		MSG_WriteShort(msg, packed);
-		MSG_WriteShort(msg, sound_id);
+		if (sound_id > 255)
+			MSG_WriteShort(msg, sound_id);
+		else
+			MSG_WriteByte(msg, sound_id);
 	}
 	else {
 		MSG_WriteByte(msg, sound_id);
@@ -801,9 +817,9 @@ void SV_StartSound (edict_t *entity, int channel, char *sample, int volume, floa
 	                    attenuation, origin);
 
 	if (use_phs)
-		SV_MulticastEx (origin, reliable ? MULTICAST_PHS_R : MULTICAST_PHS, sv_reliable_sound.value ? "rsnd" : NULL);
+		SV_MulticastExFiltered (origin, reliable ? MULTICAST_PHS_R : MULTICAST_PHS, sv_reliable_sound.value ? "rsnd" : NULL, ent >= 1024 || sound_num > 255);
 	else
-		SV_MulticastEx (origin, reliable ? MULTICAST_ALL_R : MULTICAST_ALL, sv_reliable_sound.value ? "rsnd" : NULL);
+		SV_MulticastExFiltered (origin, reliable ? MULTICAST_ALL_R : MULTICAST_ALL, sv_reliable_sound.value ? "rsnd" : NULL, ent >= 1024 || sound_num > 255);
 }
 
 
