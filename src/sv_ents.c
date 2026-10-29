@@ -73,7 +73,7 @@ unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_stat
 }
 
 /* Encode one complete base-RD payload into a bounded temporary message. */
-static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsigned int bits)
+static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsigned int bits, qbool floatcoords)
 {
 	unsigned int pred = UFP_MOVETYPE | UFP_WEAPONFRAME_OLD;
 	int i;
@@ -95,8 +95,14 @@ static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsig
 		if (bits & UF_16BIT_LERPTIME) MSG_WriteShort(msg, s->frame);
 		else MSG_WriteByte(msg, s->frame);
 	}
-	if (bits & UF_ORIGINXY) { MSG_WriteCoord(msg, s->origin[0]); MSG_WriteCoord(msg, s->origin[1]); }
-	if (bits & UF_ORIGINZ) MSG_WriteCoord(msg, s->origin[2]);
+	if (bits & UF_ORIGINXY) {
+		if (floatcoords) { MSG_WriteFloat(msg, s->origin[0]); MSG_WriteFloat(msg, s->origin[1]); }
+		else { MSG_WriteCoord(msg, s->origin[0]); MSG_WriteCoord(msg, s->origin[1]); }
+	}
+	if (bits & UF_ORIGINZ) {
+		if (floatcoords) MSG_WriteFloat(msg, s->origin[2]);
+		else MSG_WriteCoord(msg, s->origin[2]);
+	}
 	if (bits & UF_ANGLESXZ) {
 		if (bits & UF_PREDINFO) { MSG_WriteAngle16(msg, s->angles[0]); MSG_WriteAngle16(msg, s->angles[2]); }
 		else { MSG_WriteAngle(msg, s->angles[0]); MSG_WriteAngle(msg, s->angles[2]); }
@@ -177,14 +183,14 @@ static qbool SV_RD_ValidState(const rd_entity_state_t *s, unsigned int bits)
 }
 
 /* Copy only a complete record; callers retain pending bits on failure. */
-qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits)
+qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords)
 {
 	byte data[256];
 	sizebuf_t record;
 	if (state->number <= 0 || state->number >= MAX_EDICTS || !SV_RD_ValidState(state, bits)) return false;
 	SZ_Init(&record, data, sizeof(data));
 	MSG_WriteShort(&record, state->number);
-	SV_RD_WritePayload(&record, state, bits);
+	SV_RD_WritePayload(&record, state, bits, floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) return false;
 	SZ_Write(msg, record.data, record.cursize);
 	return true;
@@ -199,7 +205,7 @@ qbool SV_RD_WriteRemove(sizebuf_t *msg, int number)
 }
 
 /* Static payloads omit the entity reference; baselines include it. */
-qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered)
+qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered, qbool floatcoords)
 {
 	byte data[256];
 	sizebuf_t record;
@@ -208,7 +214,7 @@ qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool 
 	if ((numbered && (state->number < 0 || state->number >= MAX_EDICTS)) || !SV_RD_ValidState(state, 0)) return false;
 	SZ_Init(&record, data, sizeof(data));
 	if (numbered) MSG_WriteShort(&record, state->number);
-	SV_RD_WritePayload(&record, state, UF_RESET | SV_RD_StateBits(&nullstate, state));
+	SV_RD_WritePayload(&record, state, UF_RESET | SV_RD_StateBits(&nullstate, state), floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) return false;
 	SZ_Write(msg, record.data, record.cursize);
 	return true;
@@ -428,7 +434,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 			}
 			/* Player angles carry the view-pitch / -3 basis even at rest. */
 			if (n <= MAX_CLIENTS && (bits & (UF_ANGLESXZ | UF_ANGLESY))) bits |= UF_PREDINFO;
-			if (!SV_RD_WriteEntity(msg, &rd->current[n], bits)) { next = n; break; }
+			if (!SV_RD_WriteEntity(msg, &rd->current[n], bits, (client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) { next = n; break; }
 			if (rd->introduction[n] == -1) rd->introduction[n] = sequence + 1;
 		}
 		SV_RD_Record(rd, frame, n, bits);

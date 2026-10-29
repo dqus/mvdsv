@@ -758,7 +758,7 @@ static void Cmd_PreSpawn_f (void)
 				rd_entity_state_t rd;
 				SV_RD_FromLegacy(&rd, s);
 				MSG_WriteByte(&sv_client->netchan.message, svc_fte_spawnstatic2);
-				if (!SV_RD_WriteBaseline(&sv_client->netchan.message, &rd, false)) {
+				if (!SV_RD_WriteBaseline(&sv_client->netchan.message, &rd, false, (sv_client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) {
 					SV_ClientPrintf(sv_client, PRINT_HIGH, "Invalid RD static entity\n");
 					SV_DropClient(sv_client);
 					return;
@@ -803,7 +803,7 @@ static void Cmd_PreSpawn_f (void)
 				rd_entity_state_t rd;
 				SV_RD_FromLegacy(&rd, s);
 				MSG_WriteByte(&sv_client->netchan.message, svc_fte_spawnbaseline2);
-				if (!SV_RD_WriteBaseline(&sv_client->netchan.message, &rd, true)) {
+				if (!SV_RD_WriteBaseline(&sv_client->netchan.message, &rd, true, (sv_client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) {
 					SV_ClientPrintf(sv_client, PRINT_HIGH, "Invalid RD baseline\n");
 					SV_DropClient(sv_client);
 					return;

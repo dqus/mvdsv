@@ -944,7 +944,7 @@ void SV_KickClient(client_t* client, const char* reason);
 //
 // sv_ents.c
 //
-/* Base FTE replacement-delta wire helpers, independent of legacy snapshots. */
+/* Base RD wire helpers; floatcoords enables negotiated entity-only float origins. */
 void SV_RD_InitState(rd_entity_state_t *state);
 /* RD ownership, snapshot collection and QW acknowledgement lifecycle. */
 void SV_RD_FromLegacy(rd_entity_state_t *to, const entity_state_t *from);
@@ -957,9 +957,9 @@ void SV_RD_AckFrame(client_t *client, int sequence);
 void SV_RD_DroppedFrame(client_t *client, int sequence);
 void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time);
 unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_state_t *to);
-qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits);
+qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords);
 qbool SV_RD_WriteRemove(sizebuf_t *msg, int number);
-qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered);
+qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered, qbool floatcoords);
 
 void SV_WriteEntitiesToClient (client_t *client, sizebuf_t *msg, qbool recorder);
 void SV_SetVisibleEntitiesForBot (client_t* client);
