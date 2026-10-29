@@ -202,6 +202,17 @@ cvar_t sv_pext_mvdsv_serversideweapon = { "sv_pext_mvdsv_serversideweapon", "1" 
 
 cvar_t sv_extlimits = { "sv_extlimits", "2" };
 
+/* Change advertised RD support only; existing connections retain their codec. */
+static void OnChange_replacementdeltas(cvar_t *var, char *value, qbool *cancel)
+{
+	if (Q_atoi(value)) {
+		svs.fteprotocolextensions2 |= FTE_PEXT2_REPLACEMENTDELTAS;
+	} else {
+		svs.fteprotocolextensions2 &= ~FTE_PEXT2_REPLACEMENTDELTAS;
+	}
+}
+cvar_t sv_pext_replacementdeltas = {"sv_pext_replacementdeltas", "0", CVAR_NONE, OnChange_replacementdeltas};
+
 #if defined(FTE_PEXT_TRANS)
 cvar_t sv_pext_ezquake_verfortrans = {"pext_ezquake_verfortrans", "7814", CVAR_NONE};
 #endif
@@ -282,6 +293,9 @@ void SV_Shutdown (char *finalmsg)
 	}
 #endif
 
+	for (i = 0; i < MAX_CLIENTS; ++i) {
+		SV_RD_ClearClient(&svs.clients[i]);
+	}
 	memset (svs.clients, 0, sizeof(svs.clients));
 	svs.lastuserid = 0;
 	svs.serverflags = 0;
@@ -377,6 +391,7 @@ or crashing.
 */
 void SV_DropClient(client_t* drop)
 {
+	SV_RD_ClearClient(drop);
 	//bliP: cuff, mute ->
 	SV_SavePenaltyFilter (drop, ft_mute, drop->lockedtill);
 	SV_SavePenaltyFilter (drop, ft_cuff, drop->cuff_time);
@@ -1371,6 +1386,7 @@ static void SVC_DirectConnect (void)
 	// build a new connection
 	// accept the new client
 	// this is the only place a client_t is ever initialized
+	SV_RD_ClearClient(newcl);
 	memset (newcl, 0, sizeof(*newcl));
 
 	newcl->userid = SV_GenerateUserID();
@@ -3574,6 +3590,7 @@ void SV_InitLocal (void)
 #endif
 
 	Cvar_Register (&sv_extlimits);
+	Cvar_Register (&sv_pext_replacementdeltas);
 #ifdef MVD_PEXT1_SERVERSIDEWEAPON
 	Cvar_Register (&sv_pext_mvdsv_serversideweapon);
 #endif
