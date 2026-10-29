@@ -22,374 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 
-/* FTE's null state uses identity appearance values, unlike legacy QW. */
-void SV_RD_InitState(rd_entity_state_t *state)
-{
-	memset(state, 0, sizeof(*state));
-	state->trans = 255;
-	state->scale = 16;
-	state->drawflags = 96;
-	memset(state->colourmod, 32, sizeof(state->colourmod));
-	memset(state->glowmod, 32, sizeof(state->glowmod));
-}
-
-/* Compare persistent fields; predinfo also carries transient movement. */
-unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_state_t *to)
-{
-	unsigned int bits = 0;
-	if (from->origin[0] != to->origin[0] || from->origin[1] != to->origin[1]) {
-		bits |= UF_ORIGINXY;
-	}
-	if (from->origin[2] != to->origin[2]) {
-		bits |= UF_ORIGINZ;
-	}
-	if (from->angles[0] != to->angles[0] || from->angles[2] != to->angles[2]) {
-		bits |= UF_ANGLESXZ;
-	}
-	if (from->angles[1] != to->angles[1]) {
-		bits |= UF_ANGLESY;
-	}
-	if (from->frame != to->frame) {
-		bits |= UF_FRAME;
-	}
-	if (from->effects != to->effects) {
-		bits |= UF_EFFECTS;
-	}
-	if (from->modelindex != to->modelindex) {
-		bits |= UF_MODEL;
-	}
-	if (from->modelindex2 != to->modelindex2) {
-		bits |= UF_MODELINDEX2;
-	}
-	if (from->skinnum != to->skinnum) {
-		bits |= UF_SKIN;
-	}
-	if (from->colormap != to->colormap) {
-		bits |= UF_COLORMAP;
-	}
-	if (from->solidsize != to->solidsize) {
-		bits |= UF_SOLID;
-	}
-	if (from->dpflags != to->dpflags) {
-		bits |= UF_FLAGS;
-	}
-	if (from->trans != to->trans) {
-		bits |= UF_ALPHA;
-	}
-	if (from->scale != to->scale) {
-		bits |= UF_SCALE;
-	}
-	if (from->fatness != to->fatness) {
-		bits |= UF_FATNESS;
-	}
-	if (from->drawflags != to->drawflags || from->abslight != to->abslight) {
-		bits |= UF_DRAWFLAGS;
-	}
-	if (from->tagentity != to->tagentity || from->tagindex != to->tagindex) {
-		bits |= UF_TAGINFO;
-	}
-	if (memcmp(from->light, to->light, sizeof(to->light)) || from->lightstyle != to->lightstyle || from->lightpflags != to->lightpflags) {
-		bits |= UF_LIGHT;
-	}
-	if (from->traileffect != to->traileffect || from->emiteffect != to->emiteffect) {
-		bits |= UF_TRAILEFFECT;
-	}
-	if (memcmp(from->colourmod, to->colourmod, sizeof(to->colourmod))) {
-		bits |= UF_COLORMOD;
-	}
-	if (from->glowsize != to->glowsize || from->glowcolour != to->glowcolour || memcmp(from->glowmod, to->glowmod, sizeof(to->glowmod))) {
-		bits |= UF_GLOW;
-	}
-	if (memcmp(from->gravitydir, to->gravitydir, sizeof(to->gravitydir))) {
-		bits |= UF_GRAVITYDIR;
-	}
-	if (from->pmovetype != to->pmovetype || from->weaponframe != to->weaponframe
-		|| memcmp(from->velocity, to->velocity, sizeof(to->velocity))
-		|| (to->pmovetype && (to->msec || to->velocity[0] || to->velocity[1] || to->velocity[2]
-			|| to->movement[0] || to->movement[1] || to->movement[2]))) {
-		bits |= UF_PREDINFO;
-		/* Moving players need their origin and model/view angle basis together. */
-		if (to->pmovetype) {
-			bits |= UF_ORIGINXY | UF_ORIGINZ | UF_ANGLESXZ | UF_ANGLESY;
-		}
-	}
-	/* Refresh the camera basis when entering or leaving server control. */
-	if ((from->pmovetype & 63) != (to->pmovetype & 63)
-		&& ((from->pmovetype & 63) == RD_MOVETYPE_LOCK || (to->pmovetype & 63) == RD_MOVETYPE_LOCK)) {
-		bits |= UF_ORIGINXY | UF_ORIGINZ | UF_ANGLESXZ | UF_ANGLESY | UF_PREDINFO;
-	}
-	return bits;
-}
-
-/* Encode one complete base-RD payload into a bounded temporary message. */
-static void SV_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsigned int bits, qbool floatcoords)
-{
-	unsigned int pred = UFP_MOVETYPE | UFP_WEAPONFRAME_OLD;
-	int i;
-	if (((bits & UF_MODEL) && s->modelindex > 255) || ((bits & UF_MODELINDEX2) && s->modelindex2 > 255)
-		|| ((bits & UF_FRAME) && s->frame > 255) || ((bits & UF_SKIN) && (s->skinnum < 0 || s->skinnum > 255)))
-		bits |= UF_16BIT_LERPTIME;
-	if (bits & UF_EFFECTS) {
-		if (s->effects & 0xffff0000u) {
-			bits |= UF_EFFECTS2_OLD;
-		} else if (s->effects & 0xff00u) {
-			bits = (bits & ~UF_EFFECTS) | UF_EFFECTS2_OLD;
-		}
-	}
-	if (bits & 0xff000000u) {
-		bits |= UF_EXTEND3;
-	}
-	if (bits & 0x00ff0000u) {
-		bits |= UF_EXTEND2;
-	}
-	if (bits & 0x0000ff00u) {
-		bits |= UF_EXTEND1;
-	}
-	MSG_WriteByte(msg, bits);
-	if (bits & UF_EXTEND1) {
-		MSG_WriteByte(msg, bits >> 8);
-	}
-	if (bits & UF_EXTEND2) {
-		MSG_WriteByte(msg, bits >> 16);
-	}
-	if (bits & UF_EXTEND3) {
-		MSG_WriteByte(msg, bits >> 24);
-	}
-	if (bits & UF_FRAME) {
-		if (bits & UF_16BIT_LERPTIME) {
-			MSG_WriteShort(msg, s->frame);
-		} else {
-			MSG_WriteByte(msg, s->frame);
-		}
-	}
-	if (bits & UF_ORIGINXY) {
-		if (floatcoords) {
-			MSG_WriteFloat(msg, s->origin[0]);
-			MSG_WriteFloat(msg, s->origin[1]);
-		} else {
-			MSG_WriteCoord(msg, s->origin[0]);
-			MSG_WriteCoord(msg, s->origin[1]);
-		}
-	}
-	if (bits & UF_ORIGINZ) {
-		if (floatcoords) {
-			MSG_WriteFloat(msg, s->origin[2]);
-		} else {
-			MSG_WriteCoord(msg, s->origin[2]);
-		}
-	}
-	if (bits & UF_ANGLESXZ) {
-		if (bits & UF_PREDINFO) {
-			MSG_WriteAngle16(msg, s->angles[0]);
-			MSG_WriteAngle16(msg, s->angles[2]);
-		} else {
-			MSG_WriteAngle(msg, s->angles[0]);
-			MSG_WriteAngle(msg, s->angles[2]);
-		}
-	}
-	if (bits & UF_ANGLESY) {
-		if (bits & UF_PREDINFO) {
-			MSG_WriteAngle16(msg, s->angles[1]);
-		} else {
-			MSG_WriteAngle(msg, s->angles[1]);
-		}
-	}
-	if ((bits & (UF_EFFECTS | UF_EFFECTS2_OLD)) == (UF_EFFECTS | UF_EFFECTS2_OLD)) {
-		MSG_WriteLong(msg, s->effects);
-	} else if (bits & UF_EFFECTS2_OLD) {
-		MSG_WriteShort(msg, s->effects);
-	} else if (bits & UF_EFFECTS) {
-		MSG_WriteByte(msg, s->effects);
-	}
-	if (bits & UF_PREDINFO) {
-		if (s->movement[0]) {
-			pred |= UFP_FORWARD;
-		}
-		if (s->movement[1]) {
-			pred |= UFP_SIDE;
-		}
-		if (s->movement[2]) {
-			pred |= UFP_UP;
-		}
-		if (s->velocity[0] || s->velocity[1]) {
-			pred |= UFP_VELOCITYXY;
-		}
-		if (s->velocity[2]) {
-			pred |= UFP_VELOCITYZ;
-		}
-		if (s->msec) {
-			pred |= UFP_MSEC;
-		}
-		MSG_WriteByte(msg, pred);
-		for (i = 0; i < 3; ++i) {
-			if (pred & (UFP_FORWARD << i)) {
-				MSG_WriteShort(msg, s->movement[i]);
-			}
-		}
-		MSG_WriteByte(msg, s->pmovetype);
-		if (pred & UFP_VELOCITYXY) {
-			MSG_WriteShort(msg, s->velocity[0]);
-			MSG_WriteShort(msg, s->velocity[1]);
-		}
-		if (pred & UFP_VELOCITYZ) {
-			MSG_WriteShort(msg, s->velocity[2]);
-		}
-		if (pred & UFP_MSEC) {
-			MSG_WriteByte(msg, s->msec);
-		}
-		MSG_WriteByte(msg, (s->weaponframe & 127) | (s->weaponframe > 127 ? 128 : 0));
-		if (s->weaponframe > 127) {
-			MSG_WriteByte(msg, s->weaponframe >> 7);
-		}
-	}
-	if (bits & UF_MODEL) {
-		if (bits & UF_16BIT_LERPTIME) {
-			MSG_WriteShort(msg, s->modelindex);
-		} else {
-			MSG_WriteByte(msg, s->modelindex);
-		}
-	}
-	if (bits & UF_SKIN) {
-		if (bits & UF_16BIT_LERPTIME) {
-			MSG_WriteShort(msg, s->skinnum);
-		} else {
-			MSG_WriteByte(msg, s->skinnum);
-		}
-	}
-	if (bits & UF_COLORMAP) {
-		MSG_WriteByte(msg, s->colormap);
-	}
-	if (bits & UF_SOLID) {
-		MSG_WriteShort(msg, s->solidsize);
-	}
-	if (bits & UF_FLAGS) {
-		MSG_WriteByte(msg, s->dpflags);
-	}
-	if (bits & UF_ALPHA) {
-		MSG_WriteByte(msg, s->trans);
-	}
-	if (bits & UF_SCALE) {
-		MSG_WriteByte(msg, s->scale);
-	}
-	if (bits & UF_DRAWFLAGS) {
-		MSG_WriteByte(msg, s->drawflags);
-		if ((s->drawflags & 7) >= 6) {
-			MSG_WriteByte(msg, s->abslight);
-		}
-	}
-	if (bits & UF_TAGINFO) {
-		MSG_WriteShort(msg, s->tagentity);
-		MSG_WriteByte(msg, s->tagindex);
-	}
-	if (bits & UF_LIGHT) {
-		for (i = 0; i < 4; ++i) {
-			MSG_WriteShort(msg, s->light[i]);
-		}
-		MSG_WriteByte(msg, s->lightstyle);
-		MSG_WriteByte(msg, s->lightpflags);
-	}
-	if (bits & UF_TRAILEFFECT) {
-		MSG_WriteShort(msg, s->traileffect | (s->emiteffect ? 0x8000 : 0));
-		if (s->emiteffect) {
-			MSG_WriteShort(msg, s->emiteffect);
-		}
-	}
-	if (bits & UF_COLORMOD) {
-		for (i = 0; i < 3; ++i) {
-			MSG_WriteByte(msg, s->colourmod[i]);
-		}
-	}
-	if (bits & UF_GLOW) {
-		MSG_WriteByte(msg, s->glowsize);
-		MSG_WriteByte(msg, s->glowcolour);
-		for (i = 0; i < 3; ++i) {
-			MSG_WriteByte(msg, s->glowmod[i]);
-		}
-	}
-	if (bits & UF_FATNESS) {
-		MSG_WriteChar(msg, s->fatness);
-	}
-	if (bits & UF_MODELINDEX2) {
-		if (bits & UF_16BIT_LERPTIME) {
-			MSG_WriteShort(msg, s->modelindex2);
-		} else {
-			MSG_WriteByte(msg, s->modelindex2);
-		}
-	}
-	if (bits & UF_GRAVITYDIR) {
-		MSG_WriteByte(msg, s->gravitydir[0]);
-		MSG_WriteByte(msg, s->gravitydir[1]);
-	}
-}
-
-/* Bounded base format: fields requiring other PEXT2 capabilities are rejected. */
-static qbool SV_RD_ValidState(const rd_entity_state_t *s, unsigned int bits)
-{
-	return !(bits & (UF_BONEDATA | UF_UNUSED1 | UF_EXTEND4))
-		&& s->tagentity < MAX_EDICTS && s->weaponframe <= 32767
-		&& s->modelindex >= 0 && s->modelindex < MAX_MODELS
-		&& s->modelindex2 >= 0 && s->modelindex2 < MAX_MODELS
-		&& s->frame >= 0 && s->frame <= 65535
-		&& s->skinnum >= -32768 && s->skinnum <= 32767
-		&& s->colormap >= 0 && s->colormap <= 255
-		&& s->traileffect <= 0x3fff && s->emiteffect <= 0x3fff;
-}
-
-/* Copy only a complete record; callers retain pending bits on failure. */
-qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords)
-{
-	byte data[256];
-	sizebuf_t record;
-	if (state->number <= 0 || state->number >= MAX_EDICTS || !SV_RD_ValidState(state, bits)) {
-		return false;
-	}
-	SZ_Init(&record, data, sizeof(data));
-	MSG_WriteShort(&record, state->number);
-	SV_RD_WritePayload(&record, state, bits, floatcoords);
-	if (record.cursize > msg->maxsize - msg->cursize) {
-		return false;
-	}
-	SZ_Write(msg, record.data, record.cursize);
-	return true;
-}
-
-/* World removal is FTE's reset-all marker; other removals identify one slot. */
-qbool SV_RD_WriteRemove(sizebuf_t *msg, int number)
-{
-	if (number < 0 || number >= MAX_EDICTS || msg->maxsize - msg->cursize < 2) {
-		return false;
-	}
-	MSG_WriteShort(msg, number | 0x8000);
-	return true;
-}
-
-/* Static payloads omit the entity reference; baselines include it. */
-qbool SV_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered, qbool floatcoords)
-{
-	byte data[256];
-	sizebuf_t record;
-	rd_entity_state_t nullstate;
-	SV_RD_InitState(&nullstate);
-	if ((numbered && (state->number < 0 || state->number >= MAX_EDICTS)) || !SV_RD_ValidState(state, 0)) {
-		return false;
-	}
-	SZ_Init(&record, data, sizeof(data));
-	if (numbered) {
-		MSG_WriteShort(&record, state->number);
-	}
-	SV_RD_WritePayload(&record, state, UF_RESET | SV_RD_StateBits(&nullstate, state), floatcoords);
-	if (record.cursize > msg->maxsize - msg->cursize) {
-		return false;
-	}
-	SZ_Write(msg, record.data, record.cursize);
-	return true;
-}
-
-
 /* Convert existing typed baselines/statics without changing legacy storage. */
 void SV_RD_FromLegacy(rd_entity_state_t *to, const entity_state_t *from)
 {
-	SV_RD_InitState(to);
+	MSG_RD_InitState(to);
 	to->number = from->number;
 	VectorCopy(from->origin, to->origin);
 	VectorCopy(from->angles, to->angles);
@@ -510,7 +146,7 @@ void SV_RD_QueueEntity(client_t *client, const rd_entity_state_t *state)
 		rd->introduction[n] = -1;
 	}
 	else {
-		rd->pending[n] |= SV_RD_StateBits(&rd->current[n], state);
+		rd->pending[n] |= MSG_RD_StateBits(&rd->current[n], state);
 	}
 	rd->current[n] = *state;
 }
@@ -629,7 +265,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 	MSG_WriteFloat(msg, time);
 	msg->maxsize -= 2;
 	if (rd->pending[0]) {
-		SV_RD_WriteRemove(msg, 0);
+		MSG_RD_WriteRemove(msg, 0);
 		SV_RD_Record(rd, frame, 0, RD_REMOVE);
 		rd->pending[0] = 0;
 	}
@@ -640,7 +276,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 			continue;
 		}
 		if (bits & RD_REMOVE) {
-			if (!SV_RD_WriteRemove(msg, n)) {
+			if (!MSG_RD_WriteRemove(msg, n)) {
 				next = n;
 				break;
 			}
@@ -651,13 +287,13 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 			}
 			if (bits & UF_RESET) {
 				SV_RD_FromLegacy(&baseline, &EDICT_NUM(n)->e.baseline);
-				bits = UF_RESET | SV_RD_StateBits(&baseline, &rd->current[n]);
+				bits = UF_RESET | MSG_RD_StateBits(&baseline, &rd->current[n]);
 			}
 			/* Player angles carry the view-pitch / -3 basis even at rest. */
 			if (n <= MAX_CLIENTS && (bits & (UF_ANGLESXZ | UF_ANGLESY))) {
 				bits |= UF_PREDINFO;
 			}
-			if (!SV_RD_WriteEntity(msg, &rd->current[n], bits, (client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) {
+			if (!MSG_RD_WriteEntity(msg, &rd->current[n], bits, (client->mvdprotocolextensions1 & MVD_PEXT1_FLOATCOORDS) != 0)) {
 				next = n;
 				break;
 			}
@@ -1161,7 +797,7 @@ static int TranslateEffects (edict_t *ent)
 static void SV_RD_BuildEntityState(rd_entity_state_t *state, edict_t *ent, int number, client_t *client)
 {
 	int i;
-	SV_RD_InitState(state);
+	MSG_RD_InitState(state);
 	state->number = number;
 	VectorCopy(ent->v->origin, state->origin);
 	VectorCopy(ent->v->angles, state->angles);
