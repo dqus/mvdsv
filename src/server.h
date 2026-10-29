@@ -211,6 +211,8 @@ typedef struct client_s
 	antilag_position_t	antilag_positions[MAX_ANTILAG_POSITIONS];
 	int				antilag_position_next;
 
+	struct sv_rd_state_s *rd;            // RD-only pending entity state and resend history.
+
 	usercmd_t		lastcmd;			// for filling in big drops and partial predictions
 	double			localtime;			// of last message
 	qbool			jump_held;
@@ -942,6 +944,14 @@ void SV_KickClient(client_t* client, const char* reason);
 //
 /* Base FTE replacement-delta wire helpers, independent of legacy snapshots. */
 void SV_RD_InitState(rd_entity_state_t *state);
+/* RD ownership, snapshot collection and QW acknowledgement lifecycle. */
+void SV_RD_FromLegacy(rd_entity_state_t *to, const entity_state_t *from);
+void SV_RD_ClearClient(client_t *client);
+void SV_RD_ResetClient(client_t *client, int capacity);
+void SV_RD_BeginSnapshot(client_t *client);
+void SV_RD_QueueEntity(client_t *client, const rd_entity_state_t *state);
+void SV_RD_AckFrame(client_t *client, int sequence);
+void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time);
 unsigned int SV_RD_StateBits(const rd_entity_state_t *from, const rd_entity_state_t *to);
 qbool SV_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits);
 qbool SV_RD_WriteRemove(sizebuf_t *msg, int number);
