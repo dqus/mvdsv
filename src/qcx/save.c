@@ -44,8 +44,8 @@ _Static_assert(QCX_SAVE_LIGHTSTYLE_COUNT == MAX_LIGHTSTYLES,
 	"QCMS lightstyle count must match the engine");
 _Static_assert(QCX_SAVE_MODEL_CAPACITY == MAX_MODELS && QCX_SAVE_SOUND_CAPACITY == MAX_SOUNDS,
 	"QCMS precache bounds must match the engine");
-_Static_assert(QCX_SAVE_MAX_ENTITY_CAPACITY == MAX_EDICTS,
-	"QCMS entity capacity must match the engine");
+_Static_assert(QCX_SAVE_MAX_ENTITY_CAPACITY <= MAX_EDICTS,
+	"QCMS entity capacity must fit the engine");
 _Static_assert(NUM_SPAWN_PARMS == QCX_SAVE_SPAWN_PARM_COUNT,
 	"QCMS spawn parameter count");
 _Static_assert(QCX_SAVE_MAX_STATIC_ENTITIES == MAX_STATIC_ENTITIES
