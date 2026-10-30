@@ -157,6 +157,7 @@ int main(void)
 	entities[1].shared.model = (qcx_legacy_string_ref_t)(sizeof(entities[0])
 		+ offsetof(fixture_entity_t, model_string));
 	entities[1].model_string = (fixture_string_t){model, (uint32_t)strlen(model)};
+	sv.max_edicts = 2;
 	assert(QCX_ConfigureEntities((qcx_guest_address_t)(uintptr_t)&memory));
 	assert(QCX_ResolveEntityFields());
 	assert(QCX_BindEntities());
