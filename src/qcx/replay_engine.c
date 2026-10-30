@@ -98,7 +98,7 @@ void SV_QCXReplayMapStart(const char *map, int restoring)
 		"sv_stopspeed", "sv_maxvelocity", "sv_safestrafe",
 		"sv_minpitch", "sv_maxpitch", "pm_ktjump", "pm_slidefix", "pm_airstep", "pm_pground",
 		"pm_rampjump", "pm_bunnyspeedcap", "sv_bigcoords", "sv_extlimits", "sv_loadentfiles",
-		"maxclients", "maxspectators", "sv_cheats", NULL
+		"maxclients", "maxspectators", "sv_cheats", "sv_maxedicts", NULL
 	};
 	for (int i = 0; names[i]; ++i) {
 		size_t offset = strlen(header.config);
@@ -353,8 +353,8 @@ static void Status_f(void)
 			comma = 1;
 		}
 	}
-	Con_Printf("{\"qcx_probe_status\":{\"spawncount\":%u,\"clients\":%u,\"events\":%zu,\"spawn_points\":%u,\"spawned\":[%s]}}\n",
-		(unsigned)svs.spawncount, clients, QCX_ReplayCaptureCount(), spawns, slots);
+	Con_Printf("{\"qcx_probe_status\":{\"spawncount\":%u,\"clients\":%u,\"events\":%zu,\"spawn_points\":%u,\"map_entity_capacity\":%u,\"compiled_entity_capacity\":%u,\"spawned\":[%s]}}\n",
+		(unsigned)svs.spawncount, clients, QCX_ReplayCaptureCount(), spawns, (unsigned)sv.max_edicts, QCX_EntityCapacity(), slots);
 }
 
 void SV_QCXReplayInit(void)
