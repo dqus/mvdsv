@@ -238,6 +238,8 @@ int Q_namecmp(const char* s1, const char* s2);
 /* Base RD field codec, shared by live networking and demo startup writers. */
 void MSG_RD_InitState(rd_entity_state_t *state);
 unsigned int MSG_RD_StateBits(const rd_entity_state_t *from, const rd_entity_state_t *to);
+/* Atomic RD update/removal index; independent of runtime entity capacity. */
+qbool MSG_RD_WriteEntityIndex(sizebuf_t *msg, unsigned int number, qbool remove);
 qbool MSG_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords);
 qbool MSG_RD_WriteRemove(sizebuf_t *msg, int number);
 qbool MSG_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool numbered, qbool floatcoords);
