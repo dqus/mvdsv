@@ -701,7 +701,8 @@ static void SV_WriteSoundPacket(sizebuf_t *msg, int entity, int channel,
 	qbool extended = entity >= 1024 || sound_id > 255;
 
 	if (extended) {
-		int flags = sound_id > 255 ? NQSND_LARGESOUND : 0;
+		/* A packed entity/channel word only has thirteen entity bits. */
+		int flags = (sound_id > 255 ? NQSND_LARGESOUND : 0) | (entity >= 8192 ? (1 << 3) : 0);
 
 		if (volume != DEFAULT_SOUND_PACKET_VOLUME) {
 			flags |= NQSND_VOLUME;
@@ -729,7 +730,13 @@ static void SV_WriteSoundPacket(sizebuf_t *msg, int entity, int channel,
 		MSG_WriteByte(msg, attenuation * 64);
 	}
 	if (extended) {
-		MSG_WriteShort(msg, packed);
+		if (entity >= 8192) {
+			MSG_RD_WriteEntityRef(msg, entity);
+			MSG_WriteByte(msg, channel);
+		}
+		else {
+			MSG_WriteShort(msg, packed);
+		}
 		if (sound_id > 255)
 			MSG_WriteShort(msg, sound_id);
 		else
