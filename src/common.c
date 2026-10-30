@@ -2044,7 +2044,7 @@ static void MSG_RD_WritePayload(sizebuf_t *msg, const rd_entity_state_t *s, unsi
 		MSG_WriteByte(msg, s->drawflags);
 		if ((s->drawflags & 7) >= 6) MSG_WriteByte(msg, s->abslight);
 	}
-	if (bits & UF_TAGINFO) { MSG_WriteShort(msg, s->tagentity); MSG_WriteByte(msg, s->tagindex); }
+	if (bits & UF_TAGINFO) { MSG_RD_WriteEntityRef(msg, s->tagentity); MSG_WriteByte(msg, s->tagindex); }
 	if (bits & UF_LIGHT) {
 		for (i = 0; i < 4; ++i) MSG_WriteShort(msg, s->light[i]);
 		MSG_WriteByte(msg, s->lightstyle); MSG_WriteByte(msg, s->lightpflags);
@@ -2077,6 +2077,27 @@ static qbool MSG_RD_ValidState(const rd_entity_state_t *s, unsigned int bits)
 		&& s->skinnum >= -32768 && s->skinnum <= 32767
 		&& s->colormap >= 0 && s->colormap <= 255
 		&& s->traileffect <= 0x3fff && s->emiteffect <= 0x3fff;
+}
+
+/* Ordinary RD references use a 15-bit short or 15 high bits plus a low byte.
+ * This is deliberately separate from update/removal index framing. */
+qbool MSG_RD_WriteEntityRef(sizebuf_t *msg, unsigned int number)
+{
+	int size = number < 0x8000 ? 2 : 3;
+
+	if (number > 0x7fffff || msg->maxsize - msg->cursize < size) return false;
+	MSG_WriteShort(msg, size == 2 ? number : (number >> 8) | 0x8000);
+	if (size == 3) MSG_WriteByte(msg, number & 0xff);
+	return true;
+}
+
+/* A truncated reference never becomes a usable entity number. */
+int MSG_RD_ReadEntityRef(void)
+{
+	unsigned int number = (unsigned short)MSG_ReadShort();
+
+	if (number & 0x8000) number = ((number & 0x7fff) << 8) | MSG_ReadByte();
+	return msg_badread ? -1 : (int)number;
 }
 
 /* RD update indices use 14 low bits and an optional high byte, independently
@@ -2125,7 +2146,7 @@ qbool MSG_RD_WriteBaseline(sizebuf_t *msg, const rd_entity_state_t *state, qbool
 	MSG_RD_InitState(&nullstate);
 	if ((numbered && (state->number < 0 || state->number >= MAX_EDICTS)) || !MSG_RD_ValidState(state, 0)) return false;
 	SZ_Init(&record, data, sizeof(data));
-	if (numbered) MSG_WriteShort(&record, state->number);
+	if (numbered) MSG_RD_WriteEntityRef(&record, state->number);
 	MSG_RD_WritePayload(&record, state, UF_RESET | MSG_RD_StateBits(&nullstate, state), floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) return false;
 	SZ_Write(msg, record.data, record.cursize);
