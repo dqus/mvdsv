@@ -37,7 +37,7 @@ static int Text(reader_t *r, const uint8_t **value, uint32_t *size)
 	r->cursor += *size;
 	return 1;
 }
-/* QCGD v2 wire tags from qc/schema.hpp, independent of native C++ types. */
+/* QCGD v3 wire tags from qc/schema.hpp, independent of native C++ types. */
 enum { WIRE_VOID, WIRE_FLOAT, WIRE_INT32, WIRE_UINT32, WIRE_VECTOR,
 	WIRE_STRING, WIRE_ENTITY, WIRE_FUNCTION, WIRE_FIELD, WIRE_ARRAY };
 typedef struct {
@@ -105,7 +105,15 @@ static int Description(reader_t *r, unsigned scope, schema_t *schema,
 
 static int Values(reader_t *r, const schema_t *schema)
 {
+	/* Each v3 object starts with presence bits in durable schema order. */
+	const size_t bytes = (schema->count + 7U) / 8U;
+	if ((size_t)(r->end - r->cursor) < bytes) return 0;
+	const uint8_t *bitmap = r->cursor;
+	r->cursor += bytes;
+	if (schema->count % 8U
+		&& (bitmap[bytes - 1U] & ~((1U << (schema->count % 8U)) - 1U))) return 0;
 	for (uint32_t i = 0; i < schema->count; ++i) {
+		if (!(bitmap[i / 8U] & (1U << (i % 8U)))) continue;
 		uint32_t tag = schema->types[i], word;
 		if (tag == WIRE_FLOAT || tag == WIRE_INT32 || tag == WIRE_UINT32
 			|| tag == WIRE_VECTOR || tag == WIRE_ENTITY) {
@@ -138,9 +146,9 @@ static int Values(reader_t *r, const schema_t *schema)
 int QCX_ReplayLogicalHash(const uint8_t *data, size_t size,
 	qcx_replay_field_kind_t field_kind, uint64_t *hash)
 {
-	snprintf(error, sizeof(error), "malformed QCGD v2 checkpoint");
+	snprintf(error, sizeof(error), "malformed QCGD v3 checkpoint");
 	if (!data || size < 8 || !field_kind || !hash
-		|| memcmp(data, "QCGD\2\0\0\0", 8)) {
+		|| memcmp(data, "QCGD\3\0\0\0", 8)) {
 		return 0;
 	}
 	reader_t reader = {data + 8, data + size};

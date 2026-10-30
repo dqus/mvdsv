@@ -48,9 +48,9 @@ static void Rejected(const buffer_t *source, size_t offset, uint8_t value)
 }
 int main(void)
 {
-	/* QCGD v2: two descriptions, then globals and repeated entity values only. */
+	/* QCGD v3: two descriptions, then globals and repeated entity values only. */
 	buffer_t logical = {{'Q','C','G','D'}, 4};
-	Word(&logical, 2);
+	Word(&logical, 3);
 	Word(&logical, 1); Text(&logical, "name"); Word(&logical, 5); /* String global. */
 	size_t entity_schema = Word(&logical, 6);
 	size_t health_name = Text(&logical, "health");
@@ -62,11 +62,13 @@ int main(void)
 	Text(&logical, "name"); Word(&logical, 5);
 	Text(&logical, "enemy"); Word(&logical, 6);
 	Text(&logical, "field"); Word(&logical, 8); Word(&logical, 1); /* Field<float> */
+	size_t global_bitmap = logical.size; logical.data[logical.size++] = 1;
 	size_t global_name = Text(&logical, "arena");
 	size_t count = Word(&logical, 2);
-	size_t health = 0, origin = 0, presence = 0, callback = 0, field = 0, last_slot = 0;
+	size_t health = 0, origin = 0, presence = 0, callback = 0, field = 0, last_slot = 0, bitmap = 0;
 	for (unsigned i = 0; i < 2; ++i) {
 		last_slot = Word(&logical, i ? 7 : 0);
+		bitmap = logical.size; logical.data[logical.size++] = 0x3f;
 		size_t value = Word(&logical, 0x42c80000U); /* health 100 */
 		if (!i) health = value;
 		value = Word(&logical, 0x3f800000U); Word(&logical, 0); Word(&logical, 0);
@@ -88,11 +90,13 @@ int main(void)
 	Changed(&logical, callback, a);
 	Changed(&logical, field, a);
 	Changed(&logical, result_type, a); /* Signature metadata contributes too. */
-	Rejected(&logical, 4, 1); /* Old format has no backward compatibility. */
+	Rejected(&logical, 4, 2); /* Old format has no backward compatibility. */
 	Rejected(&logical, entity_schema + 1, 255); /* Oversized description. */
 	Rejected(&logical, health_name, 'x'); /* Unknown inventory member. */
 	Rejected(&logical, health_type, 5); /* Serialized type disagrees with inventory. */
 	Rejected(&logical, health_type, 255);
+	Rejected(&logical, global_bitmap, 0x81);
+	Rejected(&logical, bitmap, 0x7f);
 	Rejected(&logical, presence, 2);
 	Rejected(&logical, callback, 0);
 	Rejected(&logical, count + 1, 255);
@@ -109,5 +113,17 @@ int main(void)
 	a = QCX_ReplayHashBytes(1, counts, sizeof(counts));
 	++counts[0]; assert(a != QCX_ReplayHashBytes(1, counts, sizeof(counts)));
 	--counts[0]; ++counts[1]; assert(a != QCX_ReplayHashBytes(1, counts, sizeof(counts)));
-	puts("checkpoint: typed descriptions and logical values, strict v2 parsing");
+	/* Entirely omitted objects still carry their (possibly empty) bitmap. */
+	buffer_t zero = {{'Q','C','G','D'}, 4};
+	Word(&zero, 3);
+	Word(&zero, 1); Text(&zero, "name"); Word(&zero, 5);
+	Word(&zero, 1); Text(&zero, "health"); Word(&zero, 1);
+	size_t absent_globals = zero.size; zero.data[zero.size++] = 0;
+	Word(&zero, 1); Word(&zero, 0);
+	size_t absent_entity = zero.size; zero.data[zero.size++] = 0;
+	assert(QCX_ReplayLogicalHash(zero.data, zero.size, Kind, &b));
+	Rejected(&zero, absent_globals, 1); /* Missing value, no positional drift. */
+	Rejected(&zero, absent_entity, 1); /* Missing scalar. */
+	assert(!QCX_ReplayLogicalHash(zero.data, zero.size - 1, Kind, &b));
+	puts("checkpoint: typed descriptions and presence bitmaps, strict v3 parsing");
 }
