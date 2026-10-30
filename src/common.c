@@ -2079,6 +2079,22 @@ static qbool MSG_RD_ValidState(const rd_entity_state_t *s, unsigned int bits)
 		&& s->traileffect <= 0x3fff && s->emiteffect <= 0x3fff;
 }
 
+/* RD update indices use 14 low bits and an optional high byte, independently
+ * of the current map capacity. Write nothing when the whole index cannot fit. */
+qbool MSG_RD_WriteEntityIndex(sizebuf_t *msg, unsigned int number, qbool remove)
+{
+	unsigned int word, size;
+
+	if (number > 0x3fffff) return false;
+	size = number < 0x4000 ? 2 : 3;
+	if (msg->maxsize - msg->cursize < size) return false;
+	word = (number & 0x3fff) | (remove ? 0x8000 : 0);
+	if (size == 3) word |= 0x4000;
+	MSG_WriteShort(msg, word);
+	if (size == 3) MSG_WriteByte(msg, number >> 14);
+	return true;
+}
+
 /* Copy only a complete record; callers retain pending bits on failure. */
 qbool MSG_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigned int bits, qbool floatcoords)
 {
@@ -2086,7 +2102,7 @@ qbool MSG_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigne
 	sizebuf_t record;
 	if (state->number <= 0 || state->number >= MAX_EDICTS || !MSG_RD_ValidState(state, bits)) return false;
 	SZ_Init(&record, data, sizeof(data));
-	MSG_WriteShort(&record, state->number);
+	MSG_RD_WriteEntityIndex(&record, state->number, false);
 	MSG_RD_WritePayload(&record, state, bits, floatcoords);
 	if (record.cursize > msg->maxsize - msg->cursize) return false;
 	SZ_Write(msg, record.data, record.cursize);
@@ -2096,9 +2112,8 @@ qbool MSG_RD_WriteEntity(sizebuf_t *msg, const rd_entity_state_t *state, unsigne
 /* World removal is FTE's reset-all marker; other removals identify one slot. */
 qbool MSG_RD_WriteRemove(sizebuf_t *msg, int number)
 {
-	if (number < 0 || number >= MAX_EDICTS || msg->maxsize - msg->cursize < 2) return false;
-	MSG_WriteShort(msg, number | 0x8000);
-	return true;
+	if (number < 0 || number >= MAX_EDICTS) return false;
+	return MSG_RD_WriteEntityIndex(msg, number, true);
 }
 
 /* Static payloads omit the entity reference; baselines include it. */
