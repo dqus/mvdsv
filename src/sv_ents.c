@@ -58,6 +58,7 @@ typedef struct {
 
 struct sv_rd_state_s {
 	int capacity, last_ack, cursor;     // Supported slots, acknowledged sequence, deferred scan.
+	int slot_limit;                    // Exclusive highest queued slot; never shrinks before reset.
 	rd_entity_state_t *current;         // Current desired state; number zero means absent.
 	unsigned int *pending;             // Dirty fields/removals not yet delivered.
 	byte *seen;                        // Visibility in the snapshot currently being built.
@@ -86,6 +87,7 @@ void SV_RD_ResetClient(client_t *client, int capacity)
 	if (capacity < 1 || capacity > MAX_EDICTS) Sys_Error("Invalid RD capacity %d", capacity);
 	client->rd = rd = Q_malloc(sizeof(*rd));
 	rd->capacity = capacity;
+	rd->slot_limit = 1;
 	rd->last_ack = -1;
 	rd->cursor = MAX_CLIENTS + 1;
 	rd->current = Q_calloc(capacity, sizeof(*rd->current));
@@ -103,7 +105,7 @@ void SV_RD_RequestReset(client_t *client)
 	int n;
 	if (!rd) return;
 	rd->pending[0] = RD_REMOVE;
-	for (n = 1; n < rd->capacity; ++n) if (rd->current[n].number) {
+	for (n = 1; n < rd->slot_limit; ++n) if (rd->current[n].number) {
 		rd->pending[n] = UF_RESET;
 		rd->introduction[n] = -1;
 	}
@@ -112,7 +114,7 @@ void SV_RD_RequestReset(client_t *client)
 /* Begin collecting the real snapshot; unobserved slots become removals. */
 void SV_RD_BeginSnapshot(client_t *client)
 {
-	if (client->rd) memset(client->rd->seen, 0, client->rd->capacity);
+	if (client->rd) memset(client->rd->seen, 0, client->rd->slot_limit);
 }
 
 /* Queue current field values; a new/reused slot needs an acknowledged reset. */
@@ -121,6 +123,9 @@ void SV_RD_QueueEntity(client_t *client, const rd_entity_state_t *state)
 	struct sv_rd_state_s *rd = client->rd;
 	int n = state->number;
 	if (!rd || n <= 0 || n >= rd->capacity) return;
+	/* Newly reached array tails are still calloc-zero; retain the extent for
+	 * removals and ACK recovery even after the highest slot disappears. */
+	rd->slot_limit = max(rd->slot_limit, n + 1);
 	rd->seen[n] = true;
 	if (!rd->current[n].number) {
 		rd->pending[n] = UF_RESET;
@@ -138,7 +143,7 @@ static void SV_RD_Requeue(struct sv_rd_state_s *rd, const rd_frame_t *frame)
 		n = frame->changes[i].number;
 		if (!n) {
 			rd->pending[0] = RD_REMOVE;
-			for (n = 1; n < rd->capacity; ++n) if (rd->current[n].number) {
+			for (n = 1; n < rd->slot_limit; ++n) if (rd->current[n].number) {
 				rd->pending[n] = UF_RESET;
 				rd->introduction[n] = -1;
 			}
@@ -207,7 +212,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 	if (frame->count) SV_RD_Requeue(rd, frame);
 	frame->count = 0;
 	frame->sequence = sequence;
-	for (n = 1; n < rd->capacity; ++n) if (rd->current[n].number && !rd->seen[n]) {
+	for (n = 1; n < rd->slot_limit; ++n) if (rd->current[n].number && !rd->seen[n]) {
 		rd->current[n].number = 0;
 		rd->pending[n] = RD_REMOVE;
 	}
@@ -220,7 +225,7 @@ void SV_RD_WriteFrame(client_t *client, sizebuf_t *msg, int sequence, float time
 		SV_RD_Record(rd, frame, 0, RD_REMOVE);
 		rd->pending[0] = 0;
 	}
-	for (n = 1; n < rd->capacity; ++n) {
+	for (n = 1; n < rd->slot_limit; ++n) {
 		unsigned int bits = rd->pending[n];
 		rd_entity_state_t baseline;
 		if (!bits || (n > MAX_CLIENTS && n < rd->cursor && !(bits & RD_REMOVE))) continue;
