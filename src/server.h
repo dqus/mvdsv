@@ -924,7 +924,10 @@ void SV_FindModelNumbers (void);
 //
 // sv_user.c
 //
-qbool SV_CheckClientSoundSupport(client_t *client);
+/* Map-latched capacity policy and pre-signon compatibility gate. */
+extern cvar_t sv_maxedicts;
+qbool SV_EntityCapacityRequiresRD(void);
+qbool SV_CheckClientMapSupport(client_t *client);
 void SV_ExecuteClientMessage (client_t *cl);
 void SV_UserInit (void);
 void SV_TogglePause (const char *msg, int bit);
