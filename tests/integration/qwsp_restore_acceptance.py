@@ -231,7 +231,7 @@ def restore_qwsp_state(process, name, expected, *, context):
 
 def assert_profile_mismatch_keeps_waiting_session(process, basedir, save_path, *, profile=1):
     image = bytearray(save_path.read_bytes())
-    if image[:8] != b"QCMS\x03\x00\x00\x00":
+    if image[:8] != b"QCMS\x04\x00\x00\x00":
         raise ProcessFailure("profile rejection test requires a current QCMS image")
     section, size = struct.unpack_from("<II", image, 8)
     if section != 1 or struct.unpack_from("<I", image, 16 + size - 4)[0] != profile:

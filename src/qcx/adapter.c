@@ -108,6 +108,10 @@ void QCX_InitProg(void)
 		SV_Error("qc2cpp game did not publish compatible entity storage");
 	}
 	qcx_published = true;
+	if (!QCX_PreparedCapacitiesMatch(QCX_EntityCapacity(), (uint32_t)sv.max_edicts)) {
+		QCX_Unpublish(NULL);
+		SV_Error("qc2cpp replacement game does not match saved entity capacities");
+	}
 }
 
 void QCX_Shutdown(void)

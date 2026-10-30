@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #define QCX_SAVE_NAME_CAPACITY 64U
-#define QCX_SAVE_MAX_ENTITY_CAPACITY 2048U
+#define QCX_SAVE_MAX_ENTITY_CAPACITY 16384U
 #define QCX_SAVE_MAX_CLIENTS 32U
 #define QCX_SAVE_CLIENT_STRING_CAPACITY 32U
 #define QCX_SAVE_SPAWN_PARM_COUNT 16U
@@ -88,6 +88,8 @@ typedef struct qcx_save_metadata_s {
 	char map_name[QCX_SAVE_NAME_CAPACITY];
 	uint32_t map_bsp_checksum;
 	uint32_t entity_capacity;
+	/* Effective limit of the saved map, independently of compiled storage. */
+	uint32_t map_entity_capacity;
 	uint32_t client_slot_capacity;
 	uint32_t compatibility_profile;
 } qcx_save_metadata_t;

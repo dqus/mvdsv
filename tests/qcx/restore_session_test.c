@@ -327,6 +327,7 @@ static qcx_save_image_t make_image(const qcx_save_roster_entry_t *entries,
 	qcx_save_image_t image = {0};
 	image.metadata.client_slot_capacity = test_slot_capacity;
 	image.metadata.entity_capacity = test_slot_capacity + 1U;
+	image.metadata.map_entity_capacity = test_slot_capacity + 1U;
 	image.roster_count = count;
 	if (count != 0U) memcpy(image.roster, entries, count * sizeof(entries[0]));
 	return image;

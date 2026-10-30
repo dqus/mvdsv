@@ -908,7 +908,9 @@ void PR2_InitProg(void)
 #ifdef QCX_ENABLED
 	if (QCX_Active()) {
 		/* Publication clamps this requested limit to the game's compiled count. */
-		sv.max_edicts = min(MAX_EDICTS, (int)sv_maxedicts.value);
+		const uint32_t saved_limit = QCX_PreparedMapEntityCapacity();
+		sv.max_edicts = saved_limit != 0U ? (int)saved_limit
+			: min(MAX_EDICTS, (int)sv_maxedicts.value);
 		QCX_InitProg();
 		return;
 	}

@@ -365,6 +365,7 @@ static qcx_restore_status_t QCX_SaveCheckEngineIdentity(const qcx_save_image_t *
 		return QCX_RESTORE_MALFORMED_CHUNK;
 	}
 	if (image->metadata.entity_capacity != QCX_EntityCapacity()
+		|| image->metadata.map_entity_capacity != (uint32_t)sv.max_edicts
 		|| image->metadata.compatibility_profile != QCX_GameCompatibility()
 		|| strcmp(image->metadata.logical_game, sv_progsname.string) != 0
 		|| strcmp(image->metadata.map_name, sv.mapname) != 0
@@ -536,7 +537,7 @@ qbool QCX_SaveGame(const char *name)
 	uint8_t selection[(QCX_SAVE_MAX_ENTITY_CAPACITY + 7U) / 8U];
 	const uint32_t entity_capacity = QCX_EntityCapacity();
 	const uint32_t selection_size = (entity_capacity + 7U) / 8U;
-	qcx_save_bytes_t guest = {0}; qcx_save_image_t image = {0};
+	qcx_save_image_t *image = NULL;
 	uint8_t *encoded = NULL; uint32_t encoded_size = 0U; qbool result = false;
 	const char *failure = "unknown error";
 	qcx_byte_count_t required;
@@ -560,30 +561,34 @@ qbool QCX_SaveGame(const char *name)
 		Con_Printf("qc2cpp save rejected: invalid game snapshot size.\n");
 		return false;
 	}
-	guest.size = required;
-	if (guest.size != 0U) {
-		guest.data = malloc(guest.size);
-		if (guest.data == NULL || QCX_WriteGuestSave(guest.data, guest.size) != guest.size) {
-			failure = "could not serialize game state";
-			goto done;
-		}
+	image = calloc(1U, sizeof(*image));
+	if (image == NULL) {
+		failure = "could not allocate save image";
+		goto done;
 	}
-	if (!QCX_SaveCaptureEngine(entity_capacity, &image.engine)) {
+	image->guest_payload.size = required;
+	image->guest_payload.data = malloc(required);
+	if (image->guest_payload.data == NULL
+		|| QCX_WriteGuestSave(image->guest_payload.data, required) != required) {
+		failure = "could not serialize game state";
+		goto done;
+	}
+	if (!QCX_SaveCaptureEngine(entity_capacity, &image->engine)) {
 		failure = "could not serialize server state";
 		goto done;
 	}
-	if (!QCX_SaveBuildRoster(&image)) {
+	if (!QCX_SaveBuildRoster(image)) {
 		failure = "could not serialize restored player roster";
 		goto done;
 	}
-	strlcpy(image.metadata.logical_game, sv_progsname.string, sizeof(image.metadata.logical_game));
-	strlcpy(image.metadata.map_name, sv.mapname, sizeof(image.metadata.map_name));
-	image.metadata.map_bsp_checksum = sv.map_checksum;
-	image.metadata.entity_capacity = entity_capacity;
-	image.metadata.client_slot_capacity = MAX_CLIENTS;
-	image.metadata.compatibility_profile = QCX_GameCompatibility();
-	image.guest_payload = guest;
-	if (QCX_SaveEncode(&image, &encoded, &encoded_size) != QCX_PLUGIN_OK) {
+	strlcpy(image->metadata.logical_game, sv_progsname.string, sizeof(image->metadata.logical_game));
+	strlcpy(image->metadata.map_name, sv.mapname, sizeof(image->metadata.map_name));
+	image->metadata.map_bsp_checksum = sv.map_checksum;
+	image->metadata.entity_capacity = entity_capacity;
+	image->metadata.map_entity_capacity = (uint32_t)sv.max_edicts;
+	image->metadata.client_slot_capacity = MAX_CLIENTS;
+	image->metadata.compatibility_profile = QCX_GameCompatibility();
+	if (QCX_SaveEncode(image, &encoded, &encoded_size) != QCX_PLUGIN_OK) {
 		failure = "could not encode QCMS image";
 		goto done;
 	}
@@ -596,8 +601,7 @@ done:
 		Con_Printf("qc2cpp save rejected: %s.\n", failure);
 	}
 	free(encoded);
-	free(image.engine.precaches);
-	free(guest.data);
+	QCX_SaveImageFree(image);
 	return result;
 }
 
@@ -656,15 +660,34 @@ qbool QCX_PreparedGameProfileMatches(uint32_t profile)
 		|| qcx_prepared_image->metadata.compatibility_profile == profile;
 }
 
+uint32_t QCX_PreparedMapEntityCapacity(void)
+{
+	return qcx_prepared_image == NULL ? 0U : qcx_prepared_image->metadata.map_entity_capacity;
+}
+
+qbool QCX_PreparedCapacitiesMatch(uint32_t compiled_capacity, uint32_t map_capacity)
+{
+	if (qcx_prepared_image == NULL
+		|| (qcx_prepared_image->metadata.entity_capacity == compiled_capacity
+			&& qcx_prepared_image->metadata.map_entity_capacity == map_capacity)) {
+		return true;
+	}
+	Con_Printf("qc2cpp restore capacity mismatch: saved=%u/%u, loaded=%u/%u.\n",
+		qcx_prepared_image->metadata.entity_capacity, qcx_prepared_image->metadata.map_entity_capacity,
+		compiled_capacity, map_capacity);
+	return false;
+}
+
 static qbool QCX_SaveIsLegacyImage(const uint8_t *bytes, uint32_t size)
 {
 	return bytes != NULL && size >= 8U && memcmp(bytes, "QCMS", 4U) == 0
-		&& (bytes[4] == 1U || bytes[4] == 2U)
+		&& (bytes[4] == 1U || bytes[4] == 2U || bytes[4] == 3U)
 		&& bytes[5] == 0U && bytes[6] == 0U && bytes[7] == 0U;
 }
 
 qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_size)
 {
+	extern cvar_t sv_extlimits;
 	uint8_t *bytes = NULL;
 	uint32_t size = 0U;
 	qcx_save_image_t *image = NULL;
@@ -676,7 +699,7 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 	parse_status = QCX_SaveParse(bytes, size, &image);
 	if (parse_status != QCX_PLUGIN_OK) {
 		if (QCX_SaveIsLegacyImage(bytes, size)) {
-			Con_Printf("qc2cpp restore rejected: QCMS V1/V2 saves are unsupported; create a new save.\n");
+			Con_Printf("qc2cpp restore rejected: QCMS V1/V2/V3 saves are unsupported; create a new save.\n");
 		}
 		QCX_SaveImageFree(image);
 		free(bytes);
@@ -686,6 +709,18 @@ qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_si
 	if (loaded_profile != 0U && loaded_profile != image->metadata.compatibility_profile) {
 		Con_Printf("qc2cpp restore compatibility mismatch: saved=%u, loaded=%u.\n",
 			image->metadata.compatibility_profile, loaded_profile);
+		QCX_SaveImageFree(image);
+		free(bytes);
+		return false;
+	}
+	const uint32_t loaded_capacity = QCX_Active() ? QCX_EntityCapacity() : 0U;
+	/* A publication is an early check only; a replaced artifact is checked
+	 * again after init. BSP-dependent extlimits are finalized by map startup. */
+	if ((loaded_capacity != 0U && image->metadata.entity_capacity != loaded_capacity)
+		|| image->metadata.map_entity_capacity > sv_maxedicts.value
+		|| (sv_extlimits.value == 0.0f
+			&& image->metadata.map_entity_capacity > MAX_EDICTS_SAFE)) {
+		Con_Printf("qc2cpp fresh restore rejected: entity capacity is incompatible with the selected game or server limit.\n");
 		QCX_SaveImageFree(image);
 		free(bytes);
 		return false;
