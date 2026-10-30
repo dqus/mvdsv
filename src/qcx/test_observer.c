@@ -159,8 +159,9 @@ static qbool QCX_TestCopyLegacyString(qcx_legacy_string_ref_t ref, char *out,
 
 static void QCX_TestSnapshot_f(void)
 {
-	Con_Printf("{\"qc2cpp_test_snapshot\":{\"map\":\"%s\",\"frame_count\":%u,\"time\":%.6f,\"globals_address\":%" PRIuPTR ",\"player_model_index\":%d}}\n",
-		sv.mapname, observer.frame_count, sv.time, (uintptr_t)QCX_Globals(), sv_playermodel);
+	Con_Printf("{\"qc2cpp_test_snapshot\":{\"map\":\"%s\",\"frame_count\":%u,\"time\":%.6f,\"globals_address\":%" PRIuPTR ",\"player_model_index\":%d,\"compiled_entity_capacity\":%u,\"map_entity_capacity\":%d,\"num_edicts\":%d}}\n",
+		sv.mapname, observer.frame_count, sv.time, (uintptr_t)QCX_Globals(), sv_playermodel,
+		QCX_EntityCapacity(), sv.max_edicts, sv.num_edicts);
 }
 
 static void QCX_TestEvents_f(void)

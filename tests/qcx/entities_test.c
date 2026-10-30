@@ -16,6 +16,9 @@ _Static_assert(_Generic(sv.edicts[0].v,
 	"QCX entity access must use MVDSV's entvars_t");
 
 static const qcx_game_api_v1_t *active_game;
+static entvars_t capacity_entities[MAX_EDICTS];
+static qcx_game_entity_memory_v1_t capacity_memory;
+static qcx_byte_count_t mapped_capacity_bytes;
 static qbool qcx_active;
 server_t sv;
 int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
@@ -34,6 +37,61 @@ qbool QCX_Active(void)
 qcx_transport_kind_t QCX_GameTransportKind(void)
 {
 	return QCX_TRANSPORT_NATIVE;
+}
+
+static qcx_plugin_status_t capacity_view(void *context, qcx_guest_address_t address,
+	qcx_byte_count_t size, uint32_t alignment, void **out)
+{
+	(void)context;
+	if (alignment == 0U || address % alignment != 0U) return QCX_PLUGIN_BAD_ARGUMENT;
+	if (address == (qcx_guest_address_t)(uintptr_t)&capacity_memory
+		&& size <= sizeof(capacity_memory)) {
+		*out = &capacity_memory;
+		return QCX_PLUGIN_OK;
+	}
+	if (address == (qcx_guest_address_t)(uintptr_t)capacity_entities
+		&& size <= sizeof(capacity_entities)) {
+		mapped_capacity_bytes = size;
+		*out = capacity_entities;
+		return QCX_PLUGIN_OK;
+	}
+	return QCX_PLUGIN_BAD_ARGUMENT;
+}
+
+static void assert_compiled_and_map_capacities(void)
+{
+	static const qcx_game_api_v1_t game = {.memory_view = capacity_view};
+	active_game = &game;
+	qcx_active = true;
+	capacity_memory = (qcx_game_entity_memory_v1_t){
+		.abi_version = QCX_GAME_ENTITY_MEMORY_ABI_VERSION_V1,
+		.struct_size = sizeof(capacity_memory),
+		.shared_state_base = (qcx_guest_address_t)(uintptr_t)capacity_entities,
+		.entity_object_base = (qcx_guest_address_t)(uintptr_t)capacity_entities,
+		.entity_stride = sizeof(capacity_entities[0]),
+		.max_entities = 16384U,
+		.shared_state_abi_version = QCX_SHARED_ENTITY_STATE_ABI_VERSION_V1,
+	};
+	const int limits[] = {2048, 8192, 16384};
+	for (unsigned index = 0U; index < sizeof(limits) / sizeof(limits[0]); ++index) {
+		const int limit = limits[index];
+		sv.max_edicts = limit;
+		assert(QCX_ConfigureEntities((qcx_guest_address_t)(uintptr_t)&capacity_memory));
+		assert(QCX_EntityCapacity() == 16384U && sv.max_edicts == limit);
+		assert(QCX_BindEntities());
+		assert(mapped_capacity_bytes == 16384U * sizeof(capacity_entities[0]));
+		assert(QCX_SlotToEdict((uint32_t)limit - 1U) == &sv.edicts[limit - 1]);
+		assert(QCX_SlotToEdict((uint32_t)limit) == NULL);
+		/* BSP extlimits can lower the final map limit after the initial bind. */
+		sv.max_edicts = 512;
+		QCX_ClearEntities();
+		assert(sv.edicts[limit - 1].v == NULL);
+	}
+	capacity_memory.max_entities = 1024U;
+	sv.max_edicts = 16384;
+	assert(QCX_ConfigureEntities((qcx_guest_address_t)(uintptr_t)&capacity_memory));
+	assert(QCX_EntityCapacity() == 1024U && sv.max_edicts == 1024);
+	QCX_ClearEntities();
 }
 
 static void assert_invalid_entities_fixture(const char *directory, const char *name)
@@ -59,6 +117,7 @@ int main(int argc, char **argv)
 	active_game = QCX_TransportGame(transport);
 	const qcx_guest_address_t publication = active_game->init(active_game->context, 0, 1U);
 	assert(publication != 0U);
+	sv.max_edicts = 11;
 	assert(QCX_ConfigureEntities(publication));
 	qcx_active = true;
 	sv.max_edicts = 11;
@@ -117,5 +176,6 @@ int main(int argc, char **argv)
 	assert_invalid_entities_fixture(argv[1], "bad_entities_capacity");
 	assert_invalid_entities_fixture(argv[1], "bad_entities_stride");
 	assert_invalid_entities_fixture(argv[1], "bad_entities_overflow");
+	assert_compiled_and_map_capacities();
 	return 0;
 }

@@ -38,6 +38,7 @@ int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 		|| memory->entity_stride % _Alignof(entvars_t) != 0U
 		|| memory->max_entities == 0U
 		|| memory->max_entities > MAX_EDICTS
+		|| sv.max_edicts <= 0
 		|| memory->shared_state_abi_version != QCX_SHARED_ENTITY_STATE_ABI_VERSION_V1
 		|| memory->reserved0 != 0U) {
 		return 0;
@@ -50,7 +51,7 @@ int QCX_ConfigureEntities(qcx_guest_address_t publication_address)
 	qcx_entity_base = memory->entity_object_base;
 	qcx_entity_stride = memory->entity_stride;
 	qcx_entity_capacity = memory->max_entities;
-	sv.max_edicts = (int)qcx_entity_capacity;
+	sv.max_edicts = min(sv.max_edicts, (int)qcx_entity_capacity);
 	return 1;
 }
 
@@ -78,7 +79,8 @@ int QCX_BindEntities(void)
 
 void QCX_ClearEntities(void)
 {
-	for (int slot = 0; slot < sv.max_edicts && slot < MAX_EDICTS; ++slot) {
+	/* Map/BSP policy can lower sv.max_edicts after the initial binding. */
+	for (uint32_t slot = 0U; slot < qcx_entity_capacity; ++slot) {
 		sv.edicts[slot].v = NULL;
 	}
 	qcx_entity_memory = NULL;
