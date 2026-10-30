@@ -7,7 +7,7 @@
 #include <string.h>
 
 enum {
-	QCX_SAVE_VERSION = 3,
+	QCX_SAVE_VERSION = 4,
 	QCX_SAVE_METADATA_SECTION = 1,
 	QCX_SAVE_ENGINE_SECTION = 2,
 	QCX_SAVE_ROSTER_SECTION = 3,
@@ -208,9 +208,11 @@ static bool QCX_SaveValidMetadata(const qcx_save_metadata_t *metadata,
 	if (*game_size == 0U || *game_size == QCX_SAVE_NAME_CAPACITY || *map_size == 0U
 		|| *map_size == QCX_SAVE_NAME_CAPACITY || metadata->entity_capacity == 0U
 		|| metadata->entity_capacity > QCX_SAVE_MAX_ENTITY_CAPACITY
+		|| metadata->map_entity_capacity == 0U
+		|| metadata->map_entity_capacity > metadata->entity_capacity
 		|| metadata->client_slot_capacity == 0U
 		|| metadata->client_slot_capacity > QCX_SAVE_MAX_CLIENTS
-		|| metadata->client_slot_capacity >= metadata->entity_capacity
+		|| metadata->client_slot_capacity >= metadata->map_entity_capacity
 		|| (metadata->compatibility_profile != QCX_GAME_PROFILE_QUAKEWORLD
 			&& metadata->compatibility_profile != QCX_GAME_PROFILE_NETQUAKE)) {
 		return false;
@@ -238,6 +240,7 @@ static bool QCX_SaveParseMetadata(const uint8_t *bytes, uint32_t size,
 			QCX_SAVE_NAME_CAPACITY, false, QCX_SaveValidNameByte)
 		|| !QCX_SaveReadU32(&reader, &metadata->map_bsp_checksum)
 		|| !QCX_SaveReadU32(&reader, &metadata->entity_capacity)
+		|| !QCX_SaveReadU32(&reader, &metadata->map_entity_capacity)
 		|| !QCX_SaveReadU32(&reader, &metadata->client_slot_capacity)
 		|| !QCX_SaveReadU32(&reader, &metadata->compatibility_profile)
 		|| reader.cursor != reader.end) {
@@ -312,6 +315,7 @@ static bool QCX_SaveValidateEngine(const qcx_save_engine_t *engine,
 	for (uint32_t index = 0U; index < metadata->entity_capacity; ++index) {
 		const qcx_save_edict_t *edict = &engine->edicts[index];
 		if ((uint32_t)edict->state > QCX_SAVE_FREE_EDICT || !isfinite(edict->freetime)
+			|| (index >= metadata->map_entity_capacity && edict->state != QCX_SAVE_UNUSED_EDICT)
 			|| !isfinite(edict->alpha) || edict->alpha < 0.0f || edict->alpha > 1.0f
 			|| (unused_slot && edict->state != QCX_SAVE_UNUSED_EDICT)) {
 			return false;
@@ -743,6 +747,7 @@ static bool QCX_SaveWriteMetadata(qcx_save_writer_t *writer,
 		&& QCX_SaveWriteString(writer, metadata->map_name, map_size)
 		&& QCX_SaveWriteU32(writer, metadata->map_bsp_checksum)
 		&& QCX_SaveWriteU32(writer, metadata->entity_capacity)
+		&& QCX_SaveWriteU32(writer, metadata->map_entity_capacity)
 		&& QCX_SaveWriteU32(writer, metadata->client_slot_capacity)
 		&& QCX_SaveWriteU32(writer, metadata->compatibility_profile);
 }
@@ -909,7 +914,7 @@ qcx_plugin_status_t QCX_SaveEncode(const qcx_save_image_t *image, uint8_t **out,
 		|| !QCX_SaveEngineSize(image, &engine_size)) {
 		return QCX_PLUGIN_BAD_ARGUMENT;
 	}
-	metadata_size = 4U + game_size + 4U + map_size + 16U;
+	metadata_size = 4U + game_size + 4U + map_size + 20U;
 	if (!QCX_SaveAddSize(&total_size, 8U) || !QCX_SaveAddSize(&total_size, metadata_size)
 		|| !QCX_SaveAddSize(&total_size, 8U)
 		|| !QCX_SaveAddSize(&total_size, engine_size)

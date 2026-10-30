@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "game_compat.h"
 #include "nq_messages.h"
 #if defined(QCX_ENABLED)
+#include "qcx/adapter.h"
+#include "qcx/entities.h"
 #include "qcx/restore_session.h"
 #include "qcx/save.h"
 #endif
@@ -551,6 +553,13 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		}
 	}
 
+#if defined(QCX_ENABLED)
+	if (restoring_qc2cpp
+		&& !QCX_PreparedCapacitiesMatch(QCX_EntityCapacity(), (uint32_t)sv.max_edicts)) {
+		QCX_Unpublish(NULL);
+		SV_Error("qc2cpp saved map entity limit is not permitted by the destination map");
+	}
+#endif
 	SV_MVD_ConfigureMap();
 
 	sv.checkpvs = (byte *)Hunk_AllocName(CM_PVSRowBytes(), "checkpvs");

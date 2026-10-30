@@ -22,6 +22,10 @@ qbool QCX_SaveGame(const char *name);
 qbool QCX_PrepareLoadGame(const char *name, char *map_name, uint32_t map_name_size);
 qbool QCX_HasPreparedLoadGame(void);
 qbool QCX_PreparedGameProfileMatches(uint32_t profile);
+/* Pending saved map limit, or zero for an ordinary map startup. */
+uint32_t QCX_PreparedMapEntityCapacity(void);
+/* Check the newly loaded game/map, even when preflight knew an older game. */
+qbool QCX_PreparedCapacitiesMatch(uint32_t compiled_capacity, uint32_t map_capacity);
 /* After successful preflight and old-world teardown, before guest load/init:
  * apply saved mode cvars and install indexed resource names. */
 qbool QCX_PrepareLoadStartup(void);

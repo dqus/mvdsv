@@ -26,6 +26,7 @@ cvar_t sv_bigcoords;
 #endif
 cvar_t sv_progsname;
 cvar_t deathmatch, coop, teamplay;
+cvar_t sv_maxedicts, sv_extlimits;
 void Cvar_Set(cvar_t *cvar, char *value)
 {
 	cvar->value = Q_atof(value);
@@ -162,6 +163,7 @@ static qcx_save_image_t make_valid_image(uint32_t world_flags, qbool restored_cl
 	strcpy(image.metadata.map_name, "e1m1");
 	image.metadata.map_bsp_checksum = UINT32_C(0x12345678);
 	image.metadata.entity_capacity = test_entity_capacity;
+	image.metadata.map_entity_capacity = test_entity_capacity;
 	image.metadata.client_slot_capacity = 3U;
 	image.metadata.compatibility_profile = active_profile;
 	image.roster_count = restored_client ? 1U : 0U;
@@ -201,6 +203,8 @@ static void reset_live_engine(void)
 	saved_selection = 0U;
 	expected_validation_selection = 1U;
 	entity_capacity = test_entity_capacity;
+	sv_maxedicts.value = test_entity_capacity;
+	sv_extlimits.value = 1.0f;
 	create_path_calls = 0U;
 	session_installs = 0U;
 	flush_fs_calls = 0U;
@@ -657,6 +661,7 @@ static void test_save_path_limits_preserve_existing_file(void)
 		const size_t prefix_length = strlen(parent);
 		reset_live_engine();
 		entity_capacity = MAX_CLIENTS + 1U;
+		sv_maxedicts.value = entity_capacity;
 		sv.max_edicts = (int)entity_capacity;
 		sv.num_edicts = 1;
 		sv.state = ss_active;
@@ -710,6 +715,7 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	coop.value = 1.0f;
 	teamplay.value = 2.0f;
 	entity_capacity = MAX_CLIENTS + 1U;
+	sv_maxedicts.value = entity_capacity;
 	sv.max_edicts = (int)entity_capacity;
 	sv.num_edicts = 1;
 	sv.state = ss_active;
@@ -755,6 +761,7 @@ static void test_world_signon_survives_fresh_restore(const char *directory)
 	coop.value = 0.0f;
 	teamplay.value = 0.0f;
 	entity_capacity = MAX_CLIENTS + 1U;
+	sv_maxedicts.value = entity_capacity;
 	sv.max_edicts = (int)entity_capacity;
 	assert(QCX_PrepareLoadGame("world", map_name, sizeof(map_name)));
 	/* Preflight must not change the current world's mode. */
@@ -840,6 +847,7 @@ static void test_rejected_guest_write_preserves_existing_file(const char *direct
 		reset_live_engine();
 		sv.state = ss_active;
 		entity_capacity = MAX_CLIENTS + 1U;
+		sv_maxedicts.value = entity_capacity;
 		sv.max_edicts = (int)entity_capacity;
 		sv.num_edicts = 1;
 		strcpy(fs_gamedir, directory);
@@ -861,6 +869,46 @@ static void test_rejected_guest_write_preserves_existing_file(const char *direct
 		assert(remove(path) == 0);
 	}
 	guest_write_result = 2U;
+}
+
+static void test_preflight_capacities_preserve_pending_load(const char *directory)
+{
+	reset_live_engine();
+	strcpy(fs_gamedir, directory);
+	entity_capacity = 16384U;
+	sv_maxedicts.value = 2048.0f;
+	sv.max_edicts = 2048;
+	qcx_save_image_t image = make_valid_image(true, false);
+	image.metadata.entity_capacity = 16384U;
+	image.metadata.map_entity_capacity = 2048U;
+	write_preflight_image(directory, "capacity-prior", &image);
+	char map_name[QCX_SAVE_NAME_CAPACITY] = "unchanged";
+	assert(QCX_PrepareLoadGame("capacity-prior", map_name, sizeof(map_name)));
+	assert(QCX_PreparedMapEntityCapacity() == 2048U);
+	image.metadata.map_entity_capacity = 8192U;
+	write_preflight_image(directory, "capacity-next", &image);
+	strcpy(map_name, "unchanged");
+	assert(!QCX_PrepareLoadGame("capacity-next", map_name, sizeof(map_name)));
+	assert(strcmp(map_name, "unchanged") == 0 && sv.time == 7.0);
+	assert(QCX_PreparedMapEntityCapacity() == 2048U && session_installs == 0U);
+	sv_maxedicts.value = 16384.0f;
+	sv_extlimits.value = 0.0f;
+	assert(!QCX_PrepareLoadGame("capacity-next", map_name, sizeof(map_name)));
+	assert(QCX_PreparedMapEntityCapacity() == 2048U);
+	sv_extlimits.value = 1.0f;
+	entity_capacity = 4096U;
+	assert(!QCX_PrepareLoadGame("capacity-next", map_name, sizeof(map_name)));
+	assert(QCX_PreparedMapEntityCapacity() == 2048U);
+	/* With no live publication, final startup must establish C instead. */
+	entity_capacity = 0U;
+	assert(QCX_PrepareLoadGame("capacity-next", map_name, sizeof(map_name)));
+	assert(QCX_PreparedMapEntityCapacity() == 8192U);
+	assert(!QCX_PreparedCapacitiesMatch(4096U, 8192U));
+	assert(!QCX_PreparedCapacitiesMatch(16384U, 2048U));
+	assert(QCX_PreparedCapacitiesMatch(16384U, 8192U));
+	assert(guest_validation_calls == 0U && guest_restore_calls == 0U && sv.time == 7.0);
+	QCX_DiscardPreparedLoadGame();
+	assert(QCX_PreparedMapEntityCapacity() == 0U);
 }
 
 int main(int argc, char **argv)
@@ -893,5 +941,6 @@ int main(int argc, char **argv)
 	test_prepared_resources_survive_image_disposal(argv[1]);
 	test_save_path_limits_preserve_existing_file();
 	test_rejected_guest_write_preserves_existing_file(argv[1]);
+	test_preflight_capacities_preserve_pending_load(argv[1]);
 	return 0;
 }

@@ -341,7 +341,7 @@ foreach(required IN ITEMS
 endforeach()
 
 foreach(required IN ITEMS
-	"QCMS V1/V2 saves are unsupported"
+	"QCMS V1/V2/V3 saves are unsupported"
 	"QCX_SaveIsLegacyImage")
 	string(FIND "${save_source}" "${required}" position)
 	if(position EQUAL -1)

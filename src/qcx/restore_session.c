@@ -196,7 +196,8 @@ static qbool QCX_RestoreSessionImageIsValid(const qcx_save_image_t *image)
 	uint32_t right;
 	if (image == NULL || image->metadata.client_slot_capacity == 0U
 		|| image->metadata.client_slot_capacity > MAX_CLIENTS
-		|| image->metadata.entity_capacity <= image->metadata.client_slot_capacity
+		|| image->metadata.map_entity_capacity <= image->metadata.client_slot_capacity
+		|| image->metadata.map_entity_capacity > image->metadata.entity_capacity
 		|| image->roster_count > QCX_SAVE_MAX_CLIENTS) {
 		return false;
 	}
