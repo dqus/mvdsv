@@ -71,10 +71,10 @@ void SV_QCXReplayMapStart(const char *map, int restoring)
 	if (QCX_ReplayMode() != QCX_REPLAY_RECORD) {
 		return;
 	}
-	if (started || restoring || strcmp(map, "povdmm4") || Cvar_Value("sv_progtype") != 4
+	if (started || restoring || strcmp(map, "povdmm4") || (Cvar_Value("sv_progtype") != 4 && Cvar_Value("sv_progtype") != 5)
 		|| Cvar_Value("deathmatch") != 4 || Cvar_Value("sv_speedcheck") != 0
 		|| Cvar_Value("sv_antilag") != 0 || Cvar_Value("sv_minping") != 0) {
-		SV_Error("QCX capture requires fresh Native povdmm4 DM4, speedcheck/antilag/minping 0");
+		SV_Error("QCX capture requires fresh QCX Native/Wasm povdmm4 DM4, speedcheck/antilag/minping 0");
 	}
 	qcx_replay_tape_t header = {
 		.guest_seed = 0xadc0de, .host_seed = 1, .clients = 32, .asset_hash = "pending"
@@ -758,7 +758,9 @@ static int ScheduleFile(const qcx_replay_tape_t *tape, int writing)
 	}
 	int fields = COM_CheckParm("-qcx-probe-fields");
 	char game[256];
-	snprintf(game, sizeof(game), "%s/%s.dylib", fs_gamedir, sv_progsname.string);
+	/* Bind the schedule to the actual transport artifact, retaining the hash gate. */
+	const char *extension = Cvar_Value("sv_progtype") == 5 ? "wasm" : "dylib";
+	snprintf(game, sizeof(game), "%s/%s.%s", fs_gamedir, sv_progsname.string, extension);
 	uint64_t identities[] = {FileIdentity(QCX_ReplayPath()), FileIdentity(game),
 		FileIdentity(com_argv[fields+1]), FileIdentity(com_argv[0])};
 	size_t size = 8 + 32 + 8 + sizeof(last_checkpoint) + 8*tape->count + 8;
