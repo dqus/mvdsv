@@ -66,6 +66,13 @@ static void QCX_Remove(void *context, qcx_entity_id_t slot)
 	ED_Free(QCX_RequireServiceEdict(slot, "entity"));
 }
 
+/* Search bound includes free holes and world; reading it cannot reenter QC. */
+static uint32_t QCX_EntityScanEnd(void *context)
+{
+	QCX_ObserveGameplayImport(context);
+	return (uint32_t)sv.num_edicts;
+}
+
 static qcx_entity_id_t QCX_NextEnt(void *context, qcx_entity_id_t after)
 {
 	QCX_ObserveGameplayImport(context);
@@ -274,6 +281,7 @@ void QCX_BindWorldServices(qcx_host_api_v1_t *host)
 	host->spawn = QCX_Spawn;
 	host->remove = QCX_Remove;
 	host->nextent = QCX_NextEnt;
+	host->entity_scan_end = QCX_EntityScanEnd;
 	host->map_metadata = QCX_MapMetadata;
 	host->map_admit = QCX_MapAdmit;
 	host->map_time = QCX_MapTime;
