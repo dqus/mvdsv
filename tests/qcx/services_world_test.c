@@ -302,6 +302,7 @@ static void test_nextent(qcx_host_api_v1_t *host)
 		sv.edicts[slot].v = &test_entity_state;
 		sv.edicts[slot].e.free = true;
 	}
+	assert(host->entity_scan_end(host->context) == 6U);
 	assert(host->nextent(host->context, 0U) == 0U);
 	sv.edicts[2].e.free = false;
 	sv.edicts[5].e.free = false;
@@ -314,7 +315,9 @@ static void test_nextent(qcx_host_api_v1_t *host)
 	assert(host->nextent(host->context, 2U) == 5U);
 	sv.edicts[3].e.free = false; /* Each query sees current allocation state. */
 	assert(host->nextent(host->context, 2U) == 3U);
+	assert(host->entity_scan_end(host->context) == 6U);
 	sv.num_edicts = 8;
+	assert(host->entity_scan_end(host->context) == 8U);
 	assert(host->nextent(host->context, 5U) == 7U);
 	expect_error = true;
 	if (setjmp(validation_error) == 0) {
