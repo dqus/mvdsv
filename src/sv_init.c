@@ -253,6 +253,81 @@ static cm_vispolicy_t SV_VisibilityPolicy(void)
 
 /*
 ================
+SV_InitEdicts
+
+Bind wrappers and client slots after the map capacity is finalized.
+================
+*/
+static void SV_InitEdicts(void)
+{
+	int i;
+	edict_t *ent;
+
+	if (sv.max_edicts <= MAX_CLIENTS || sv.max_edicts > MAX_EDICTS)
+	{
+		SV_Error("SV_InitEdicts: invalid map capacity %d", sv.max_edicts);
+	}
+
+	for (i = 0; i < sv.max_edicts; i++)
+	{
+		sv.edicts[i].e.entnum = i;
+		sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
+	}
+
+	// Reserve client slots before any game callback can use them.
+	sv.num_edicts = MAX_CLIENTS + 1;
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		svs.clients[i].edict = &sv.edicts[i + 1];
+	}
+
+	sv.edicts_initialized = true;
+	PR_BindServerState();
+
+	for (i=0 ; i<MAX_CLIENTS ; i++)
+	{
+		ent = EDICT_NUM(i+1);
+		// restore client name.
+		PR_SetEntityString(ent, ent->v->netname, svs.clients[i].name);
+		//ZOID - make sure we update frags right
+		svs.clients[i].old_frags = 0;
+	}
+}
+
+/*
+================
+SV_ShutdownGame
+
+Unload the game before invalidating references to its entity wrappers.
+================
+*/
+void SV_ShutdownGame(void)
+{
+	int i;
+
+	if (sv.edicts_initialized)
+	{
+		sv.edicts_initialized = false;
+		PR_GameShutDown();
+	}
+	PR_UnLoadProgs();
+
+	for (i = 0; i < sv.max_edicts; i++)
+	{
+		SV_UnlinkEdict(&sv.edicts[i]);
+	}
+
+
+	sv.game_edicts = NULL;
+	sv_player = NULL;
+	for (i = 0; i < MAX_CLIENTS; i++)
+	{
+		svs.clients[i].edict = NULL;
+	}
+}
+
+/*
+================
 SV_SpawnServer
 
 Change the server to a new map, taking all connected
@@ -324,9 +399,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	}
 #endif
 
-	// Shutdown game.
-	PR_GameShutDown();
-	PR_UnLoadProgs();
+	SV_ShutdownGame();
 
 	svs.spawncount++; // any partially connected client will be restarted
 
@@ -424,12 +497,64 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	PR_InitPatchTables();
 #endif
 	PR_InitProg();
-	for (i = 0; i < sv.max_edicts; i++)
+
+	// fill sv.mapname and sv.modelname with new map name
+	strlcpy (sv.mapname, mapname, sizeof(sv.mapname));
+	snprintf (sv.modelname, sizeof(sv.modelname), "maps/%s.bsp", sv.mapname);
+#ifndef SERVERONLY
+	// set cvar
+	Cvar_ForceSet (&host_mapname, mapname);
+#endif
+
+	vispolicy = SV_VisibilityPolicy();
+	if (!(sv.worldmodel = CM_LoadMap (sv.modelname, false, vispolicy, &sv.map_checksum, &sv.map_checksum2))) // true if bad map
 	{
-		sv.edicts[i].e.entnum = i;
-		sv.edicts[i].e.area.ed = &sv.edicts[i]; // yeah, pretty funny, but this help to find which edict_t own this area (link_t)
+		if (restoring_qc2cpp) {
+#if defined(QCX_ENABLED)
+			QCX_RestoreSessionCancel();
+			QCX_DiscardPreparedLoadGame();
+#endif
+			SV_Error("qc2cpp restore could not load saved map %s", mapname);
+		}
+		Con_Printf ("Cant load map %s, falling back to %s\n", mapname, oldmap);
+
+		// fill mapname, sv.mapname and sv.modelname with old map name
+		strlcpy (sv.mapname, oldmap, sizeof(sv.mapname));
+		snprintf (sv.modelname, sizeof(sv.modelname), "maps/%s.bsp", sv.mapname);
+		mapname = oldmap;
+
+		// and re-load old map
+		sv.worldmodel = CM_LoadMap (sv.modelname, false, vispolicy, &sv.map_checksum, &sv.map_checksum2);
+
+		// this should never happen
+		if (!sv.worldmodel)
+			SV_Error ("CM_LoadMap: bad map");
 	}
-	PR_BindServerState();
+
+	{
+		extern cvar_t sv_extlimits, sv_bspversion;
+
+		sv.max_edicts = min(sv.max_edicts, (int)sv_maxedicts.value);
+		if (sv_extlimits.value == 0 || (sv_extlimits.value == 2 && sv_bspversion.value < 2)) {
+			sv.max_edicts = min(sv.max_edicts, MAX_EDICTS_SAFE);
+		}
+	}
+
+#if defined(QCX_ENABLED)
+	if (restoring_qc2cpp
+		&& !QCX_PreparedCapacitiesMatch(QCX_EntityCapacity(), (uint32_t)sv.max_edicts)) {
+		QCX_Unpublish(NULL);
+		SV_Error("qc2cpp saved map entity limit is not permitted by the destination map");
+	}
+#endif
+
+	sv.checkpvs = (byte *)Hunk_AllocName(CM_PVSRowBytes(), "checkpvs");
+
+	sv.map_checksum2 = Com_TranslateMapChecksum (sv.mapname, sv.map_checksum2);
+	sv.static_entity_count = 0;
+
+	SV_ClearWorld (); // clear physics interaction links
+	SV_InitEdicts();
 
 #ifdef MVD_PEXT1_HIGHLAGTELEPORT
 	if (fofs_teleported) {
@@ -498,76 +623,7 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	GE_PausedTic = ED_FindFunctionOffset ("GE_PausedTic");
 	GE_ShouldPause = ED_FindFunctionOffset ("GE_ShouldPause");
 
-	// leave slots at start for clients only
-	sv.num_edicts = MAX_CLIENTS+1;
-	for (i=0 ; i<MAX_CLIENTS ; i++)
-	{
-		ent = EDICT_NUM(i+1);
-		// restore client name.
-		PR_SetEntityString(ent, ent->v->netname, svs.clients[i].name);
-		// reserve edict.
-		svs.clients[i].edict = ent;
-		//ZOID - make sure we update frags right
-		svs.clients[i].old_frags = 0;
-	}
-
-	// fill sv.mapname and sv.modelname with new map name
-	strlcpy (sv.mapname, mapname, sizeof(sv.mapname));
-	snprintf (sv.modelname, sizeof(sv.modelname), "maps/%s.bsp", sv.mapname);
-#ifndef SERVERONLY
-	// set cvar
-	Cvar_ForceSet (&host_mapname, mapname);
-#endif
-
-	vispolicy = SV_VisibilityPolicy();
-	if (!(sv.worldmodel = CM_LoadMap (sv.modelname, false, vispolicy, &sv.map_checksum, &sv.map_checksum2))) // true if bad map
-	{
-		if (restoring_qc2cpp) {
-#if defined(QCX_ENABLED)
-			QCX_RestoreSessionCancel();
-			QCX_DiscardPreparedLoadGame();
-#endif
-			SV_Error("qc2cpp restore could not load saved map %s", mapname);
-		}
-		Con_Printf ("Cant load map %s, falling back to %s\n", mapname, oldmap);
-
-		// fill mapname, sv.mapname and sv.modelname with old map name
-		strlcpy (sv.mapname, oldmap, sizeof(sv.mapname)); 
-		snprintf (sv.modelname, sizeof(sv.modelname), "maps/%s.bsp", sv.mapname);
-		mapname = oldmap;
-
-		// and re-load old map
-		sv.worldmodel = CM_LoadMap (sv.modelname, false, vispolicy, &sv.map_checksum, &sv.map_checksum2);
-
-		// this should never happen
-		if (!sv.worldmodel)
-			SV_Error ("CM_LoadMap: bad map");
-	}
-
-	{
-		extern cvar_t sv_extlimits, sv_bspversion;
-
-		sv.max_edicts = min(sv.max_edicts, (int)sv_maxedicts.value);
-		if (sv_extlimits.value == 0 || (sv_extlimits.value == 2 && sv_bspversion.value < 2)) {
-			sv.max_edicts = min(sv.max_edicts, MAX_EDICTS_SAFE);
-		}
-	}
-
-#if defined(QCX_ENABLED)
-	if (restoring_qc2cpp
-		&& !QCX_PreparedCapacitiesMatch(QCX_EntityCapacity(), (uint32_t)sv.max_edicts)) {
-		QCX_Unpublish(NULL);
-		SV_Error("qc2cpp saved map entity limit is not permitted by the destination map");
-	}
-#endif
 	SV_MVD_ConfigureMap();
-
-	sv.checkpvs = (byte *)Hunk_AllocName(CM_PVSRowBytes(), "checkpvs");
-
-	sv.map_checksum2 = Com_TranslateMapChecksum (sv.mapname, sv.map_checksum2);
-	sv.static_entity_count = 0;
-
-	SV_ClearWorld (); // clear physics interaction links
 	PR_InitializePrecacheSlots();
 	sv.model_precache[1] = sv.modelname;
 	sv.models[1] = sv.worldmodel;

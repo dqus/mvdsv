@@ -13,6 +13,8 @@ static qcx_game_entity_memory_v1_t *qcx_entity_memory;
 static qcx_guest_address_t qcx_entity_base;
 static uint32_t qcx_entity_stride;
 static uint32_t qcx_entity_capacity;
+/* Host wrappers currently bound, independently of the guest storage capacity. */
+static uint32_t qcx_bound_entity_count;
 static const char *qcx_entity_field_error;
 
 typedef struct qcx_optional_field_spec_s {
@@ -74,15 +76,17 @@ int QCX_BindEntities(void)
 				+ (size_t)slot * qcx_entity_stride);
 		sv.edicts[slot].v = entity;
 	}
+	qcx_bound_entity_count = (uint32_t)sv.max_edicts;
 	return 1;
 }
 
 void QCX_ClearEntities(void)
 {
-	/* Map/BSP policy can lower sv.max_edicts after the initial binding. */
-	for (uint32_t slot = 0U; slot < qcx_entity_capacity; ++slot) {
+	/* Clear only wrappers that were bound, even if the map limit has changed. */
+	for (uint32_t slot = 0U; slot < qcx_bound_entity_count; ++slot) {
 		sv.edicts[slot].v = NULL;
 	}
+	qcx_bound_entity_count = 0U;
 	qcx_entity_memory = NULL;
 	qcx_entity_base = 0U;
 	qcx_entity_stride = 0U;

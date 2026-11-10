@@ -80,12 +80,20 @@ static void assert_compiled_and_map_capacities(void)
 		assert(QCX_EntityCapacity() == 16384U && sv.max_edicts == limit);
 		assert(QCX_BindEntities());
 		assert(mapped_capacity_bytes == 16384U * sizeof(capacity_entities[0]));
+		/* Host cleanup must not touch the unbound guest-capacity tail. */
+		if (limit < MAX_EDICTS) {
+			sv.edicts[limit].v = &capacity_entities[limit];
+		}
 		assert(QCX_SlotToEdict((uint32_t)limit - 1U) == &sv.edicts[limit - 1]);
 		assert(QCX_SlotToEdict((uint32_t)limit) == NULL);
 		/* BSP extlimits can lower the final map limit after the initial bind. */
 		sv.max_edicts = 512;
 		QCX_ClearEntities();
 		assert(sv.edicts[limit - 1].v == NULL);
+		if (limit < MAX_EDICTS) {
+			assert(sv.edicts[limit].v == &capacity_entities[limit]);
+			sv.edicts[limit].v = NULL;
+		}
 	}
 	capacity_memory.max_entities = 1024U;
 	sv.max_edicts = 16384;

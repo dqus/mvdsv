@@ -306,9 +306,7 @@ void SV_Shutdown (char *finalmsg)
 	Central_Shutdown();
 #endif
 
-	// Shutdown game.
-	PR_GameShutDown();
-	PR_UnLoadProgs();
+	SV_ShutdownGame();
 
 	memset (&sv, 0, sizeof(sv));
 	sv.state = ss_dead;

@@ -1334,6 +1334,8 @@ void PR1_BindServerState(void)
 
 	for (slot = 0; slot < sv.max_edicts; ++slot) {
 		sv.edicts[slot].v = (entvars_t *)((byte *)sv.game_edicts + slot * pr_edict_size);
+	}
+	for (slot = 0; slot < sv.max_edicts; ++slot) {
 		PR_ClearEdict(&sv.edicts[slot]);
 	}
 	PR1_ResolveOptionalFieldOffsets();
