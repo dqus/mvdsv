@@ -20,6 +20,7 @@ static globalvars_t legacy_globals;
 globalvars_t *pr_global_struct = &legacy_globals;
 float *pr_globals = (float *)&legacy_globals;
 server_t sv;
+#include "edict_fixture.h"
 
 void SV_Error(char *message, ...)
 {
@@ -154,6 +155,7 @@ static void assert_global_field_validation(void)
 
 int main(int argc, char **argv)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	assert(argc == 2);
 	qcx_transport_t *transport = NULL;
 	qcx_program_diagnostic_v1_t diagnostic = {0};
@@ -198,7 +200,7 @@ int main(int argc, char **argv)
 	assert(pr_global_struct == &legacy_globals);
 	assert(pr_globals == (float *)&legacy_globals);
 	assert(PR_GLOBAL(time) == 101.0f);
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	sv.game_edicts = (entvars_t *)legacy_game_memory.bytes;
 	edict_t legacy_entity = {0};
 	legacy_entity.v = (entvars_t *)(legacy_game_memory.bytes + 128U);

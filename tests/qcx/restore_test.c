@@ -19,6 +19,7 @@
 enum { test_entity_capacity = 4 };
 
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 #ifdef FTE_PEXT_FLOATCOORDS
 int msg_coordsize = 2;
@@ -187,7 +188,7 @@ static void reset_live_engine(void)
 	msg_coordsize = 2;
 	sv_bigcoords.value = 0.0f;
 #endif
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	memset(&svs, 0, sizeof(svs));
 	memset(&restore_test_globals, 0, sizeof(restore_test_globals));
 	memset(&restore_shared_globals, 0, sizeof(restore_shared_globals));
@@ -911,9 +912,86 @@ static void test_preflight_capacities_preserve_pending_load(const char *director
 	assert(QCX_PreparedMapEntityCapacity() == 0U);
 }
 
+/* Compiled guest storage does not imply host wrappers beyond the map limit. */
+static void test_capture_canonical_unused_tail(const char *directory, qbool exact_storage)
+{
+	const uint32_t map_limit = 2048U;
+	char path[MAX_OSPATH];
+	reset_live_engine();
+	entity_capacity = 16384U;
+	sv.max_edicts = (int)map_limit;
+	sv.num_edicts = 1;
+	sv.state = ss_active;
+	strcpy(fs_gamedir, directory);
+	if (exact_storage) {
+		QCX_TestFreeEdicts();
+		sv.edicts = calloc(map_limit, sizeof(*sv.edicts));
+		assert(sv.edicts != NULL);
+	} else {
+		sv.edicts[map_limit].e.freetime = 17.0f;
+		sv.edicts[map_limit].xv.alpha = 0.5f;
+	}
+	assert(QCX_SaveGame("host-bound"));
+	assert(snprintf(path, sizeof(path), "%s/save/host-bound.sav", directory) > 0);
+	FILE *file = fopen(path, "rb");
+	assert(file != NULL && fseek(file, 0, SEEK_END) == 0);
+	const long size = ftell(file);
+	assert(size > 0 && size <= QCX_SAVE_MAX_FILE_BYTES && fseek(file, 0, SEEK_SET) == 0);
+	uint8_t *bytes = malloc((size_t)size);
+	assert(bytes != NULL && fread(bytes, 1U, (size_t)size, file) == (size_t)size);
+	assert(fclose(file) == 0);
+	qcx_save_image_t *image = NULL;
+	assert(QCX_SaveParse(bytes, (uint32_t)size, &image) == QCX_PLUGIN_OK);
+	assert(image->metadata.entity_capacity == entity_capacity);
+	assert(image->metadata.map_entity_capacity == map_limit);
+	for (uint32_t index = map_limit; index < entity_capacity; ++index) {
+		assert(image->engine.edicts[index].state == QCX_SAVE_UNUSED_EDICT);
+		assert(image->engine.edicts[index].freetime == 0.0f);
+		assert(image->engine.edicts[index].alpha == 0.0f);
+	}
+	if (!exact_storage) {
+		assert(sv.edicts[map_limit].e.freetime == 17.0f);
+	}
+	QCX_SaveImageFree(image);
+	free(bytes);
+	assert(remove(path) == 0);
+}
+
+/* Apply a validated full-C image only to the allocated L host wrappers. */
+static void test_apply_preserves_unbound_host_tail(qbool exact_storage)
+{
+	const uint32_t map_limit = 2048U;
+	reset_live_engine();
+	entity_capacity = 16384U;
+	sv.max_edicts = (int)map_limit;
+	qcx_save_image_t image = make_valid_image(true, false);
+	image.metadata.entity_capacity = entity_capacity;
+	image.metadata.map_entity_capacity = map_limit;
+	if (exact_storage) {
+		QCX_TestFreeEdicts();
+		sv.edicts = calloc(map_limit, sizeof(*sv.edicts));
+		assert(sv.edicts != NULL);
+	} else {
+		sv.edicts[map_limit].e.freetime = 17.0f;
+		sv.edicts[map_limit].xv.alpha = 0.5f;
+	}
+	qcx_restore_plan_t plan = {0};
+	assert(QCX_PrepareRestore(&image, QCX_RESTORE_RESOURCES_EXACT, &plan) == QCX_RESTORE_OK);
+	QCX_ApplyRestore(&plan);
+	if (!exact_storage) {
+		assert(sv.edicts[map_limit].e.freetime == 17.0f);
+		assert(sv.edicts[map_limit].xv.alpha == 0.5f);
+	}
+}
+
 int main(int argc, char **argv)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	assert(argc == 2);
+	test_capture_canonical_unused_tail(argv[1], false);
+	test_capture_canonical_unused_tail(argv[1], true);
+	test_apply_preserves_unbound_host_tail(false);
+	test_apply_preserves_unbound_host_tail(true);
 	test_profile_mismatch_retains_world_and_prepared_image(argv[1]);
 	test_game_mode_round_trip_keeps_float_precision();
 	test_invalid_mode_does_not_mutate_current_world();

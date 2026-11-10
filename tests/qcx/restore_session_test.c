@@ -10,6 +10,7 @@
 enum { test_slot_capacity = 4 };
 
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 client_t *sv_client;
 edict_t *sv_player;
@@ -257,7 +258,7 @@ static void reset_fixture(void)
 	}
 	allocated_info_count = 0U;
 	restore_continue_command = NULL;
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	memset(&svs, 0, sizeof(svs));
 	sv_client = NULL;
 	sv_player = NULL;
@@ -1400,6 +1401,7 @@ static void test_server_resumes_a_waiting_client_after_discarding_obsolete_relia
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	test_server_restarts_an_existing_client_without_resetting_inflight_reliable();
 	test_server_resumes_a_waiting_client_after_discarding_obsolete_reliable();
 	test_server_swap_keeps_connections_and_repairs_both_slots();

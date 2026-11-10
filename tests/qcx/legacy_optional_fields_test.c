@@ -7,6 +7,7 @@
 int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
 int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_teleported;
 server_t sv;
+#include "edict_fixture.h"
 
 void SV_Error(char *error, ...) { (void)error; assert(!"unexpected SV_Error"); }
 
@@ -46,6 +47,7 @@ static void configure_field_discovery(void) {}
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	configure_field_discovery();
 	PR1_ResolveOptionalFieldOffsets();
 	assert(fofs_items2 == 4 && fofs_hideentity == (int)offsetof(entvars_t, owner));
@@ -59,7 +61,7 @@ int main(void)
 	PR1_ResolveOptionalFieldOffsets();
 	assert(fofs_hideentity == (int)offsetof(entvars_t, owner));
 	static byte storage[8][sizeof(entvars_t)];
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	pr_edict_size = (int)sizeof(entvars_t);
 	sv.game_edicts = (entvars_t *)storage;
 	sv.max_edicts = 8;

@@ -21,6 +21,7 @@ static qcx_game_entity_memory_v1_t capacity_memory;
 static qcx_byte_count_t mapped_capacity_bytes;
 static qbool qcx_active;
 server_t sv;
+#include "edict_fixture.h"
 int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
 int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_teleported;
 
@@ -75,6 +76,7 @@ static void assert_compiled_and_map_capacities(void)
 	const int limits[] = {2048, 8192, 16384};
 	for (unsigned index = 0U; index < sizeof(limits) / sizeof(limits[0]); ++index) {
 		const int limit = limits[index];
+		QCX_TestResetServer((size_t)limit + 1U);
 		sv.max_edicts = limit;
 		assert(QCX_ConfigureEntities((qcx_guest_address_t)(uintptr_t)&capacity_memory));
 		assert(QCX_EntityCapacity() == 16384U && sv.max_edicts == limit);
@@ -117,6 +119,7 @@ static void assert_invalid_entities_fixture(const char *directory, const char *n
 
 int main(int argc, char **argv)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	assert(argc == 2);
 	qcx_transport_t *transport = NULL;
 	qcx_program_diagnostic_v1_t diagnostic = {0};
@@ -128,6 +131,10 @@ int main(int argc, char **argv)
 	sv.max_edicts = 11;
 	assert(QCX_ConfigureEntities(publication));
 	qcx_active = true;
+	QCX_TestFreeEdicts();
+	assert(QCX_SlotToEdict(1U) == NULL);
+	assert(!QCX_BindEntities());
+	QCX_TestResetServer(11U);
 	sv.max_edicts = 11;
 	sv.edicts[7].e.entnum = 77;
 	sv.edicts[7].e.area.ed = &sv.edicts[2];

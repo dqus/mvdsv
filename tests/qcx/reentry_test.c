@@ -55,6 +55,7 @@ static qcx_byte_count_t command_payload_size;
 static uint8_t command_payload[QCX_CLIENT_COMMAND_PAYLOAD_V1_MAX_SIZE];
 vec3_t vec3_origin;
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 globalvars_t legacy_globals;
 extern double sv_frametime;
@@ -406,6 +407,7 @@ static void test_think_scheduling(void)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	pr_global_struct = &globals;
 	pr_globals = (float *)&globals;
 	pr_edict_size = (int)sizeof(entvars_t);

@@ -62,7 +62,7 @@ int QCX_BindEntities(void)
 	const qcx_game_api_v1_t *const game = QCX_Game();
 	const uint64_t span = (uint64_t)qcx_entity_stride * qcx_entity_capacity;
 	void *storage = NULL;
-	if (qcx_entity_memory == NULL || game == NULL || game->memory_view == NULL
+	if (sv.edicts == NULL || qcx_entity_memory == NULL || game == NULL || game->memory_view == NULL
 		|| span > UINT32_MAX
 		|| game->memory_view(game->context, qcx_entity_base, (qcx_byte_count_t)span,
 			_Alignof(entvars_t), &storage) != QCX_PLUGIN_OK
@@ -180,14 +180,15 @@ qbool QCX_EntityHasModel(const edict_t *entity)
 
 qcx_entity_id_t QCX_EdictToSlot(const edict_t *edict)
 {
-	const uintptr_t first = (uintptr_t)&sv.edicts[0];
+	const uintptr_t first = (uintptr_t)sv.edicts;
 	const uintptr_t address = (uintptr_t)edict;
-	if (qcx_entity_memory == NULL || edict == NULL || address < first
+	if (sv.edicts == NULL || qcx_entity_memory == NULL || edict == NULL || address < first
 		|| (address - first) % sizeof(sv.edicts[0]) != 0U) {
 		return QCX_INVALID_ENTITY_ID;
 	}
 	const uintptr_t slot = (address - first) / sizeof(sv.edicts[0]);
-	if (slot >= qcx_entity_capacity || slot >= (uintptr_t)sv.max_edicts) {
+	if (slot >= qcx_entity_capacity || slot >= qcx_bound_entity_count
+		|| slot >= (uintptr_t)sv.max_edicts) {
 		return QCX_INVALID_ENTITY_ID;
 	}
 	return (qcx_entity_id_t)slot;
@@ -195,8 +196,8 @@ qcx_entity_id_t QCX_EdictToSlot(const edict_t *edict)
 
 edict_t *QCX_SlotToEdict(qcx_entity_id_t slot)
 {
-	if (qcx_entity_memory == NULL || slot >= qcx_entity_capacity
-		|| slot >= (uint32_t)sv.max_edicts) {
+	if (sv.edicts == NULL || qcx_entity_memory == NULL || slot >= qcx_entity_capacity
+		|| slot >= qcx_bound_entity_count || slot >= (uint32_t)sv.max_edicts) {
 		return NULL;
 	}
 	return &sv.edicts[slot];

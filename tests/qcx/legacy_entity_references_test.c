@@ -7,6 +7,7 @@
 #include "qwsvdef.h"
 
 server_t sv;
+#include "edict_fixture.h"
 
 static jmp_buf error_jump;
 
@@ -26,9 +27,10 @@ static void expect_invalid_reference(int reference)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	static byte entity_storage[8][sizeof(entvars_t)];
 
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	pr_edict_size = (int)sizeof(entvars_t);
 	sv.game_edicts = (entvars_t *)entity_storage;
 	sv.max_edicts = 8;

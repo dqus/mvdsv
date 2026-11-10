@@ -11,6 +11,7 @@
 #include "qcx/world_text.h"
 
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 cvar_t deathmatch;
 int current_skill;
@@ -331,6 +332,7 @@ static void test_nextent(qcx_host_api_v1_t *host)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	test_entity.v = &test_entity_state;
 	test_spawned.v = &test_spawned_state;
 	qcx_host_api_v1_t host = {

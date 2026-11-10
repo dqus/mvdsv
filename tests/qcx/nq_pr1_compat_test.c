@@ -4,6 +4,7 @@
 #include "qwsvdef.h"
 
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 qbool pr_nqprogs = true;
 int pr_edict_size = sizeof(entvars_t);
@@ -276,6 +277,7 @@ static void test_builtins(void)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	sv.edicts[0].v = &entity_states[0];
 	sv.edicts[1].v = &entity_states[1];
 	svs.clients[0].edict = &sv.edicts[1];

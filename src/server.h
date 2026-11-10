@@ -98,7 +98,7 @@ typedef struct
 	int         num_edicts;         // increases towards MAX_EDICTS
 	int         num_baseline_edicts;// number of entities that have baselines
 
-	edict_t		edicts[MAX_EDICTS];
+	edict_t		*edicts; // Stable wrapper storage for the effective map capacity.
 	qbool		edicts_initialized; // Entity bindings are ready for game shutdown callbacks.
 	entvars_t	*game_edicts;		// can NOT be array indexed, because entvars_t is variable sized
 

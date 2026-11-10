@@ -10,6 +10,7 @@
 #include "nq_messages.h"
 
 server_t sv;
+#include "edict_fixture.h"
 server_static_t svs;
 static qbool netquake = true, through_qcx;
 static unsigned qw_calls, qw_operations, warnings;
@@ -326,6 +327,7 @@ static void test_reset_and_ignored_destinations(void)
 }
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	test_particle();
 	sv.edicts[0].v = &states[0];
 	sv.edicts[1].v = &states[1];

@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
 #if defined(QCX_ENABLED)
+#include "qcx/adapter.h"
 #include "qcx/restore_session.h"
 #include "qcx/save.h"
 #endif
@@ -268,43 +269,56 @@ qbool GameStarted(void)
 ================
 SV_Shutdown
 
-Quake calls this before calling Sys_Quit or Sys_Error
+Quake calls this before calling Sys_Quit or Sys_Error.
+Also releases incomplete map loads; a fully idle server needs no cleanup.
 ================
 */
 void SV_Shutdown (char *finalmsg)
 {
 	int i;
 
-	if (!sv.state)
-		return; // already shutdown. FIXME: what about error during SV_SpawnServer() ?
+	if (!sv.state && !sv.max_edicts && !sv.edicts && !progs
+#ifdef USE_PR2
+		&& !sv_vm
+#endif
+#if defined(QCX_ENABLED)
+		&& !QCX_Active()
+#endif
+	)
+	{
+		return;
+	}
 
 #if defined(QCX_ENABLED)
 	QCX_RestoreSessionCancel();
 	QCX_DiscardPreparedLoadGame();
 #endif
 
-	SV_FinalMessage(finalmsg);
-
-	Master_Shutdown ();
-
-	for (i = MIN_LOG; i < MAX_LOG; ++i)
+	if (sv.state)
 	{
-		if (logs[i].sv_logfile)
+		SV_FinalMessage(finalmsg);
+
+		Master_Shutdown ();
+
+		for (i = MIN_LOG; i < MAX_LOG; ++i)
 		{
-			fclose (logs[i].sv_logfile);
-			logs[i].sv_logfile = NULL;
+			if (logs[i].sv_logfile)
+			{
+				fclose (logs[i].sv_logfile);
+				logs[i].sv_logfile = NULL;
+			}
 		}
-	}
-	if (sv.mvdrecording)
-		SV_MVDStop_f();
+		if (sv.mvdrecording)
+			SV_MVDStop_f();
 
 #ifndef SERVER_ONLY
-	NET_CloseServer ();
+		NET_CloseServer ();
 #endif
 
 #if defined(SERVERONLY) && defined(WWW_INTEGRATION)
-	Central_Shutdown();
+		Central_Shutdown();
 #endif
+	}
 
 	SV_ShutdownGame();
 

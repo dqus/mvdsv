@@ -238,13 +238,16 @@ static qbool QCX_SaveCaptureEngine(uint32_t entity_capacity, qcx_save_engine_t *
 			return false;
 		}
 	}
-	for (index = 0; index < (int)entity_capacity; ++index) {
+	for (index = 0; index < sv.max_edicts; ++index) {
 		engine->edicts[index].state = index >= sv.num_edicts ? QCX_SAVE_UNUSED_EDICT
 			: sv.edicts[index].e.free ? QCX_SAVE_FREE_EDICT : QCX_SAVE_ACTIVE_EDICT;
 		engine->edicts[index].freetime = sv.edicts[index].e.freetime;
 		engine->edicts[index].alpha = sv.edicts[index].xv.alpha;
 		VectorCopy(sv.edicts[index].xv.colourmod, engine->edicts[index].colourmod);
 	}
+	/* The guest-capacity tail has no host wrappers and is saved as unused. */
+	memset(&engine->edicts[sv.max_edicts], 0,
+		(entity_capacity - (uint32_t)sv.max_edicts) * sizeof(engine->edicts[0]));
 	return QCX_SaveCaptureStaticWorld(engine);
 }
 
@@ -496,7 +499,7 @@ void QCX_ApplyRestore(qcx_restore_plan_t *plan)
 		sv.lightstyles[index] = QCX_StoreLightstyle(index, image->engine.lightstyles[index]);
 	}
 	QCX_SaveApplyStaticWorld(&image->engine);
-	for (index = 0U; index < image->metadata.entity_capacity; ++index) {
+	for (index = 0U; index < image->metadata.map_entity_capacity; ++index) {
 		sv.edicts[index].e.free = image->engine.edicts[index].state != QCX_SAVE_ACTIVE_EDICT;
 		sv.edicts[index].e.freetime = image->engine.edicts[index].freetime;
 		sv.edicts[index].xv.alpha = image->engine.edicts[index].alpha;

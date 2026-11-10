@@ -10,6 +10,7 @@
 #include "qwsvdef.h"
 
 server_t sv;
+#include "edict_fixture.h"
 void ED_Count(void);
 
 void SV_Error(char *error, ...)
@@ -68,6 +69,7 @@ void Con_Printf(char *format, ...)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	entvars_t state = {0};
 	edict_t entity = {0};
 	entity.v = &state;
@@ -84,7 +86,7 @@ int main(void)
 
 	/* The raw QCX model token remains nonzero even for an empty model. */
 	entvars_t count_states[2] = {{0}};
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	sv.num_edicts = 2;
 	sv.max_edicts = 2;
 	for (int index = 0; index < sv.num_edicts; ++index) {

@@ -9,6 +9,7 @@ static globalvars_t globals;
 static int touch_call_count;
 
 server_t sv;
+#include "edict_fixture.h"
 globalvars_t *pr_global_struct = &globals;
 float *pr_globals = (float *)&globals;
 
@@ -46,7 +47,7 @@ void PR2_EdictTouch(func_t function)
 
 int main(void)
 {
-	memset(&sv, 0, sizeof(sv));
+	QCX_TestResetServer(MAX_EDICTS);
 	memset(&globals, 0, sizeof(globals));
 	memset(entity_states, 0, sizeof(entity_states));
 	memset(entities, 0, sizeof(entities));

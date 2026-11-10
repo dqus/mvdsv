@@ -24,6 +24,7 @@ typedef struct fixture_entity_s {
 enum { optional_field_count = 10 };
 
 server_t sv;
+#include "edict_fixture.h"
 int fofs_items2, fofs_maxspeed, fofs_gravity, fofs_movement, fofs_vw_index;
 int fofs_hideentity, fofs_trackent, fofs_visibility, fofs_hide_players, fofs_teleported;
 
@@ -120,6 +121,7 @@ static void reset_offsets(void)
 
 int main(void)
 {
+	QCX_TestResetServer(MAX_EDICTS);
 	char model[] = "progs/player.mdl";
 	memory = (qcx_game_entity_memory_v1_t){
 		.abi_version = QCX_GAME_ENTITY_MEMORY_ABI_VERSION_V1,
